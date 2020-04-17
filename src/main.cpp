@@ -1,7 +1,10 @@
-#include <iostream>
+#include "Concatenator.h"
+#include "adcs_dbus_server.h"
 
-int main() {
 
-    std::cout << "Hello, world!" << std::endl;
+int main(int argc, char *argv[]) {
+    Controller controller;
+    controller.run();
     return 0;
 }
+

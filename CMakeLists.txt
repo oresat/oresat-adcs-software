@@ -42,6 +42,9 @@ find_package(PkgConfig REQUIRED)
 # libsystemd
 pkg_check_modules(LIBSYSTEMD REQUIRED libsystemd)
 
+# sdbus-c++
+find_package(sdbus-c++ REQUIRED)
+
 
 ##############################################################################
 # Deal with git submodule
@@ -87,6 +90,7 @@ endif()
 ##############################################################################
 # Get source files
 
+
 set(SOURCE_FILES
     src/main.cpp
 )
@@ -95,8 +99,10 @@ set(SOURCE_FILES
 ##############################################################################
 # Create an executable
 
+
 add_executable(oresat-adcs ${SOURCE_FILES})
-target_link_libraries(oresat-adcs ${LIBSYSTEMD_LIBRARIES} Threads::Threads)
+target_link_libraries(oresat-adcs PRIVATE SDBusCpp::sdbus-c++)
+#target_link_libraries(oresat-adcs ${LIBSYSTEMD_LIBRARIES} Threads::Threads)
 target_include_directories(oresat-adcs PUBLIC ${LIBSYSTEMD_INCLUDE_DIRS})
 target_compile_options(oresat-adcs PUBLIC ${LIBSYSTEMD_CFLAGS_OTHER})
 

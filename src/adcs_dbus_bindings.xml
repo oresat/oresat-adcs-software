@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<node name="/org/OreSat/ADCS">
+    <interface name="org.OreSat.ADCS">
+        <!--Methods-->
+        <!--Signals-->
+        <signal name="ReactionWheelsCommand">
+            <arg type="(i)" name="command" />
+        </signal>
+        <signal name="MagnetorquerCommand">
+            <arg type="(i)" name="command" />
+        </signal>
+        <!--Properties-->
+        <property name="CurrentState" type="i" access="readwrite"/>
+        <property name="GPS_Data" type="((ddd)(ddd)i)" access="readwrite"/>
+        <property name="StarTrackerData" type="(dddi)" access="readwrite"/>
+        <property name="MagnetometersData" type="a(ii)" access="readwrite"/>
+        <property name="ReactionWheelsData" type="a(ii)" access="readwrite"/>
+        <property name="MagnetorquerData" type="(ii)" access="readwrite"/>
+    </interface>
+</node>
