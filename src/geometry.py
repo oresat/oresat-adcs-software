@@ -4,7 +4,7 @@ import numpy as np
 # by Markely and Crassidis for understanding, pardon the magic numbers
 # This is needed to translate between ECEF and ECI coordinates
 class Clock():
-    def __init__(year, month, day, hour, minute, second, dt):
+    def __init__(self, year, month, day, hour, minute, second, dt):
         self.year = year
         self.month = month
         self.day = day
@@ -14,7 +14,7 @@ class Clock():
         self.leap_year = is_leap_year()
         self.leap_second = False
 
-    def schedule_leap_second(year, month, day, hour, minute, second):
+    def schedule_leap_second(self, year, month, day, hour, minute, second):
         pass # figure it out later
     def is_leap_second(self):
         pass # probably just check whether state matches schedule
@@ -136,7 +136,7 @@ def lvlh_to_inertial(r_I, v_I):
                      [o_1I[2], o_2I[2], o_3I[2]]])
 
 # transformation from WGS-84 geodetic coordinates to ECEF geocentric coordinates
- def geodetic_to_ECEF(lat, long, h):
+def geodetic_to_ECEF(lat, long, h):
      a = 6378137.0 # m, semimajor axis
      e = 0.0818 # eccentricity approximation
      N = a / np.sqrt(1 - (e*np.sin(lat))**2)
@@ -146,8 +146,8 @@ def lvlh_to_inertial(r_I, v_I):
      z = (N*(1 - e**2) + h) * np.sin(lat)
      return np.array([x, y, z])
 
- # transformation from ECEF geocentric coordinates to WGS-84 geodetic coordinates
- def ECEF_to_geodetic(r):
+    # transformation from ECEF geocentric coordinates to WGS-84 geodetic coordinates
+def ECEF_to_geodetic(r):
      a = 6378137.0 # m, semimajor axis
      b = 6356752.3142 # m, semiminor axis
      x = r[0]*1000 # convert from km to m
