@@ -91,7 +91,7 @@ def quat_product(a, b):
 
 # this expresses a vector in the reference frame of the quaterion
 def sandwich(q, v):
-    return product(conjugate(q), product(np.array([0, v[0], v[1], v[2]]), q))[1:]
+    return quat_product(conjugate(q), quat_product(np.array([0, v[0], v[1], v[2]]), q))[1:]
 
 # encodes an axis-angle representation of a rotation as a unit quaterion
 def axisangle_to_quat(r, theta):

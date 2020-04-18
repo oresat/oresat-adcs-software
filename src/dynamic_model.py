@@ -71,7 +71,7 @@ def position_derivative(lin_vel):
 
 # quaternion kinematics for attitude
 def attitude_derivative(attitude, body_ang_vel):
-    return 1/2 * product(attitude, np.array([0,
+    return 1/2 * quat_product(attitude, np.array([0,
                                     body_ang_vel[0],
                                     body_ang_vel[1],
                                     body_ang_vel[2]]))
@@ -87,7 +87,7 @@ def wheel_vel_derivative(accl_cmd):
     return accl_cmd
 
 # euler's rotational equation. body ref
-def dw_dt(body_ang_vel, wheel_momenta, wheel_torques, external_torques):
+def body_ang_vel_derivative(body_ang_vel, wheel_momenta, wheel_torques, external_torques):
     return INV_MOMENT_OF_INERTIA.dot(external_torques -
                                     wheel_torques -
                                     np.cross(body_ang_vel,

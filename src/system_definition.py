@@ -30,6 +30,10 @@ WHEEL_AXES = np.array([[S_rw * np.cos(np.pi * (2 * n + 5) / 4),
 # there is another method for minimizing max effort of any wheel (minimax)
 # right now we don't care, but we may later
 RWSYS_TO_WHEELS = np.linalg.pinv(WHEEL_AXES.T)
+# I emphasise these coefficients are entirely arbitrary
+P_COEFF = 0.5
+I_COEFF = 0.01
+D_COEFF = 10
 
 # moments of inertia, all in kg * m^2 and body coordinates
 # body moment does NOT include reaction wheels
