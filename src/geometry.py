@@ -84,7 +84,7 @@ def normalize(q):
     return q / np.linalg.norm(q)
 
 # this is hamilton's quaternion product, q[0] is real part of a quaternion
-# be aware that some aerospace textbooks use a different sign convention on dot product
+# be aware that some aerospace textbooks use a different sign convention on cross product
 def quat_product(a, b):
     v = b[0] * a[1:] + a[0] * b[1:] + np.cross(a[1:], b[1:])
     return np.array([a[0] * b[0] - np.dot(a[1:], b[1:]), v[0], v[1], v[2]])
@@ -136,23 +136,25 @@ def lvlh_to_inertial(r_I, v_I):
                      [o_1I[2], o_2I[2], o_3I[2]]])
 
 # transformation from WGS-84 geodetic coordinates to ECEF geocentric coordinates
+# might not need this if GPS is already in ECEF
 def geodetic_to_ECEF(lat, long, h):
-     a = 6378137.0 # m, semimajor axis
-     e = 0.0818 # eccentricity approximation
-     N = a / np.sqrt(1 - (e*np.sin(lat))**2)
-     temp = (N + h) * np.cos(lat)
-     x = temp * np.cos(long)
-     y = temp * np.sin(long)
-     z = (N*(1 - e**2) + h) * np.sin(lat)
-     return np.array([x, y, z])
+    a = 6378137.0 # m, semimajor axis
+    e = 0.0818 # eccentricity approximation
+    N = a / np.sqrt(1 - (e*np.sin(lat))**2)
+    temp = (N + h) * np.cos(lat)
+    x = temp * np.cos(long)
+    y = temp * np.sin(long)
+    z = (N*(1 - e**2) + h) * np.sin(lat)
+    return np.array([x, y, z])
 
-    # transformation from ECEF geocentric coordinates to WGS-84 geodetic coordinates
+# transformation from ECEF geocentric coordinates to WGS-84 geodetic coordinates
+# might be useful for modeling atmospheric drag
 def ECEF_to_geodetic(r):
      a = 6378137.0 # m, semimajor axis
      b = 6356752.3142 # m, semiminor axis
-     x = r[0]*1000 # convert from km to m
-     y = r[1]*1000
-     z = r[2]*1000
+     x = r[0]
+     y = r[1]
+     z = r[2]
      # convert from ECEF to geodetic coords
      # see page 35 and pray there are no typos in the book
      def geo_rho(x, y):
