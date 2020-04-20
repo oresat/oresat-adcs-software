@@ -1,5 +1,5 @@
 import numpy as np
-import geometry # i can't remember whether this makes my namespace "flat"
+from geometry import *
 # various physical constants and parameters
 
 EARTH_ROTATION = 7.2921158553e-5 # rad/s, rotation of Earth around axis

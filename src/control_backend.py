@@ -1,7 +1,7 @@
 import numpy as np
-import geometry # can't remember whether these imports make namespace "flat"
-import system_definition
-import dynamic_model
+from geometry import *
+from system_definition import *
+from dynamic_model import *
 
 # Point and Stare Maneuver performed in inertial frame (because attitude is inertial)
 # convert coordinates from ECEF to ECI before calling

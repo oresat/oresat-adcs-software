@@ -1,6 +1,6 @@
 import numpy as np
-import geometry # can't remember whether these imports make namespace "flat"
-import system_definition
+from geometry import * # I'm not sure if this still executes the file being imported from
+from system_definition import *
 
 # physics
 # angular momentum of all wheels together (along their respective spin axes), body ref
@@ -87,9 +87,50 @@ def wheel_vel_derivative(accl_cmd):
     return accl_cmd
 
 # euler's rotational equation. body ref
-def body_ang_vel_derivative(body_ang_vel, wheel_momenta, wheel_torques, external_torques):
+def body_ang_vel_derivative(body_ang_vel, wheel_vel, wheel_torques, external_torques):
+    wheel_momenta = rw_sys_momentum(wheel_vel, body_ang_vel)
     return INV_MOMENT_OF_INERTIA.dot(external_torques -
                                     wheel_torques -
                                     np.cross(body_ang_vel,
                                             MOMENT_OF_INERTIA.dot(body_ang_vel) +
                                              wheel_momenta))
+
+class DynamicalSystem():
+    def __init__(self, f, x0, dt):
+        self.f = f
+        self.x0 = x0
+        self.dt = dt
+        self.history = [x0]
+        self.history_length = 5
+    def RK4_step(self, state, param): # simplifying assumption to not update param for now
+        k1 = self.f(*state, *param)
+        k2 = self.f(*(state + k1 * self.dt/2), *param)
+        k3 = self.f(*(state + k2 * self.dt/2), *param)
+        k4 = self.f(*(state + k3 * self.dt), *param)
+        return state + (k1 + 2*k2 + 2*k3 + k4) * self.dt / 6
+    def update(self, state, param):
+        next_step = self.RK4_step(state, param)
+        if len(self.history) >= self.history_length:
+            del self.history[0]
+        self.history.append(next_step)
+    def derivative(self): # don't call this without a history or you'll crash
+        return (self.history[-2] - self.history[-1]) / self.dt
+    def integrate(self, state, duration):
+        t = 0
+        while t < duration:
+            self.update(state, [])
+            t += self.dt
+        for i in self.history:
+            print(i, '\n')
+
+def linear_motion(position, lin_vel):
+    return np.array([position_derivative(lin_vel), lin_vel_derivative(position)])
+
+def rotational_motion(attitude, body_ang_vel, body_ang_vel, wheel_vel,
+                        wheel_torques, external_torques):
+    return np.array([attitude_derivative(attitude, body_ang_vel),
+                    body_ang_vel_derivative(body_ang_vel, wheel_vel,
+                                            wheel_torques, external_torques)])
+
+test = DynamicalSystem(newton, [x_0, v_0], 0.1)
+test.integrate([x_0, v_0], 5)
