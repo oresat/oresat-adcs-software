@@ -2,21 +2,13 @@
 Attitude Determination Control System (ADCS). It include GPS, Star Tracker, Magnetorquer, Magnetometer, and Reaction Wheels.
 
 
-## Dependencies
-- cmake
-- libsystemd
-- pkgconfig
-- [armadillo]
-- [sdbus-c++]
+## Dependacies
+`python3 python3-pydbus`
 
-
-## Building and running the program
-```bash
-cd build/
-cmake ..
-make clean all
-./oresat-adcs
-```
+## Usage
+- `python3 src/main.py` To run as a process
+- `python3 src/main.py -d` To run as a daemon
+- `python3 src/main.py -h` For help output
 
 ## State Machine
 ![](docs/adcs_statemachine.jpg)
@@ -25,7 +17,6 @@ make clean all
 ## Class Design
 ![](docs/adcs_class_design.jpg)
 
+## Class Data Flow
+![](docs/adcs_class_data_flow.jpg)
 
-<!-- links -->
-[armadillo]:http://arma.sourceforge.net/
-[sdbus-c++]:https://github.com/Kistler-Group/sdbus-cpp
