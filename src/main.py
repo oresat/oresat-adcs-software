@@ -1,20 +1,17 @@
 import sys, os
-from controller import *
+from adcs_daemon import *
 
-PID_FILE = '/run/oresat-linux-updater.pid'
-
-
-def daemonize():
+def daemonize(pid_file):
     # Check for a pidfile to see if the daemon is already running
     try:
-        with open(PID_FILE,'r') as pf:
+        with open(pid_file,'r') as pf:
 
             pid = int(pf.read().strip())
     except IOError:
         pid = None
 
     if pid:
-        sys.stderr.write("pid file {0} already exist.\n".format(PID_FILE))
+        sys.stderr.write("pid file {0} already exist.\n".format(pid_file))
         sys.exit(1)
 
     try:
@@ -42,8 +39,9 @@ def daemonize():
     os.dup2(so.fileno(), sys.stdout.fileno())
     os.dup2(se.fileno(), sys.stderr.fileno())
 
+    # make pid file
     pid = str(os.getpid())
-    with open(PID_FILE,'w+') as f:
+    with open(pid_file,'w+') as f:
         f.write(pid + '\n')
 
 
@@ -59,9 +57,11 @@ def usage():
 
 
 if __name__ == "__main__":
-    controller = Controller()
+    pid_file = '/run/oresat-linux-updater.pid'
+    adcs_daemon = ADCS_Daemon()
     daemon_flag = False
 
+    # deal with flags
     opts, args = getpid.getpid(sys.argv[1:], "dh")
     for opt, arg in opts:
         if opt == "d":
@@ -71,12 +71,13 @@ if __name__ == "__main__":
             exit(0)
 
     if daemon_flag:
-        daemonize()
+        daemonize(pid_file)
 
     try:
-        controller.run()
+        adcs_daemon.run()
     except KeyboardInterrupt as e:
-        controller.quit()
+        adcs_daemon.quit()
 
     # remove pid file
-    os.remove(PID_FILE)
+    if daemon_flag:
+        os.remove(pid_file)
