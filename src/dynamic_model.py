@@ -64,43 +64,70 @@ def magnetic_field(r):
     return (3*np.dot(m, r) * r -
             m * n_r**2) / n_r**5 # nT
 
-# kinematic equations
-# ECEF ref
-def position_derivative(lin_vel):
-    return lin_vel
-
-# quaternion kinematics for attitude
-def attitude_derivative(attitude, body_ang_vel):
-    return 1/2 * quat_product(attitude, np.array([0,
-                                    body_ang_vel[0],
-                                    body_ang_vel[1],
-                                    body_ang_vel[2]]))
-
-# dynamic equations
-# central force model for acceleration of satellite, ECEF ref
-def lin_vel_derivative(position):
-    g = (- MU / np.dot(position, position)) * normalize(position)
-    return g # at some point, we'll include drag which depends on vel
-
-# change in wheel velocity is just commanded for now
-def wheel_vel_derivative(accl_cmd):
-    return accl_cmd
-
-# euler's rotational equation. body ref
-def body_ang_vel_derivative(body_ang_vel, wheel_vel, wheel_torques, external_torques):
-    wheel_momenta = rw_sys_momentum(wheel_vel, body_ang_vel)
-    return INV_MOMENT_OF_INERTIA.dot(external_torques -
-                                    wheel_torques -
-                                    np.cross(body_ang_vel,
-                                            MOMENT_OF_INERTIA.dot(body_ang_vel) +
-                                             wheel_momenta))
-
 class DynamicalSystem():
-    def __init__(self, f, x0, dt):
-        self.f = f
-        self.x0 = x0
+    def __init__(self, position, lin_vel, attitude, body_ang_vel, wheel_vel):
+        self.full_state = np.array([position, lin_vel,
+                                    attitude, body_ang_vel, wheel_vel])
+
+    # kinematic equations
+    # ECEF ref
+    def position_derivative(self, lin_vel):
+        return lin_vel
+
+    # quaternion kinematics for attitude
+    def attitude_derivative(self, attitude, body_ang_vel):
+        return 1/2 * quat_product(attitude, np.array([0,
+                                        body_ang_vel[0],
+                                        body_ang_vel[1],
+                                        body_ang_vel[2]]))
+
+    # dynamic equations
+    # central force model for acceleration of satellite, ECEF ref
+    def lin_vel_derivative(self, position):
+        g = (- MU / np.dot(position, position)) * normalize(position)
+        return g # at some point, we'll include drag which depends on vel
+
+    # change in wheel velocity is just commanded for now
+    def wheel_vel_derivative(self, accl_cmd):
+        return accl_cmd
+
+    # euler's rotational equation. body ref
+    def body_ang_vel_derivative(self, wheel_vel, body_ang_vel,
+                                wheel_torques, external_torques):
+        wheel_momenta = rw_sys_momentum(wheel_vel, body_ang_vel)
+        return INV_MOMENT_OF_INERTIA.dot(external_torques -
+                                        wheel_torques -
+                                        np.cross(body_ang_vel,
+                                                MOMENT_OF_INERTIA.dot(body_ang_vel) +
+                                                 wheel_momenta))
+
+    def linear_motion(self, position, lin_vel):
+         return np.array([self.position_derivative(lin_vel),
+                        self.lin_vel_derivative(position)])
+
+
+    def rotational_motion(self, position, attitude, body_ang_vel, wheel_vel,
+                            body_ang_accl, accl_cmd, magnetorquer_currents):
+         T_gg = gravity_torque(position, attitude)
+         T_rw = rw_sys_torque(accl_cmd, body_ang_accl)
+         return np.array([self.attitude_derivative(attitude, body_ang_vel),
+                          self.body_ang_vel_derivative(wheel_vel, body_ang_vel,
+                                                        T_rw, T_gg)])
+
+    def full_state_derivatives(self, position, lin_vel, attitude, body_ang_vel, wheel_vel,
+                                body_ang_accl, accl_cmd, magnetorquer_currents):
+        dxdt, dvdt = self.linear_motion(position, lin_vel)
+        dqdt, dwdt = self.rotational_motion(position, attitude, body_ang_vel, wheel_vel,
+                                            body_ang_accl, accl_cmd, magnetorquer_currents)
+        dw_rw_dt = self.wheel_vel_derivative(accl_cmd)
+        return np.array([dxdt, dvdt, dqdt, dwdt, dw_rw_dt])
+
+class Integrator():
+    def __init__(self, model, dt):
+        self.model = model
+        self.f = self.model.full_state_derivatives
         self.dt = dt
-        self.history = [x0]
+        self.history = [self.model.full_state, self.model.full_state]
         self.history_length = 5
     def RK4_step(self, state, param): # simplifying assumption to not update param for now
         k1 = self.f(*state, *param)
@@ -113,24 +140,25 @@ class DynamicalSystem():
         if len(self.history) >= self.history_length:
             del self.history[0]
         self.history.append(next_step)
+        self.model.full_state = next_step
+
     def derivative(self): # don't call this without a history or you'll crash
         return (self.history[-2] - self.history[-1]) / self.dt
-    def integrate(self, state, duration):
+
+    def integrate(self, duration, zero_order_hold):
         t = 0
-        while t < duration:
-            self.update(state, [])
+        while duration > t + self.dt:
+            body_ang_accl = self.derivative()[3]
+            accl_cmd = zero_order_hold[0]
+            magnetorquer_currents = zero_order_hold[1]
+            self.update(self.model.full_state, [body_ang_accl, accl_cmd, magnetorquer_currents])
             t += self.dt
         for i in self.history:
             print(i, '\n')
+        print("duration:", t, "seconds")
 
-def linear_motion(position, lin_vel):
-    return np.array([position_derivative(lin_vel), lin_vel_derivative(position)])
 
-def rotational_motion(attitude, body_ang_vel, body_ang_vel, wheel_vel,
-                        wheel_torques, external_torques):
-    return np.array([attitude_derivative(attitude, body_ang_vel),
-                    body_ang_vel_derivative(body_ang_vel, wheel_vel,
-                                            wheel_torques, external_torques)])
 
-test = DynamicalSystem(newton, [x_0, v_0], 0.1)
-test.integrate([x_0, v_0], 5)
+test_sys = DynamicalSystem(x_0, v_0, q_0, w_0, whl_0)
+test_int = Integrator(test_sys, 0.1)
+test_int.integrate(10.0, [np.zeros(4), np.zeros(3)])
