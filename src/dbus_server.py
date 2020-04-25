@@ -1,11 +1,11 @@
 
 
 from pydbus.generic import signal
-from state_machine import *
+from state_machine import StateMachine
 import threading
 
 
-class Dbus_Server(object):
+class DbusServer(object):
     dbus = """
     <node>
         <interface name="org.OreSat.ADCS">
@@ -39,17 +39,24 @@ class Dbus_Server(object):
         self._lock = threading.Lock()
         self._state_machine = state_machine_input
 
+        # initize tuples. must match xml type field
+        self._gps_data = ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), "")
+        self._st_data = (0.0, 0.0, 0.0, 0)
+        self._magnetometers_data = [(0, 0), (0, 0)]
+        self._reaction_wheels_data = [(0, 0), (0, 0), (0, 0), (0, 0)]
+        self._magnetorquer_data = (0, 0)
+
 
     @property
     def CurrentState(self):
-        # wrapper for state machien getter.
+        # wrapper for state machine getter.
         return self._state_machine.get_current_state()
 
 
     @CurrentState.setter
     def CurrentState(self, new_state):
         # wrapper for state machien setter.
-        self._state_machine.current_state(new_state)
+        self._state_machine.change_state(new_state)
 
 
     # ------------------------------------------------------------------------
@@ -65,7 +72,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         temp = self._gps_data
-        self._lock.require()
+        self._lock.release()
 
         return temp
 
@@ -79,7 +86,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         self._gps_data = input_data
-        self._lock.require()
+        self._lock.release()
 
 
     # ------------------------------------------------------------------------
@@ -95,7 +102,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         temp = self._st_data
-        self._lock.require()
+        self._lock.release()
 
         return temp
 
@@ -109,7 +116,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         self._st_data = input_data
-        self._lock.require()
+        self._lock.release()
 
 
     # ------------------------------------------------------------------------
@@ -125,7 +132,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         temp = self._magnetometers_data
-        self._lock.require()
+        self._lock.release()
 
         return temp
 
@@ -139,7 +146,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         self._magnetometers_data = input_data
-        self._lock.require()
+        self._lock.release()
 
 
     # ------------------------------------------------------------------------
@@ -154,8 +161,8 @@ class Dbus_Server(object):
         """
 
         self._lock.acquire()
-        temp = self._reaction_wheel_data
-        self._lock.require()
+        temp = self._reaction_wheels_data
+        self._lock.release()
 
         return temp
 
@@ -168,8 +175,8 @@ class Dbus_Server(object):
         """
 
         self._lock.acquire()
-        self._reaction_wheel_data = input_data
-        self._lock.require()
+        self._reaction_wheels_data = input_data
+        self._lock.release()
 
 
     # ------------------------------------------------------------------------
@@ -185,7 +192,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         temp = self._magnetorquer_data
-        self._lock.require()
+        self._lock.release()
 
         return temp
 
@@ -199,4 +206,4 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         self._magnetorquer_data = input_data
-        self._lock.require()
+        self._lock.release()

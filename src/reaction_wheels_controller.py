@@ -1,20 +1,16 @@
-from dbus_server import Dbus_Server
 
 
 class ReactionWheelsController:
-    def __init__(self, dbus_adaptor_input):
-        self._dbus_adaptor = dbus_adaptor_input
+    def detumble(self, adcs_data_frame):
 
-    def detumble(self, adcs_data):
-        adcs_data_frame = self._dbus_adaptor.get_adcs_data()
+        # Do stuff and make command
 
-        # Do stuff
+        reaction_wheels_command = (0, 0)
+        return reaction_wheels_command
 
-        return 0
+    def point(self, adcs_data_frame):
 
-    def point(self, adcs_data):
-        adcs_data_frame = self._dbus_adaptor.get_adcs_data()
+        # Do stuff and make command
 
-        # Do stuff
-
-        return 0
+        reaction_wheels_command = (0, 0)
+        return reaction_wheels_command

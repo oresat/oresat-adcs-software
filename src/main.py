@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, getopt
 from adcs_daemon import *
 
 def daemonize(pid_file):
@@ -62,7 +62,7 @@ if __name__ == "__main__":
     daemon_flag = False
 
     # deal with flags
-    opts, args = getpid.getpid(sys.argv[1:], "dh")
+    opts, args = getopt.getopt(sys.argv[1:], "dh")
     for opt, arg in opts:
         if opt == "d":
             daemon_flag = True

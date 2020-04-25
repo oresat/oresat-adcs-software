@@ -44,6 +44,5 @@ class StateMachine:
         return valid
 
 
-
     def get_current_state(self):
         return self._current_state
