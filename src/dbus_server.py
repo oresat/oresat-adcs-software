@@ -2,7 +2,7 @@
 
 from pydbus.generic import signal
 from state_machine import StateMachine
-import threading
+import threading, datetime
 
 
 class DbusServer(object):
@@ -30,7 +30,6 @@ class DbusServer(object):
     ReactionWheelsCommand = signal()
 
     def __init__(self, state_machine_input):
-        # (StateMachine) -> ()
         """
         Contructor.
         Pass in the state machine
@@ -208,3 +207,17 @@ class DbusServer(object):
         self._lock.acquire()
         self._magnetorquer_data = input_data
         self._lock.release()
+
+    # ------------------------------------------------------------------------
+    # convenience call for all (data not for dbus)
+
+    def get_all_adcs_data(self):
+        self._lock.acquire()
+        temp = (self._gps_data,
+                self._st_data,
+                self._magnetometers_data,
+                self._reaction_wheels_data,
+                self._magnetorquer_data)
+        self._lock.release()
+        return temp
+

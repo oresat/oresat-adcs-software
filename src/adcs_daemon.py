@@ -79,26 +79,42 @@ class ADCS_Daemon(object):
             # get current state
             current_state = self._state_machine.get_current_state()
 
-            if current_state == State.SLEEP.value or current_state == State.ERROR.value:
+            if current_state == State.SLEEP.value or current_state == State.FAILED.value:
                 time.sleep(0.5)
+
             elif current_state == State.DETUMBLE.value:
+                # update dataframe
+                adcs_data_frame = self._dbus_server.get_all_adcs_data()
+
                 # calcualte and send magnetorquer command
-                mag_command = self._magnetorquer.detumble()
+                mag_command = self._magnetorquer.detumble(adcs_data_frame)
                 self._dbus_server.MagnetorquerCommand(mag_command)
 
+                # update dataframe
+                adcs_data_frame = self._dbus_server.get_all_adcs_data()
+
                 # calculate and send rection wheel command
-                rw_command = self._reaction_wheels.detumble()
+                rw_command = self._reaction_wheels.detumble(adcs_data_frame)
                 self._dbus_server.MagnetorquerCommand(rw_command)
+
             elif current_state == State.POINT.value:
+                # update dataframe
+                adcs_data_frame = self._dbus_server.get_all_adcs_data()
+
                 # calcualte and send magnetorquer command
-                mag_command = self._magnetorquer.point()
+                mag_command = self._magnetorquer.point(adcs_data_frame)
                 self._dbus_server.MagnetorquerCommand(mag_command)
 
+                # update dataframe
+                adcs_data_frame = self._dbus_server.get_all_adcs_data()
+
                 # calculate and send rection wheel command
-                rw_command = self._reaction_wheels.point()
+                rw_command = self._reaction_wheels.point(adcs_data_frame)
                 self._dbus_server.MagnetorquerCommand(rw_command)
+
             else:
                 syslog.syslog(syslog.LOG_CRIT, "Unkown state in main loop")
+                print("Unknown state")
 
             time.sleep(0.1) # to not have CPU at 100% all the time
 

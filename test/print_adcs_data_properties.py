@@ -15,6 +15,7 @@ if __name__=="__main__":
     dbus_client = bus.get("org.OreSat.ADCS")
 
     while True:
+        print("Current State: {}".format(dbus_client.CurrentState))
         print("GPS Data: {}".format(dbus_client.GPS_Data))
         print("Star Tracker Data: {}".format(dbus_client.StarTrackerData))
         print("Magnetorquers Data: {}".format(dbus_client.MagnetometersData))

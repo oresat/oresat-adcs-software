@@ -2,12 +2,13 @@
 
 
 from pydbus import SystemBus
+from gi.repository import GLib
 import time, random, datetime
 
 
 #TODO gobals for now, fix later
 bus = SystemBus() # connect to bus
-the_object = bus.get(INTERFACE_NAME)
+dbus_client = bus.get("org.OreSat.ADCS")
 
 
 def reaction_wheels_command_cb(*args):
@@ -182,6 +183,7 @@ if __name__=="__main__":
             object="/org/OreSat/ADCS")
 
     try:
+        dbus_client.CurrentState = 2
         loop.run()
     except KeyboardInterrupt as e:
         loop.quit()
