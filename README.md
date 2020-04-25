@@ -14,9 +14,6 @@ Attitude Determination Control System (ADCS). It include GPS, Star Tracker, Magn
 ![](docs/adcs_statemachine.jpg)
 
 
-## Class Design
-![](docs/adcs_class_design.jpg)
-
 ## Class Data Flow
 ![](docs/adcs_class_data_flow.jpg)
 

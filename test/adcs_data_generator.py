@@ -18,7 +18,7 @@ def reaction_wheels_command_cb(*args):
 
     #NOTE args[4] is the data sent
 
-    print("Hello Signal: ", args[4])
+    print("Reaction Wheels Command Signal: ", args[4])
 
     # NOTE replace random number generator place holder
 

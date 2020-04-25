@@ -10,10 +10,10 @@ class DbusServer(object):
     <node>
         <interface name="org.OreSat.ADCS">
             <signal name="ReactionWheelsCommand">
-                <arg type="(i)" name="command" />
+                <arg type="ii" name="command" />
             </signal>
             <signal name="MagnetorquerCommand">
-                <arg type="(i)" name="command" />
+                <arg type="ii" name="command" />
             </signal>
             <property name="CurrentState" type="i" access="readwrite"/>
             <property name="GPS_Data" type="((ddd)(ddd)s)" access="readwrite"/>

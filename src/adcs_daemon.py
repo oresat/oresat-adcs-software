@@ -88,14 +88,11 @@ class ADCS_Daemon(object):
 
                 # calcualte and send magnetorquer command
                 mag_command = self._magnetorquer.detumble(adcs_data_frame)
-                self._dbus_server.MagnetorquerCommand(mag_command)
-
-                # update dataframe
-                adcs_data_frame = self._dbus_server.get_all_adcs_data()
+                self._dbus_server.MagnetorquerCommand(mag_command[0], mag_command[1])
 
                 # calculate and send rection wheel command
                 rw_command = self._reaction_wheels.detumble(adcs_data_frame)
-                self._dbus_server.MagnetorquerCommand(rw_command)
+                self._dbus_server.ReactionWheelsCommand(rw_command[0], rw_command[1])
 
             elif current_state == State.POINT.value:
                 # update dataframe
@@ -103,20 +100,16 @@ class ADCS_Daemon(object):
 
                 # calcualte and send magnetorquer command
                 mag_command = self._magnetorquer.point(adcs_data_frame)
-                self._dbus_server.MagnetorquerCommand(mag_command)
-
-                # update dataframe
-                adcs_data_frame = self._dbus_server.get_all_adcs_data()
+                self._dbus_server.MagnetorquerCommand(mag_command[0], mag_command[1])
 
                 # calculate and send rection wheel command
                 rw_command = self._reaction_wheels.point(adcs_data_frame)
-                self._dbus_server.MagnetorquerCommand(rw_command)
+                self._dbus_server.ReactionWheelsCommand(rw_command[0], rw_command[1])
 
             else:
                 syslog.syslog(syslog.LOG_CRIT, "Unkown state in main loop")
-                print("Unknown state")
 
-            time.sleep(0.1) # to not have CPU at 100% all the time
+            time.sleep(0.5) # to not have CPU at 100% all the time
 
 
     def quit(self):

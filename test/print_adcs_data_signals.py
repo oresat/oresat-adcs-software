@@ -24,7 +24,7 @@ def magnetorquer_command_cb(*args):
     Callback when recieving MagnetorquerCommand signal.
     """
 
-    print("MagnetorquerCommand Signal: ", args[4])
+    print("Magnetorquer Command Signal: ", args[4])
 
 
 if __name__=="__main__":
@@ -34,7 +34,7 @@ if __name__=="__main__":
     bus.subscribe(
             sender="org.OreSat.ADCS",
             iface="org.OreSat.ADCS",
-            signal="MagnetorquerCommand",
+            signal="ReactionWheelsCommand",
             signal_fired=reaction_wheels_command_cb,
             object="/org/OreSat/ADCCS")
 
