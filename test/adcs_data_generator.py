@@ -85,9 +85,6 @@ def reaction_wheels_command_cb(*args):
             ),
             ]
 
-    time.sleep(1)
-
-
 
 
 def magnetorquer_command_cb(*args):
@@ -165,8 +162,6 @@ def magnetorquer_command_cb(*args):
             ),
             ]
 
-    time.sleep(1)
-
 
 if __name__=="__main__":
     loop = GLib.MainLoop()
@@ -190,6 +185,4 @@ if __name__=="__main__":
         loop.run()
     except KeyboardInterrupt as e:
         loop.quit()
-
-    while True:
 
