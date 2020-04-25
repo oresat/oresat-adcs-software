@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+
+
+from pydbus import SystemBus
+import time
+
+
+"""
+A test client that will print all the dbus properties for the adcs.
+"""
+
+
+if __name__=="__main__":
+    bus = SystemBus() # connect to bus
+    dbus_client = bus.get("org.OreSat.ADCS")
+
+    while True:
+        print("GPS Data: {}".format(dbus_client.GPS_Data))
+        print("Star Tracker Data: {}".format(dbus_client.StarTrackerData))
+        print("Magnetorquers Data: {}".format(dbus_client.MagnetometersData))
+        print("Reaction Wheels Data: {}".format(dbus_client.ReactionWheelsData))
+        print("Magnetometers Data: {}".format(dbus_client.MagnetorquerData))
+        print("")
+        time.sleep(1)
+
+

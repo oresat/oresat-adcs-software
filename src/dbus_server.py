@@ -17,10 +17,10 @@ class DbusServer(object):
             </signal>
             <property name="CurrentState" type="i" access="readwrite"/>
             <property name="GPS_Data" type="((ddd)(ddd)s)" access="readwrite"/>
-            <property name="StarTrackerData" type="(dddi)" access="readwrite"/>
-            <property name="MagnetometersData" type="a(ii)" access="readwrite"/>
-            <property name="ReactionWheelsData" type="a(ii)" access="readwrite"/>
-            <property name="MagnetorquerData" type="(ii)" access="readwrite"/>
+            <property name="StarTrackerData" type="(ddds)" access="readwrite"/>
+            <property name="MagnetometersData" type="a(is)" access="readwrite"/>
+            <property name="ReactionWheelsData" type="a(is)" access="readwrite"/>
+            <property name="MagnetorquerData" type="(is)" access="readwrite"/>
         </interface>
     </node>
     """ # this wont work in __init__()
@@ -40,11 +40,12 @@ class DbusServer(object):
         self._state_machine = state_machine_input
 
         # initize tuples. must match xml type field
-        self._gps_data = ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), "")
-        self._st_data = (0.0, 0.0, 0.0, 0)
-        self._magnetometers_data = [(0, 0), (0, 0)]
-        self._reaction_wheels_data = [(0, 0), (0, 0), (0, 0), (0, 0)]
-        self._magnetorquer_data = (0, 0)
+        time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self._gps_data = ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), time)
+        self._st_data = (0.0, 0.0, 0.0, time)
+        self._magnetometers_data = [(0, time), (0, time)]
+        self._reaction_wheels_data = [(0, time), (0, time), (0, time), (0, time)]
+        self._magnetorquer_data = (0, time)
 
 
     @property
