@@ -5,7 +5,7 @@ Attitude Determination Control System (ADCS). It include GPS, Star Tracker, Magn
 ## Dependacies
 `python3 python3-pydbus libsystemd-dev`
 
-# Setup
+## Setup
 - `sudo cp org.OreSat.ADCS.conf /usr/share/dbus-1/system.d/`
 
 ## Usage
