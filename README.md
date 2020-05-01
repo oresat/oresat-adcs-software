@@ -3,7 +3,10 @@ Attitude Determination Control System (ADCS). It include GPS, Star Tracker, Magn
 
 
 ## Dependacies
-`python3 python3-pydbus`
+`python3 python3-pydbus libsystemd-dev`
+
+## Setup
+- `sudo cp org.OreSat.ADCS.conf /usr/share/dbus-1/system.d/`
 
 ## Usage
 - `python3 src/main.py` To run as a process
@@ -13,9 +16,6 @@ Attitude Determination Control System (ADCS). It include GPS, Star Tracker, Magn
 ## State Machine
 ![](docs/adcs_statemachine.jpg)
 
-
-## Class Design
-![](docs/adcs_class_design.jpg)
 
 ## Class Data Flow
 ![](docs/adcs_class_data_flow.jpg)

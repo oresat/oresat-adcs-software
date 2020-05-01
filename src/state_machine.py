@@ -33,16 +33,15 @@ class StateMachine:
         self._lock.acquire()
 
         # check if new_state is a valid transition
-        if new_state in self._valid_transition(self._current_state):
+        if new_state in self._valid_transition[self._current_state]:
             self._current_state = new_state
             valid = True
         else:
             self._current_state = State.FAILED.value
             valid = False # not a valid transition
 
-        self._lock.require()
+        self._lock.release()
         return valid
-
 
 
     def get_current_state(self):

@@ -1,26 +1,26 @@
 
 
 from pydbus.generic import signal
-from state_machine import *
-import threading
+from state_machine import StateMachine
+import threading, datetime
 
 
-class Dbus_Server(object):
+class DbusServer(object):
     dbus = """
     <node>
         <interface name="org.OreSat.ADCS">
             <signal name="ReactionWheelsCommand">
-                <arg type="(i)" name="command" />
+                <arg type="ii" name="command" />
             </signal>
             <signal name="MagnetorquerCommand">
-                <arg type="(i)" name="command" />
+                <arg type="ii" name="command" />
             </signal>
             <property name="CurrentState" type="i" access="readwrite"/>
             <property name="GPS_Data" type="((ddd)(ddd)s)" access="readwrite"/>
-            <property name="StarTrackerData" type="(dddi)" access="readwrite"/>
-            <property name="MagnetometersData" type="a(ii)" access="readwrite"/>
-            <property name="ReactionWheelsData" type="a(ii)" access="readwrite"/>
-            <property name="MagnetorquerData" type="(ii)" access="readwrite"/>
+            <property name="StarTrackerData" type="(ddds)" access="readwrite"/>
+            <property name="MagnetometersData" type="a(is)" access="readwrite"/>
+            <property name="ReactionWheelsData" type="a(is)" access="readwrite"/>
+            <property name="MagnetorquerData" type="(is)" access="readwrite"/>
         </interface>
     </node>
     """ # this wont work in __init__()
@@ -30,7 +30,6 @@ class Dbus_Server(object):
     ReactionWheelsCommand = signal()
 
     def __init__(self, state_machine_input):
-        # (StateMachine) -> ()
         """
         Contructor.
         Pass in the state machine
@@ -39,17 +38,25 @@ class Dbus_Server(object):
         self._lock = threading.Lock()
         self._state_machine = state_machine_input
 
+        # initize tuples. must match xml type field
+        time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self._gps_data = ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), time)
+        self._st_data = (0.0, 0.0, 0.0, time)
+        self._magnetometers_data = [(0, time), (0, time)]
+        self._reaction_wheels_data = [(0, time), (0, time), (0, time), (0, time)]
+        self._magnetorquer_data = (0, time)
+
 
     @property
     def CurrentState(self):
-        # wrapper for state machien getter.
+        # wrapper for state machine getter.
         return self._state_machine.get_current_state()
 
 
     @CurrentState.setter
     def CurrentState(self, new_state):
         # wrapper for state machien setter.
-        self._state_machine.current_state(new_state)
+        self._state_machine.change_state(new_state)
 
 
     # ------------------------------------------------------------------------
@@ -65,7 +72,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         temp = self._gps_data
-        self._lock.require()
+        self._lock.release()
 
         return temp
 
@@ -79,7 +86,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         self._gps_data = input_data
-        self._lock.require()
+        self._lock.release()
 
 
     # ------------------------------------------------------------------------
@@ -95,7 +102,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         temp = self._st_data
-        self._lock.require()
+        self._lock.release()
 
         return temp
 
@@ -109,7 +116,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         self._st_data = input_data
-        self._lock.require()
+        self._lock.release()
 
 
     # ------------------------------------------------------------------------
@@ -125,7 +132,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         temp = self._magnetometers_data
-        self._lock.require()
+        self._lock.release()
 
         return temp
 
@@ -139,7 +146,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         self._magnetometers_data = input_data
-        self._lock.require()
+        self._lock.release()
 
 
     # ------------------------------------------------------------------------
@@ -154,8 +161,8 @@ class Dbus_Server(object):
         """
 
         self._lock.acquire()
-        temp = self._reaction_wheel_data
-        self._lock.require()
+        temp = self._reaction_wheels_data
+        self._lock.release()
 
         return temp
 
@@ -168,8 +175,8 @@ class Dbus_Server(object):
         """
 
         self._lock.acquire()
-        self._reaction_wheel_data = input_data
-        self._lock.require()
+        self._reaction_wheels_data = input_data
+        self._lock.release()
 
 
     # ------------------------------------------------------------------------
@@ -185,7 +192,7 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         temp = self._magnetorquer_data
-        self._lock.require()
+        self._lock.release()
 
         return temp
 
@@ -199,4 +206,18 @@ class Dbus_Server(object):
 
         self._lock.acquire()
         self._magnetorquer_data = input_data
-        self._lock.require()
+        self._lock.release()
+
+    # ------------------------------------------------------------------------
+    # convenience call for all (data not for dbus)
+
+    def get_all_adcs_data(self):
+        self._lock.acquire()
+        temp = (self._gps_data,
+                self._st_data,
+                self._magnetometers_data,
+                self._reaction_wheels_data,
+                self._magnetorquer_data)
+        self._lock.release()
+        return temp
+

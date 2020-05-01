@@ -1,8 +1,8 @@
 import time, threading, syslog
 from pydbus import SystemBus
 from gi.repository import GLib
-from dbus_server import Dbus_Server
-from state_machine import StateMachine
+from dbus_server import DbusServer
+from state_machine import *
 from magnetorquer_controller import MagnetorquerController
 from reaction_wheels_controller import ReactionWheelsController
 
@@ -14,9 +14,12 @@ OBJECT_PATH = "/org/OreSat/ADCS"
 
 class ADCS_Daemon(object):
     """
-    This class will handle initializing the program (start program as a daemon,
-    making all class objects, starting all thread, and starting the dbus
-    server).
+    This class will handle initializing the program (making all class objects,
+    starting all thread, and starting the dbus server).
+
+    NOTE:
+        This will NOT make the program into daemon (forking the process) that
+        should be done in main().
 
     It main job after initiziing everything is to loop and tell the
     MagnetorquerController and ReactionWheelsController what to do (i.e.
@@ -32,13 +35,13 @@ class ADCS_Daemon(object):
 
         # set up other classes
         self._state_machine = StateMachine()
-        self._dbus_server = DbusServer(StateMachine)
-        self._magnetorquer = MagnetorquerController(dbus_server)
-        self._reaction_wheels = ReactionWheelsController(dbus_server)
+        self._dbus_server = DbusServer(self._state_machine)
+        self._magnetorquer = MagnetorquerController()
+        self._reaction_wheels = ReactionWheelsController()
 
         # set up bus / dbus thread
         self._bus = SystemBus()
-        self._bus.publish(INTERFACE_NAME, dbus_server)
+        self._bus.publish(INTERFACE_NAME, self._dbus_server)
         self._dbus_loop = GLib.MainLoop()
         self._dbus_thread = threading.Thread(target=self._dbus_run, name="dbus-thread")
         self._dbus_thread.start()
@@ -49,7 +52,9 @@ class ADCS_Daemon(object):
     def __del__(self):
         """
         Decontructor
+        Stop dbus thread and dbus server.
         """
+
         self.quit()
 
 
@@ -72,20 +77,39 @@ class ADCS_Daemon(object):
 
         while(self._running):
             # get current state
-            current_state = state_machine.current_state()
+            current_state = self._state_machine.get_current_state()
 
-            if current_state == SLEEP or current_state == ERROR:
+            if current_state == State.SLEEP.value or current_state == State.FAILED.value:
                 time.sleep(0.5)
-            elif current_state == DETUMBLE:
-                self._magnetorquer.detumble()
-                self._reaction_wheels.detumble()
-            elif current_state == POINT:
-                self._magnetorquer.point()
-                self._reaction_wheels.point()
+
+            elif current_state == State.DETUMBLE.value:
+                # update dataframe
+                adcs_data_frame = self._dbus_server.get_all_adcs_data()
+
+                # calcualte and send magnetorquer command
+                mag_command = self._magnetorquer.detumble(adcs_data_frame)
+                self._dbus_server.MagnetorquerCommand(mag_command[0], mag_command[1])
+
+                # calculate and send rection wheel command
+                rw_command = self._reaction_wheels.detumble(adcs_data_frame)
+                self._dbus_server.ReactionWheelsCommand(rw_command[0], rw_command[1])
+
+            elif current_state == State.POINT.value:
+                # update dataframe
+                adcs_data_frame = self._dbus_server.get_all_adcs_data()
+
+                # calcualte and send magnetorquer command
+                mag_command = self._magnetorquer.point(adcs_data_frame)
+                self._dbus_server.MagnetorquerCommand(mag_command[0], mag_command[1])
+
+                # calculate and send rection wheel command
+                rw_command = self._reaction_wheels.point(adcs_data_frame)
+                self._dbus_server.ReactionWheelsCommand(rw_command[0], rw_command[1])
+
             else:
                 syslog.syslog(syslog.LOG_CRIT, "Unkown state in main loop")
 
-            time.sleep(0.1) # to not have CPU at 100% all the time
+            time.sleep(0.5) # to not have CPU at 100% all the time
 
 
     def quit(self):
