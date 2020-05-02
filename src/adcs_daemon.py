@@ -5,6 +5,7 @@ from dbus_server import DbusServer
 from state_machine import *
 from magnetorquer_controller import MagnetorquerController
 from reaction_wheels_controller import ReactionWheelsController
+from dynamic_model import *
 
 
 DESTINATION = "org.OreSat.ADCS" # aka service name
@@ -46,6 +47,10 @@ class ADCS_Daemon(object):
         self._dbus_thread = threading.Thread(target=self._dbus_run, name="dbus-thread")
         self._dbus_thread.start()
 
+        # set up dynamic model
+        self._model = DynamicalSystem(x_0, v_0, q_0, w_0, whl_0)
+        self._integrator = Integrator(self._model, 0.05)
+
         self._running = False
 
 
@@ -78,8 +83,11 @@ class ADCS_Daemon(object):
         while(self._running):
             # get current state
             current_state = self._state_machine.get_current_state()
+            self._model.publish_to_dbus()
+
 
             if current_state == State.SLEEP.value or current_state == State.FAILED.value:
+                self._integrator.integrate(0.5, [np.zeros(4), np.zeros(3)])
                 time.sleep(0.5)
 
             elif current_state == State.DETUMBLE.value:
@@ -107,8 +115,9 @@ class ADCS_Daemon(object):
                 self._dbus_server.ReactionWheelsCommand(rw_command[0], rw_command[1])
 
             else:
-                syslog.syslog(syslog.LOG_CRIT, "Unkown state in main loop")
+                syslog.syslog(syslog.LOG_CRIT, "Unknown state in main loop")
 
+            self._integrator.integrate(0.5, [np.zeros(4), np.zeros(3)])
             time.sleep(0.5) # to not have CPU at 100% all the time
 
 
@@ -120,5 +129,3 @@ class ADCS_Daemon(object):
         self._running = False
         self._dbus_loop.quit()
         self._dbus_thread.join()
-
-

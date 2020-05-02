@@ -1,3 +1,7 @@
+
+import site
+import sys
+site.addsitedir('/usr/lib/python3/dist-packages/pdbus')
 import sys, os, getopt
 from adcs_daemon import *
 

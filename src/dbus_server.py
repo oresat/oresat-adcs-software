@@ -1,5 +1,3 @@
-
-
 from pydbus.generic import signal
 from state_machine import StateMachine
 import threading, datetime
@@ -20,7 +18,7 @@ class DbusServer(object):
             <property name="StarTrackerData" type="(ddds)" access="readwrite"/>
             <property name="MagnetometersData" type="a(is)" access="readwrite"/>
             <property name="ReactionWheelsData" type="a(is)" access="readwrite"/>
-            <property name="MagnetorquerData" type="(is)" access="readwrite"/>
+            <property name="MagnetorquerData" type="a(is)" access="readwrite"/>
         </interface>
     </node>
     """ # this wont work in __init__()
@@ -220,4 +218,3 @@ class DbusServer(object):
                 self._magnetorquer_data)
         self._lock.release()
         return temp
-

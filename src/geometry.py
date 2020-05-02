@@ -115,6 +115,15 @@ def eulerangle_to_quat(RA, dec, orientation):
                      c_phi * s_theta * c_psi + s_phi * c_theta * s_psi,
                      s_phi * c_theta * c_psi + c_phi * s_theta * s_psi])
 
+# convert quaternion attitude to RA, DEC, ROLL
+# i don't particularly trust this right now, check it out later
+# http://general-tools.cosmos.esa.int/iso/manuals/HANDBOOK/gen_hb/node87.php
+def quat_to_startracker(q):
+    dec = np.arcsin(2 * (q[1]*q[3] - q[2]*q[0]))
+    cos_dec = np.cos(dec)
+    ra = np.arcsin(2 * (q[1]*q[2] + q[3]*q[0]) / cos_dec)
+    roll = np.arcsin(2 * (q[1]*q[0] + q[3]*q[2]) / cos_dec)
+    return [ra, dec, roll]
 
 ## these next few functions are for transformations between coordinate systems
 # transformation from inertial frame to ECEF, Cartesian x, y, z

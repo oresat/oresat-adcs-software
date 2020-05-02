@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+from pydbus import SystemBus
+from gi.repository import GLib
+import time, random, datetime
 import numpy as np
 from geometry import * # I'm not sure if this still executes the file being imported from
 from system_definition import *
@@ -68,6 +72,8 @@ class DynamicalSystem():
     def __init__(self, position, lin_vel, attitude, body_ang_vel, wheel_vel):
         self.full_state = np.array([position, lin_vel,
                                     attitude, body_ang_vel, wheel_vel])
+        self.bus = SystemBus() # connect to bus
+        self.dbus_client = self.bus.get("org.OreSat.ADCS")
 
     # kinematic equations
     # ECEF ref
@@ -122,6 +128,68 @@ class DynamicalSystem():
         dw_rw_dt = self.wheel_vel_derivative(accl_cmd)
         return np.array([dxdt, dvdt, dqdt, dwdt, dw_rw_dt])
 
+    def publish_to_dbus(self):
+        #self.full_state = np.array([position, lin_vel,
+        #                            attitude, body_ang_vel, wheel_vel])
+        # update the gps data
+        self.dbus_client.GPS_Data = (
+                 # postion x,y,z
+                self.full_state[0],
+
+                 # velocity x,y,z
+                self.full_state[1],
+
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            )
+
+        ra, dec, roll = quat_to_startracker(self.full_state[2])
+        # update star tracker data
+        self.dbus_client.StarTrackerData = (
+                ra, dec, roll,
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                )
+
+
+        # update magnetometer data
+        self.dbus_client.MagnetometersData = [
+                (
+                random.randint(0, 100),
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                ),
+                (
+                random.randint(0, 100),
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                )
+                ]
+
+        # update reaction wheels data
+        self.dbus_client.ReactionWheelsData = [
+                (
+                random.randint(0, 100),
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                ),
+                (
+                random.randint(0, 100),
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                ),
+                (
+                random.randint(0, 100),
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                ),
+                (
+                random.randint(0, 100),
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                )
+                ]
+
+        # update magnetorquer data
+        self.dbus_client.MagnetorquerData = [
+                (
+                random.randint(0, 100),
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                )
+                ]
+
 class Integrator():
     def __init__(self, model, dt):
         self.model = model
@@ -153,12 +221,12 @@ class Integrator():
             magnetorquer_currents = zero_order_hold[1]
             self.update(self.model.full_state, [body_ang_accl, accl_cmd, magnetorquer_currents])
             t += self.dt
-        for i in self.history:
-            print(i, '\n')
-        print("duration:", t, "seconds")
+        #for i in self.history:
+        #    print(i, '\n')
+        #print("duration:", t, "seconds")
 
 
 
-test_sys = DynamicalSystem(x_0, v_0, q_0, w_0, whl_0)
-test_int = Integrator(test_sys, 0.1)
-test_int.integrate(10.0, [np.zeros(4), np.zeros(3)])
+#test_sys = DynamicalSystem(x_0, v_0, q_0, w_0, whl_0)
+#test_int = Integrator(test_sys, 0.1)
+#test_int.integrate(10.0, [np.zeros(4), np.zeros(3)])
