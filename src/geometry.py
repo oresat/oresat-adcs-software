@@ -4,14 +4,14 @@ import numpy as np
 # by Markely and Crassidis for understanding, pardon the magic numbers
 # This is needed to translate between ECEF and ECI coordinates
 class Clock():
-    def __init__(self, year, month, day, hour, minute, second, dt):
+    def __init__(self, year, month, day, hour, minute, second):
         self.year = year
         self.month = month
         self.day = day
         self.hour = hour
         self.minute = minute
         self.second = second
-        self.leap_year = is_leap_year()
+        self.leap_year = self.is_leap_year()
         self.leap_second = False
 
     def schedule_leap_second(self, year, month, day, hour, minute, second):
@@ -28,10 +28,12 @@ class Clock():
         else:
             return True
     # advance one time step
-    def tick(self): # naive implementation, I hate the Gregorian calendar
-        self.second += self.dt
-        if ((not self.leap_second and self.second + self.dt == 60) or
-            (self.leap_second and self.second == 61)):
+    # naive implementation, I hate the Gregorian calendar
+    # we could use modulo and remainder to allow for large timesteps, let's not
+    def tick(self, dt):
+        self.second += dt
+        if ((not self.leap_second and abs(self.second - 60) < 0.00001) or
+            (self.leap_second and abs(self.second - 61) < 0.00001)):
             self.second = 0
             self.minute += 1
 
@@ -74,13 +76,21 @@ class Clock():
         return np.radians(gmst / 240)
 
 
+
+# this is the matrix corresponding to a vector acting by cross product on the left
+def cross_matrix(w):
+    return np.array([[0, -w[2], w[1]],
+                     [w[2], 0, -w[0]],
+                     [-w[1], w[0], 0]])
+
 ## these next few functions are for our use of quaternions in implementating rotations
 # this is the inverse of a unit quat
 def conjugate(q):
     return np.array([q[0], -q[1], -q[2], -q[3]])
 
-# this constrains a quat to S^3
+# this constrains a quat to S^3 or a vector to S^2
 def normalize(q):
+    #print(np.linalg.norm(q))
     return q / np.linalg.norm(q)
 
 # this is hamilton's quaternion product, q[0] is real part of a quaternion
@@ -92,6 +102,24 @@ def quat_product(a, b):
 # this expresses a vector in the reference frame of the quaterion
 def sandwich(q, v):
     return quat_product(conjugate(q), quat_product(np.array([0, v[0], v[1], v[2]]), q))[1:]
+
+# this gets the attitude error between current and desired orientations
+def error_quat(q, q_ref):
+    mat = np.array([[q_ref[0], q_ref[1], q_ref[2], q_ref[3]],
+                    [-q_ref[1], q_ref[0], q_ref[3], -q_ref[2]],
+                    [-q_ref[2], -q_ref[3], q_ref[0], q_ref[1]],
+                    [-q_ref[3], q_ref[2], -q_ref[1], q_ref[0]]])
+    return mat.dot(q)
+
+# see Attitude Control Simulator for the Small Satellite and Its Validation by On-orbit Data of QSAT-EOS
+# for descriptions of next couple functions
+# take shortest path to correct errors. keep in mind that S^3 double-covers SO(3)
+#def error_quat(q_true, q_ref):
+#    q = quat_product(conjugate(q_ref), q_true)
+#    if q[0] < 0:
+#        return -q
+#    else:
+#        return q
 
 # encodes an axis-angle representation of a rotation as a unit quaterion
 def axisangle_to_quat(r, theta):
@@ -137,8 +165,8 @@ def inertial_to_ecef(clock):
 
 # transformation from local orbital frame to inertial frame, Cartesian x, y, z
 def lvlh_to_inertial(r_I, v_I):
-    o_3I = - r_I / np.linalg.norm(r_I)
-    o_2I = - np.cross(r_I, v_I) / np.linalg.norm(np.cross(r_I, v_I))
+    o_3I = - normalize(r_I)
+    o_2I = - normalize(np.cross(r_I, v_I))
     o_1I = np.cross(o_2I, o_3I)
     return np.array([[o_1I[0], o_2I[0], o_3I[0]],
                      [o_1I[1], o_2I[1], o_3I[1]],

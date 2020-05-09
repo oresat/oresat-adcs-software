@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# note that I changed the ADCS dataframe, so this is currently broken
 from pydbus import SystemBus
 from gi.repository import GLib
 import time, random, datetime

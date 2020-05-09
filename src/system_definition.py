@@ -5,7 +5,7 @@ from geometry import *
 EARTH_ROTATION = 7.2921158553e-5 # rad/s, rotation of Earth around axis
 G_NEWTON = 6.6743e-11 #m^3 kg^-1 s^-2
 EARTH_MASS = 5.972e24 # kg
-ORESAT_MASS = (21.66*4 + 2272.07) / 1000 # kg, mass of oresat
+ORESAT_MASS = (21.66*4 + 2419.56) / 1000 # kg, mass of oresat
 #EARTH_MU = 3.986004418e14 # m^3 s^-2, standard gravitational parameter of earth
 MU = G_NEWTON * (ORESAT_MASS + EARTH_MASS) # gravitational parameter of body wrt earth
 
@@ -30,16 +30,12 @@ WHEEL_AXES = np.array([[S_rw * np.cos(np.pi * (2 * n + 5) / 4),
 # there is another method for minimizing max effort of any wheel (minimax)
 # right now we don't care, but we may later
 RWSYS_TO_WHEELS = np.linalg.pinv(WHEEL_AXES.T)
-# I emphasise these coefficients are entirely arbitrary
-P_COEFF = 0.5
-I_COEFF = 0.01
-D_COEFF = 10
 
 # moments of inertia, all in kg * m^2 and body coordinates
 # body moment does NOT include reaction wheels
-body_moment = np.array([[1.109521565e-2, 0, 0],
-                    [0, 1.109521565e-2, 0],
-                    [0, 0, 5.09404743e-3]])
+BODY_MOMENTS = np.array([1.378574142e-2,
+                        1.378854578e-2,
+                        5.49370596e-3])
 rw_moment_perpend = np.ones(4) * 1.02562e-6
 RW_MOMENT_PARALLEL = np.ones(4) * 1.64023e-6 # only this is relevant to wheel control
 
@@ -47,7 +43,7 @@ RW_MOMENT_PARALLEL = np.ones(4) * 1.64023e-6 # only this is relevant to wheel co
 def find_J_B():
     wheel_moments = sum([rw_moment_perpend[i] * (np.identity(3) - np.outer(axis, axis))
                  for i, axis in enumerate(WHEEL_AXES)])
-    return body_moment + wheel_moments
+    return np.diag(BODY_MOMENTS) + wheel_moments
 
 # note that the total moment of inertia is MOMENT_OF_INERTIA + WHEEL_MOMENT
 # refer to section 3.3.5 when confused
@@ -86,10 +82,13 @@ G_MATRIX = np.array([
 R_MATRIX = np.diag([SENSOR_SIGMA**2 for i in range(3)])
 
 # dynamic model initial conditions
-x_0 = np.array([1.91831688780483e6, 6.52089247589002e6, 1.94903609076208e3]) # m. this and v are from freeflyer
-v_0 = np.array([-4.56009030296681e3, 1.33278201869975e3, 6.0067784327447e3]) # m/s
+#x_0 = np.array([1.91831688780483e6, 6.52089247589002e6, 1.94903609076208e3]) # m. this and v are from freeflyer
+#v_0 = np.array([-4.56009030296681e3, 1.33278201869975e3, 6.0067784327447e3]) # m/s
+x_0 = np.array([5.581498e6, -3.881737e6, 1.421855e4])
+v_0 = np.array([2.708896e3, 3.914674e3, 5.994012e3])
 q_0 = np.array([1, 0, 0, 0])
 w_0 = np.array([0.08726646, 0.08726646, 0.08726646]) # 5 degrees/s / axis. worst case
+#w_0 = np.array([0,0,0.1])
 whl_0 = np.array([0, 0, 0, 0])
 cur_0 = np.array([0, 0, 0])
 t_0 = (2020, 9, 1, 0, 0, 0)

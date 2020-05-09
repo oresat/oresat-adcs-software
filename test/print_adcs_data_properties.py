@@ -18,10 +18,9 @@ if __name__=="__main__":
         print("Current State: {}".format(dbus_client.CurrentState))
         print("GPS Data: {}".format(dbus_client.GPS_Data))
         print("Star Tracker Data: {}".format(dbus_client.StarTrackerData))
-        print("Magnetorquers Data: {}".format(dbus_client.MagnetometersData))
+        print("Gyro Data: {}".format(dbus_client.GyroData))
+        print("Magnetometer Data: {}".format(dbus_client.MagnetometersData))
         print("Reaction Wheels Data: {}".format(dbus_client.ReactionWheelsData))
-        print("Magnetometers Data: {}".format(dbus_client.MagnetorquerData))
+        print("Magnetorquer Data: {}".format(dbus_client.MagnetorquerData))
         print("")
         time.sleep(1)
-
-

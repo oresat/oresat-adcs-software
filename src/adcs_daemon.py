@@ -50,6 +50,7 @@ class ADCS_Daemon(object):
         # set up dynamic model
         self._model = DynamicalSystem(x_0, v_0, q_0, w_0, whl_0)
         self._integrator = Integrator(self._model, 0.05)
+        self._model.publish_to_dbus()
 
         self._running = False
 
@@ -79,15 +80,17 @@ class ADCS_Daemon(object):
         """
 
         self._running = True
+        testing = self._state_machine.change_state(1)
 
         while(self._running):
             # get current state
             current_state = self._state_machine.get_current_state()
-            self._model.publish_to_dbus()
+            #self._model.publish_to_dbus()
 
 
             if current_state == State.SLEEP.value or current_state == State.FAILED.value:
-                self._integrator.integrate(0.5, [np.zeros(4), np.zeros(3)])
+                self._integrator.integrate(0.5, [np.zeros(3), np.zeros(3)])
+                mag_command, rw_command = np.zeros(3), np.zeros(3)
                 time.sleep(0.5)
 
             elif current_state == State.DETUMBLE.value:
@@ -96,11 +99,11 @@ class ADCS_Daemon(object):
 
                 # calcualte and send magnetorquer command
                 mag_command = self._magnetorquer.detumble(adcs_data_frame)
-                self._dbus_server.MagnetorquerCommand(mag_command[0], mag_command[1])
+                self._dbus_server.MagnetorquerCommand(mag_command)
 
                 # calculate and send rection wheel command
                 rw_command = self._reaction_wheels.detumble(adcs_data_frame)
-                self._dbus_server.ReactionWheelsCommand(rw_command[0], rw_command[1])
+                self._dbus_server.ReactionWheelsCommand(rw_command)
 
             elif current_state == State.POINT.value:
                 # update dataframe
@@ -108,16 +111,16 @@ class ADCS_Daemon(object):
 
                 # calcualte and send magnetorquer command
                 mag_command = self._magnetorquer.point(adcs_data_frame)
-                self._dbus_server.MagnetorquerCommand(mag_command[0], mag_command[1])
+                self._dbus_server.MagnetorquerCommand(mag_command)
 
                 # calculate and send rection wheel command
-                rw_command = self._reaction_wheels.point(adcs_data_frame)
-                self._dbus_server.ReactionWheelsCommand(rw_command[0], rw_command[1])
+                rw_command = self._reaction_wheels.point(adcs_data_frame, np.array([0,0,0]), np.array([0, 0, 1]))
+                self._dbus_server.ReactionWheelsCommand(rw_command)
 
             else:
                 syslog.syslog(syslog.LOG_CRIT, "Unknown state in main loop")
 
-            self._integrator.integrate(0.5, [np.zeros(4), np.zeros(3)])
+            self._integrator.integrate(0.5, [rw_command, mag_command])
             time.sleep(0.5) # to not have CPU at 100% all the time
 
 

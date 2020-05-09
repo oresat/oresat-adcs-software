@@ -8,16 +8,17 @@ class DbusServer(object):
     <node>
         <interface name="org.OreSat.ADCS">
             <signal name="ReactionWheelsCommand">
-                <arg type="ii" name="command" />
+                <arg type="(ddd)" name="command" />
             </signal>
             <signal name="MagnetorquerCommand">
-                <arg type="ii" name="command" />
+                <arg type="(ddd)" name="command" />
             </signal>
             <property name="CurrentState" type="i" access="readwrite"/>
             <property name="GPS_Data" type="((ddd)(ddd)s)" access="readwrite"/>
-            <property name="StarTrackerData" type="(ddds)" access="readwrite"/>
-            <property name="MagnetometersData" type="a(is)" access="readwrite"/>
-            <property name="ReactionWheelsData" type="a(is)" access="readwrite"/>
+            <property name="StarTrackerData" type="((dddd)s)" access="readwrite"/>
+            <property name="GyroData" type="((ddd)s)" access="readwrite"/>
+            <property name="MagnetometersData" type="a((ddd)s)" access="readwrite"/>
+            <property name="ReactionWheelsData" type="a(ds)" access="readwrite"/>
             <property name="MagnetorquerData" type="a(is)" access="readwrite"/>
         </interface>
     </node>
@@ -39,10 +40,11 @@ class DbusServer(object):
         # initize tuples. must match xml type field
         time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._gps_data = ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), time)
-        self._st_data = (0.0, 0.0, 0.0, time)
-        self._magnetometers_data = [(0, time), (0, time)]
-        self._reaction_wheels_data = [(0, time), (0, time), (0, time), (0, time)]
-        self._magnetorquer_data = (0, time)
+        self._st_data = ((0.0, 0.0, 0.0, 0.0), time)
+        self._gyro_data = ((0.0, 0.0, 0.0), time)
+        self._magnetometers_data = [((0.0, 0.0, 0.0), time), ((0.0, 0.0, 0.0), time)]
+        self._reaction_wheels_data = [(0.0, time), (0.0, time), (0.0, time), (0.0, time)]
+        self._magnetorquer_data = [(0, time)]
 
 
     @property
@@ -114,6 +116,36 @@ class DbusServer(object):
 
         self._lock.acquire()
         self._st_data = input_data
+        self._lock.release()
+
+
+        # ------------------------------------------------------------------------
+        # IMU Gyroscopes
+
+
+    @property
+    def GyroData(self):
+        """
+        Getter for Gyro data.
+        Is used by dbus and can be use by other classes.
+        """
+
+        self._lock.acquire()
+        temp = self._gyro_data
+        self._lock.release()
+
+        return temp
+
+
+    @GyroData.setter
+    def GyroData(self, input_data):
+        """
+        Setter for Gyro data.
+        Is used by dbus.
+        """
+
+        self._lock.acquire()
+        self._gyro_data = input_data
         self._lock.release()
 
 
@@ -213,6 +245,7 @@ class DbusServer(object):
         self._lock.acquire()
         temp = (self._gps_data,
                 self._st_data,
+                self._gyro_data,
                 self._magnetometers_data,
                 self._reaction_wheels_data,
                 self._magnetorquer_data)
