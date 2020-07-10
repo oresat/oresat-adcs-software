@@ -7,6 +7,7 @@ from magnetorquer_controller import MagnetorquerController
 from reaction_wheels_controller import ReactionWheelsController
 from dynamic_model import *
 
+# this is currently borked, pending use of library
 
 DESTINATION = "org.OreSat.ADCS" # aka service name
 INTERFACE_NAME = "org.OreSat.ADCS"
@@ -37,8 +38,8 @@ class ADCS_Daemon(object):
         # set up other classes
         self._state_machine = StateMachine()
         self._dbus_server = DbusServer(self._state_machine)
-        self._magnetorquer = MagnetorquerController()
-        self._reaction_wheels = ReactionWheelsController()
+        #self._magnetorquer = MagnetorquerController()
+        #self._reaction_wheels = ReactionWheelsController()
 
         # set up bus / dbus thread
         self._bus = SystemBus()
@@ -48,9 +49,9 @@ class ADCS_Daemon(object):
         self._dbus_thread.start()
 
         # set up dynamic model
-        self._model = DynamicalSystem(x_0, v_0, q_0, w_0, whl_0)
-        self._integrator = Integrator(self._model, 0.05)
-        self._model.publish_to_dbus()
+        #self._model = DynamicalSystem(x_0, v_0, q_0, w_0, whl_0)
+        #self._integrator = Integrator(self._model, 0.05)
+        #self._model.publish_to_dbus()
 
         self._running = False
 
@@ -80,7 +81,7 @@ class ADCS_Daemon(object):
         """
 
         self._running = True
-        testing = self._state_machine.change_state(1)
+        testing = self._state_machine.change_state(0)
 
         while(self._running):
             # get current state
@@ -89,7 +90,7 @@ class ADCS_Daemon(object):
 
 
             if current_state == State.SLEEP.value or current_state == State.FAILED.value:
-                self._integrator.integrate(0.5, [np.zeros(3), np.zeros(3)])
+                #self._integrator.integrate(0.5, [np.zeros(3), np.zeros(3)])
                 mag_command, rw_command = np.zeros(3), np.zeros(3)
                 time.sleep(0.5)
 
@@ -120,7 +121,7 @@ class ADCS_Daemon(object):
             else:
                 syslog.syslog(syslog.LOG_CRIT, "Unknown state in main loop")
 
-            self._integrator.integrate(0.5, [rw_command, mag_command])
+            #self._integrator.integrate(0.5, [rw_command, mag_command])
             time.sleep(0.5) # to not have CPU at 100% all the time
 
 
