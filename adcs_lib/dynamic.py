@@ -18,10 +18,10 @@ class DynamicalSystem():
         self.GCI_to_ECEF = frame.inertial_to_ecef(self.clock)
 
     def vector_field(self, position, lin_vel, attitude, body_ang_vel, wheel_vel,
-                     body_ang_accl, whl_accl, mag_moment):
+                     body_ang_accl, mag_moment, whl_accl):
         '''This is the vector field for our state space. It defines the differential equation to be solved.'''
         attitude     = quaternion.normalize(attitude) # we do this for the intermediate RK4 steps
-        F_env, T_env = self.environ.env_F_and_T(position, lin_vel, attitude, self.GCI_to_ECEF, mag_moment)
+        F_env, T_env = self.enviro.env_F_and_T(position, lin_vel, attitude, self.GCI_to_ECEF, mag_moment)
         T_whl        = self.satellite.reaction_wheels.torque(whl_accl, body_ang_accl)
         H_whl        = self.satellite.reaction_wheels.momentum(wheel_vel, body_ang_vel)
 
@@ -61,6 +61,6 @@ class Integrator():
         '''This is the front-facing interface for the library. It takes an integration duration and a set of fixed exogenous commands.
         Then it propagates the dynamic model for that duration using those commands.'''
         for i in range(duration // self.dt):
-            accl_cmd   = zero_order_hold[0]
-            mag_moment = zero_order_hold[1]
-            self.update(self.model.state, [self.last_ang_accl, accl_cmd, mag_moment])
+            mag_moment = zero_order_hold[0]
+            accl_cmd   = zero_order_hold[1]
+            self.update(self.model.state, [self.last_ang_accl, mag_moment, accl_cmd])

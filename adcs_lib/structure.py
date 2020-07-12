@@ -50,7 +50,7 @@ class ReactionWheelSystem():
         self.wheels            = (Wheel(inclination, azimuth, parallel_moment, orthogonal_moment, i) for i in range(4))
         #: Spin axes of reaction wheels.
         self.axes              = np.array([wheel.axis for wheel in self.wheels]).T
-        # the pseudoinverse method minimizes norm of torque/momentum vector which is sum of individual wheels
+        # the pseudoinverse method minimizes L2 norm of torque/momentum vector (which is sum of individual wheels)
         # there is another method for minimizing max effort of any wheel (minimax)
         # right now we don't care, but we may later
         #: Distributes torque of whole wheel system into torque of individual wheels.

@@ -50,8 +50,8 @@ class KalmanState(DynamicalSystem):
 
     def vector_field(self, atd_bias, gyro_bias, covariance,
                      position, lin_vel, attitude, body_ang_vel, wheel_vel,
-                     body_ang_accl, whl_accl, mag_moment):
-        derivs = super().vector_field(position, lin_vel, attitude, body_ang_vel, wheel_vel, body_ang_accl, whl_accl, mag_moment)
+                     body_ang_accl, mag_moment, whl_accl):
+        derivs = super().vector_field(position, lin_vel, attitude, body_ang_vel, wheel_vel, body_ang_accl, mag_moment, whl_accl)
         # farrenkopf's gyro dynamics error model
         w_est = body_ang_vel - gyro_bias - rng.normal(0, self.GYRO_SIGMA, 3)
         F = self.F_mtrx(w_est)

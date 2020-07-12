@@ -40,3 +40,8 @@ class SimulatorDaemonInterface():
         w = self.gyro.measurement()
         B = self.magnetometer.measurement()
         return (x, v, q, w, B)
+
+    def progagate(self, duration, zero_order_hold):
+        '''This function is for the daemon specifically so that it only needs one function call to use the library.'''
+        self.input(duration, zero_order_hold)
+        return self.output()
