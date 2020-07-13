@@ -1,10 +1,10 @@
 import numpy as np
-from numpy import default_rng
-import sensor
+from numpy.random import default_rng
+import sensor, dynamic
 
 rng = default_rng()
 
-class KalmanState(DynamicalSystem):
+class KalmanState(dynamic.DynamicalSystem):
 
     def __init__(self, atd_bias, gyro_bias, covariance, position, lin_vel, attitude, body_ang_vel, wheel_vel, date_and_time):
         super().__init__(position, lin_vel, attitude, body_ang_vel, wheel_vel, date_and_time)
@@ -13,7 +13,7 @@ class KalmanState(DynamicalSystem):
         self.DRIFT_SIGMA = 1.713 * 10**(-8) # rate random walk, rad / s^(3/2), guestimate
         self.BIAS_SIGMA = 0.05236 # rad/s initial bias std dev, guestimate
         self.SENSOR_SIGMA = 1.5 * 10**(-5) # rad, star tracker measurement noise, guestimate
-        g = self.GYRO_SIGMA**2Filter
+        g = self.GYRO_SIGMA**2
         d = self.DRIFT_SIGMA**2
         # untuned process noise model, assuming variance is independent
         self.Q = np.array([
@@ -60,7 +60,7 @@ class KalmanState(DynamicalSystem):
         dbdt = rng.normal(0, self.DRIFT_SIGMA, 3)
         # Riccati equation, propagation of kalman covariance matrix
         dPdt = F.dot(covariance) + covariance.dot(F.T) + self.G.dot(self.Q.dot(self.G.T))
-        return np.array([dadt, dbdt, dPdt, derivs[0], derivs[1], derivs[2], derivs[3], derivs[4]])
+        return np.array([dadt, dbdt, dPdt, derivs[0], derivs[1], derivs[2], derivs[3], derivs[4]], dtype=object)
 
 class DummyFilter():
     def __init__(self, model):
@@ -73,5 +73,5 @@ class DummyFilter():
     def update(self, sensor_data):
         pass
 
-    def progagate(self, duration, zero_order_hold):
+    def propagate(self, duration, zero_order_hold):
         pass

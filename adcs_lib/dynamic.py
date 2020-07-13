@@ -5,7 +5,7 @@ class DynamicalSystem():
     '''This class stores the state vector, Julian date, reference frame transformations,
     satellite structural model, and environmental models. It also calculates the vector field for the states.'''
     def __init__(self, position, lin_vel, attitude, body_ang_vel, wheel_vel, date_and_time):
-        self.state       = np.array([position, lin_vel, attitude, body_ang_vel, wheel_vel])
+        self.state       = np.array([position, lin_vel, attitude, body_ang_vel, wheel_vel], dtype=object)
         year, month, day, hour, minute, second = date_and_time
         self.clock       = jday.Clock(year, month, day, hour, minute, second)
         self.update_transformation_matrices()
@@ -29,7 +29,7 @@ class DynamicalSystem():
         dqdt         = 0.5 * quaternion.product(attitude, np.array([0, body_ang_vel[0], body_ang_vel[1], body_ang_vel[2]]))
         dwdt         = self.satellite.inv_red_moment.dot(T_env - T_whl - np.cross(body_ang_vel, H_whl + self.satellite.reduced_moment.dot(body_ang_vel)))
         dw_rw_dt     = whl_accl
-        return np.array([dxdt, dvdt, dqdt, dwdt, dw_rw_dt])
+        return np.array([dxdt, dvdt, dqdt, dwdt, dw_rw_dt], dtype=object)
 
 class Integrator():
     '''This is a numerical integrator for propagating an initial state through state space.'''
@@ -60,7 +60,9 @@ class Integrator():
     def integrate(self, duration, zero_order_hold):
         '''This is the front-facing interface for the library. It takes an integration duration and a set of fixed exogenous commands.
         Then it propagates the dynamic model for that duration using those commands.'''
-        for i in range(duration // self.dt):
+        t = self.dt
+        while t < duration or abs(t - duration) < 0.001:
             mag_moment = zero_order_hold[0]
             accl_cmd   = zero_order_hold[1]
             self.update(self.model.state, [self.last_ang_accl, mag_moment, accl_cmd])
+            t += self.dt

@@ -38,8 +38,8 @@ class ReactionWheelsController:
         #self.rate_gain = 1.0 * MOMENT_OF_INERTIA # rate gain arbitrary right now, balanced with quat gain
 
         # these gains correspond to linearized system, should be good for < 90 deg maneuvers
-        self.quat_gain = 2 * nat_freq**2 * MoI
-        self.rate_gain = 2 * damping * nat_freq * MoI
+        self.quat_gain = 2 * nat_freq**2 * self.MoI
+        self.rate_gain = 2 * damping * nat_freq * self.MoI
 
     def acquire_target(self, position, attitude, target, boresight):
         '''Returns the active rotation required to align the boresight with a target.
@@ -71,15 +71,14 @@ class ReactionWheelsController:
         # we want to rotate in both body and local orbital frame to match rotation around earth
         #rate_ref = (self.orbital_ref + sandwich(attitude, LVLH_to_GCI.dot(self.orbital_ref))) / 2
 
-        commanded_rotation = acquire_target(target_point, position, attitude, camera_boresight)
+        commanded_rotation = self.acquire_target(position, attitude, target_point, camera_boresight)
         attitude_error = quaternion.error_quat(attitude, commanded_rotation)
         gyroscopic_term = np.zeros(3) if not self.cancel_gyroscopic else np.cross(angular_vel, self.MoI.dot(angular_vel))
         # sign is so that we take shortest path in S^3
         quat_term = np.sign(attitude[0]) * self.quat_gain.dot(attitude_error[1:])
         rate_term = self.rate_gain.dot(angular_vel)
         reaction_wheels_command = gyroscopic_term - quat_term - rate_term
-
-        return self.reaction_wheels.accelerations(-reaction_wheels_command)
+        return self.reaction_wheels.accelerations(-reaction_wheels_command) # minus or plus???
 
     def bbq_roll(self):
         '''Placeholder for BBQ roll manuever, which puts satellite into its standby mode.'''

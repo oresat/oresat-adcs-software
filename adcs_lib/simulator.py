@@ -38,10 +38,11 @@ class SimulatorDaemonInterface():
         v = self.gps_vel.measurement()
         q = self.startracker.measurement()
         w = self.gyro.measurement()
+        W = self.model.state[4]
         B = self.magnetometer.measurement()
-        return (x, v, q, w, B)
+        return (x, v, q, w, W, B)
 
-    def progagate(self, duration, zero_order_hold):
+    def propagate(self, duration, zero_order_hold):
         '''This function is for the daemon specifically so that it only needs one function call to use the library.'''
         self.input(duration, zero_order_hold)
         return self.output()
