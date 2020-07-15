@@ -9,8 +9,7 @@ PID_FILE = "/run/42rx.pid"
 
 class RxDaemon(object):
     """
-    This class will initialize 42 Rx. The daemonization of 42 occurs
-    in the modified exec() method of 42exec.c, NOT this class.
+    This class will initialize 42 Rx.
     """
 
     def __init__(self):
@@ -28,7 +27,7 @@ class RxDaemon(object):
 
         if self._42pid == 0:
             os.chdir("./42Rx")
-            os.system("./42 Rx")
+            os.system("./42 Rx &")
 
     
     def quit(self):
@@ -38,7 +37,7 @@ class RxDaemon(object):
             sys.stderr.write("Couldn't detect a current instance of 42, aborting\n")
             return
 
-        os.kill(pid, signal.SIGTERM)
+        os.kill(self._42pid, signal.SIGTERM)
         if os.path.exists(PID_FILE):
             os.remove(PID_FILE)
         else:
