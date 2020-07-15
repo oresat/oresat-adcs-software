@@ -12,13 +12,13 @@ def dbus_run():
 
 def cleanup(dbusLoop, vi, dbusThread):
     # clean up visualization resources
-    print("Starting cleanup\n")
+    print("Starting cleanup...")
     dbusLoop.quit()
-    print("Successfully quit dbus loop\n")
+    print("Successfully quit dbus loop.")
     vi.destroy()
-    print("Successfully shut down 42\n")
+    print("Successfully shut down 42.")
     dbusThread.join()
-    print("All done\n")
+    print("All done.")
 
 
 if __name__ == "__main__":
@@ -37,6 +37,6 @@ if __name__ == "__main__":
     atexit.register(cleanup, dbusLoop, vi, dbusThread)
 
     # send data to 42 for a minute
-    for i in range(6000):
+    for i in range(120):
         vi.step()
-        sleep(0.1)
+        sleep(0.5)

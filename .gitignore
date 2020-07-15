@@ -181,3 +181,6 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Auto-generated 42 simulation data
+*.42

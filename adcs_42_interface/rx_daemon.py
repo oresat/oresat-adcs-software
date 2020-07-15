@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 
-import os, signal
+import os, signal, sys
 
 
 PID_FILE = "/run/42rx.pid"

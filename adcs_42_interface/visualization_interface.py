@@ -18,13 +18,13 @@ class VisualizationInterface:
         """Initializes dbus connection, socket to 42 Rx, and simulation variables."""
         self._dbus = SystemBus().get(DBUS_INTERFACE_NAME)
 
-        # 42 setup
-        self._42_daemon = RxDaemon()
-        self._42_daemon.run()
-
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.bind((HOST, PORT))
         self._socket.listen()
+
+        # 42 setup
+        self._42_daemon = RxDaemon()
+        self._42_daemon.run()
         self._42_socket, addr = self._socket.accept()
         
         # Simulation constants
@@ -78,7 +78,8 @@ class VisualizationInterface:
         f"Orb[0].VelN = {join_tpl(self._central_orbit_velocity)}\n" +
         f"World[3].PosH = {join_tpl(self._earth_posh)}\n" +
         f"World[3].eph.PosN = {join_tpl(self._earth_orbit_position)}\n" +
-        f"World[3].eph.VelN = {join_tpl(self._earth_orbit_velocity)}\n")
+        f"World[3].eph.VelN = {join_tpl(self._earth_orbit_velocity)}\n" +
+        f"[EOF]\n")
 
         self._42_socket.send(msg.encode())
 
