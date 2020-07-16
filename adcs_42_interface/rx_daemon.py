@@ -2,9 +2,7 @@
 
 
 import os, signal, sys
-
-
-PID_FILE = "/run/42rx.pid"
+import psutil
 
 
 class RxDaemon(object):
@@ -13,32 +11,35 @@ class RxDaemon(object):
     """
 
     def __init__(self):
-        """Initialize PID number for 42 Rx."""
-        self._42pid = -1
+        """Initialize PID number for the forked process."""
+        self._fork_pid = -1
 
 
     def run(self):
         """Launch 42 Rx as its own process."""
         try:
-            self._42pid = os.fork()
-        except OSError as err:
-            sys.stderr.write('fork failed: {0}\n'.format(err))
-            sys.exit(1)
-
-        if self._42pid == 0:
             os.chdir("./42Rx")
             os.system("./42 Rx &")
+            return 0
+        except OSError as err:
+            return -1
 
     
     def quit(self):
         """Quit 42 Rx and clean up its resources."""
-        # check that 42 is actually running
-        if self._42pid < 0:
-            sys.stderr.write("Couldn't detect a current instance of 42, aborting\n")
-            return
+        processName = "42"
+        success = False
+        for proc in psutil.process_iter():
+            try:
+                print(proc.name())
+                if processName == proc.name():
+                    os.kill(proc.pid, signal.SIGTERM)
+                    success = True
+                    break
+            except psutil.Error as err:
+                pass
 
-        os.kill(self._42pid, signal.SIGTERM)
-        if os.path.exists(PID_FILE):
-            os.remove(PID_FILE)
+        if success:
+            return 0
         else:
-            sys.stderr.write("Couldn't remove pid file for 42\n")
+            return -1
