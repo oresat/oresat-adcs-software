@@ -39,9 +39,9 @@ class VisualizationInterface:
         self._spacecraft_attitude = (0.0, 0.0, 0.0, 0.0)
         self._central_orbit_position = (0.0, 0.0, 0.0)
         self._central_orbit_velocity = (0.0, 0.0, 0.0)
-        self._earth_posh = (0.0, 0.0, 0.0)
-        self._earth_orbit_position = (0.0, 0.0, 0.0)
-        self._earth_orbit_velocity = (0.0, 0.0, 0.0)
+        #self._earth_posh = (0.0, 0.0, 0.0)
+        #self._earth_orbit_position = (0.0, 0.0, 0.0)
+        #self._earth_orbit_velocity = (0.0, 0.0, 0.0)s
 
     
     def _get_data_from_dbus(self):
@@ -53,9 +53,9 @@ class VisualizationInterface:
         self._spacecraft_attitude = self._dbus.SpacecraftAttitude42
         self._central_orbit_position = self._dbus.CentralOrbitPosition42
         self._central_orbit_velocity = self._dbus.CentralOrbitVelocity42
-        self._earth_posh = self._dbus.EarthPosH42
-        self._earth_orbit_position = self._dbus.EarthOrbitPosition42
-        self._earth_orbit_velocity = self._dbus.EarthOrbitVelocity42
+        #self._earth_posh = self._dbus.EarthPosH42
+        #self._earth_orbit_position = self._dbus.EarthOrbitPosition42
+        #self._earth_orbit_velocity = self._dbus.EarthOrbitVelocity42
 
     
     def _send_data_to_socket(self):
@@ -76,9 +76,9 @@ class VisualizationInterface:
         f"SC[0].B[0].qn = {join_tpl(self._spacecraft_attitude)}\n" +
         f"Orb[0].PosN = {join_tpl(self._central_orbit_position)}\n" +
         f"Orb[0].VelN = {join_tpl(self._central_orbit_velocity)}\n" +
-        f"World[3].PosH = {join_tpl(self._earth_posh)}\n" +
-        f"World[3].eph.PosN = {join_tpl(self._earth_orbit_position)}\n" +
-        f"World[3].eph.VelN = {join_tpl(self._earth_orbit_velocity)}\n" +
+        #f"World[3].PosH = {join_tpl(self._earth_posh)}\n" +
+        #f"World[3].eph.PosN = {join_tpl(self._earth_orbit_position)}\n" +
+        #f"World[3].eph.VelN = {join_tpl(self._earth_orbit_velocity)}\n" +
         f"[EOF]\n")
 
         self._42_socket.send(msg.encode())

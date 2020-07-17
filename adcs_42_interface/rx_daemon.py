@@ -31,7 +31,6 @@ class RxDaemon(object):
         success = False
         for proc in psutil.process_iter():
             try:
-                print(proc.name())
                 if processName == proc.name():
                     os.kill(proc.pid, signal.SIGTERM)
                     success = True
