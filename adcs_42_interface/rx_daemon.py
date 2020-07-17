@@ -11,8 +11,7 @@ class RxDaemon(object):
     """
 
     def __init__(self):
-        """Initialize PID number for the forked process."""
-        self._fork_pid = -1
+        pass
 
 
     def run(self):
