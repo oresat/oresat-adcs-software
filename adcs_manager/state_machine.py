@@ -1,5 +1,5 @@
 from enum import Enum
-import threading
+from threading import Lock
 
 
 
@@ -12,7 +12,7 @@ class State(Enum):
 
 class StateMachine:
     def __init__(self):
-        self._lock = threading.Lock()
+        self._lock = Lock()
         self._current_state = State.SLEEP.value;
         self._valid_transition = {
                 State.FAILED.value : [State.FAILED.value, State.SLEEP.value],
