@@ -49,16 +49,16 @@ class DbusServer(object):
                     <arg name="timestamp" type="s" direction="in"/>
                     <arg name="output" type="b" direction="out"/>
                 </method>
+                <method name="LastRWCommand">
+                    <arg name="rw_number" type="i" direction="in"/>
+                    <arg name="output" type="i" direction="out"/>
+                </method>
                 <property name="CurrentMode" type="i" access="read"/>
                 <property name="PointCoordinates" type="ddd" access="readwrite"/>
                 <property name="GPSStateVector" type="(ddd)(ddd)s" access="read"/>
                 <property name="STCelestialCoordinates" type="ddds" access="read"/>
                 <property name="IMUAcceleration" type="(nnn)" access="read"/>
                 <property name="IMUAngularVelocity" type="(nnn)" access="read"/>
-                <property name="LastRW1Command" type="i" access="read"/>
-                <property name="lastRW2Command" type="i" access="read"/>
-                <property name="LastRW3Command" type="i" access="read"/>
-                <property name="LastRW4Command" type="i" access="read"/>
                 <property name="LastMagXCommand" type="i" access="read"/>
                 <property name="LastMagYCommand" type="i" access="read"/>
                 <property name="LastMagZCommand" type="i" access="read"/>
@@ -100,6 +100,12 @@ class DbusServer(object):
     # state machine
     _sm = StateMachine()
 
+    # debug values
+    _last_rw_commands = [0, 0, 0, 0]
+    _last_mag_x_command = 0
+    _last_mag_y_command = 0
+    _last_mag_z_command = 0
+
 
     def __init__(self):
         # initialize dbus signals thread
@@ -113,7 +119,6 @@ class DbusServer(object):
         Continuously send out data signals to the other boards.
         """
         while(self.__running):
-            # TODO: add signals for magnetorquer, reaction wheels
             # TODO: pull real data from the board, not placeholders
             self.VisualizationDataSignal(
                 (1.0, 2.0, 3.0),
@@ -124,7 +129,19 @@ class DbusServer(object):
                 (17.0, 18.0, 19.0),
                 (20.0, 21.0, 22.0),
             )
-            print("I sent a signal!")
+
+            mag_x_command = 0
+            mag_y_command = 0
+            mag_z_command = 0
+            self.MagnetorquerCommand(0, 0, 0)
+            self._last_mag_x_command = mag_x_command
+            self._last_mag_y_command = mag_y_command
+            self._last_mag_z_command = mag_z_command
+
+            rw_commands = [0, 0, 0, 0]
+            self.ReactionWheelsCommand(*rw_commands)
+            self._last_rw_commands = rw_commands
+
             time.sleep(0.1) # this interval can change
 
 
@@ -172,7 +189,6 @@ class DbusServer(object):
         self._data_lock.acquire()
         self._board_data.acs_velocity = velocity
         self._board_data.acs_position = position
-        self._board_data.acs_temp = temp
         self._data_lock.release()
 
 
@@ -244,6 +260,24 @@ class DbusServer(object):
         self._data_lock.release()
 
 
+    def LastRWCommand(self, rw_number):
+        """
+        Gets the most recent reaction wheel command for a given wheel number.
+
+        Parameters
+        ----------
+        rw_number : int
+            Number of the reaction wheel being read from (1-4).
+        """
+        # TODO: include output
+
+        self._data_lock.acquire()
+        rwc = self._last_rw_commands[rw_number - 1]
+        self._data_lock.release()
+
+        return rwc
+
+
     @property
     def CurrentMode(self):
         """
@@ -293,6 +327,7 @@ class DbusServer(object):
 
         return gps_data
 
+
     @property
     def STCelestialCoordinates(self):
         """
@@ -310,6 +345,7 @@ class DbusServer(object):
 
         return st_data
 
+
     @property
     def IMUAcceleration(self):
         """
@@ -321,6 +357,7 @@ class DbusServer(object):
         self._data_lock.release()
 
         return imu_a
+
 
     @property
     def IMUAngularVelocity(self):
@@ -334,3 +371,40 @@ class DbusServer(object):
 
         return imu_av
  
+
+    @property
+    def LastMagXCommand(self):
+        """
+        Getter for the last magnetorquer command's x value.
+        """
+
+        self._data_lock.acquire()
+        magx = self._last_mag_x_command
+        self._data_lock.release()
+
+        return magx
+
+    @property
+    def LastMagYCommand(self):
+        """
+        Getter for the last magnetorquer command's x value.
+        """
+
+        self._data_lock.acquire()
+        magy = self._last_mag_y_command
+        self._data_lock.release()
+
+        return magy
+
+
+    @property
+    def LastMagZCommand(self):
+        """
+        Getter for the last magnetorquer command's x value.
+        """
+
+        self._data_lock.acquire()
+        magz = self._last_mag_z_command
+        self._data_lock.release()
+
+        return magz

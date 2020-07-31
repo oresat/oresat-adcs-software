@@ -64,4 +64,3 @@ class BoardData():
     acs_position = 0
     acs_temp = 0
     acs_last_update_dt = [None, None, None, None]
-
