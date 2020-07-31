@@ -50,13 +50,18 @@ class BoardData():
     celestial_coor_timestamp = None
 
     # IMU and Magnetometer board data
-    acceleration = [0, 0, 0] # xyz
+    # acceleration = [0, 0, 0] # xyz
     angular_velocity = [0, 0, 0] # xyz
     # NOTE / TODO need Magnetometer data?
+    mag_field_vector0 = [0, 0, 0]
+    mag_field_vector1 = [0, 0, 0]
     imu_last_update_dt = None
 
     # ACS board data
     reaction_wheels_data = [0, 0, 0, 0] # TODO replace with real data
     magnetorquer_data = [0, 0, 0] # TODO replace with real data
+    acs_velocity = 0
+    acs_position = 0
+    acs_temp = 0
     acs_last_update_dt = [None, None, None, None]
 

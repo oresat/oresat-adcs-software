@@ -16,4 +16,5 @@ def cleanup(vi):
 if __name__ == "__main__":
 
     vi = VisualizationInterface()
+    vi.run()
     atexit.register(cleanup, vi)

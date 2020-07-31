@@ -27,12 +27,14 @@ class DbusServer(object):
                 </method>
                 <method name="NewACSData">
                     <arg name="board_number" type ="i" direction="in"/>
-                    <arg name="rw_tbd" type="i" direction="in"/>
-                    <arg name="mag_tbd" type="i" direction="in"/>
+                    <arg name="velocity" type="n" direction="in"/>
+                    <arg name="position" type="n" direction="in"/>
+                    <arg name="temp" type="n" direction="in"/>
                 </method>
                 <method name="NewIMUMagData">
-                    <arg name="acceleration" type="(nnn)" direction="in"/>
-                    <arg name="angular_velocity" type="(nnn)" direction="in"/>
+                    <arg name="angular_velocity" type="(nnnn)" direction="in"/>
+                    <arg name="mag_field_vector0" type="(nnn)" direction="in"/>
+                    <arg name="mag_field_vector1" type="(nnn)" direction="in"/>
                 </method>
                 <method name="NewGPSData">
                     <arg name="position" type="(ddd)" direction="in"/>
@@ -150,6 +152,95 @@ class DbusServer(object):
 
         self._data_lock.acquire()
         self.new_mode = new_mode
+        self._data_lock.release()
+
+
+    def NewACSData(self, board_number, velocity, position):
+        """
+        Receive new data from an ACS board and update the ADCS board.
+
+        Parameters
+        ----------
+        board_number : int
+            The ACS board being read from (0-3).
+        velocity : int
+            ACS velocity.
+        position : int
+            ACS position.
+        """
+
+        self._data_lock.acquire()
+        self._board_data.acs_velocity = velocity
+        self._board_data.acs_position = position
+        self._board_data.acs_temp = temp
+        self._data_lock.release()
+
+
+    def NewIMUMagData(self, angular_velocity, mag_field_vector0, mag_field_vector1):
+        """
+        Receive new data from the IMU-Magnetorquer board and update the ADCS board.
+
+        Parameters
+        ----------
+        angular_velocity : [double]
+            IMU-Mag angular velocity.
+        mag_field_vector0 : [double]
+            IMU-Mag magnetic field vector (1 of 2).
+        mag_field_vector1 : [double]
+            IMU-Mag magnetic field vector (2 of 2).
+        """
+
+        self._data_lock.acquire()
+        self._board_data.angular_velocity = angular_velocity
+        self._board_data.mag_field_vector0 = mag_field_vector0
+        self._board_data.mag_field_vector1 = mag_field_vector1
+        self._data_lock.release()
+
+
+    def NewGPSData(self, position, velocity, timestamp):
+        """
+        Receive new data from the GPS board and update the ADCS board.
+
+        Parameters
+        ----------
+        position : [double]
+            GPS position.
+        velocity : [double]
+            GPS velocity.
+        timestamp : str
+            Timestamp of the most recent GPS data.
+        """
+        # TODO: include output
+
+        self._data_lock.acquire()
+        self._board_data.position = position
+        self._board_data.velocity = velocity
+        self._board_data.pos_vel_timestamp = timestamp
+        self._data_lock.release()
+
+
+    def NewStarTrackerData(self, right_ascension, declination, orientation, timestamp):
+        """
+        Receive new data from the Star Tracker board and update the ADCS board.
+
+        Parameters
+        ----------
+        right_ascension : double
+            Star tracker right ascension.
+        declination : double
+            Star tracker declination.
+        orientation : double
+            Star tracker orientation.
+        timestamp : str
+            Timestamp of the most recent Star Tracker data.
+        """
+        # TODO: include output
+
+        self._data_lock.acquire()
+        self._board_data.right_ascension = right_ascension
+        self._board_data.declination = declination
+        self._board_data.orientation = orientation
+        self._board_data.celestial_coor_timestamp = timestamp
         self._data_lock.release()
 
 

@@ -30,20 +30,14 @@ class VisualizationInterface:
             sender=DBUS_NAME,
             iface=INTERFACE_NAME,
             signal="VisualizationDataSignal",
-            signal_fired=self.send_data_to_socket,
+            signal_fired=self._send_data_to_socket,
             object=OBJECT_PATH
         )
-
-        print("\n\nhello\n\n")
 
         # 42 setup
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.bind((HOST, PORT))
-        self._socket.listen()
-
         self._42_daemon = RxDaemon()
-        self._42_daemon.run()
-        self._42_socket, addr = self._socket.accept()
         
         # Simulation constants
         self._SC_POSR = (0.0, 0.0, 0.0)
@@ -61,16 +55,15 @@ class VisualizationInterface:
         #self._earth_orbit_position = (0.0, 0.0, 0.0)
         #self._earth_orbit_velocity = (0.0, 0.0, 0.0)
 
-        # start listening for data signals in a new thread
-        self._dbus_thread = threading.Thread(target=self.__receive_signals, name="dbus-thread")
-        self._dbus_thread.start()
+        # allocate a new thread to listen for data signals
+        self._dbus_thread = threading.Thread(target=self._receive_signals, name="dbus-thread")
 
 
-    def __receive_signals(self):
+    def _receive_signals(self):
         self._dbus_loop.run()
 
     
-    def send_data_to_socket(self, *args):
+    def _send_data_to_socket(self, *args):
         """Fetches one frame of simulation data from the dbus and sends it to 42 Rx."""
         join_tpl = lambda tpl : " ".join([str(x) for x in tpl])
 
@@ -101,6 +94,17 @@ class VisualizationInterface:
         f"[EOF]\n")
 
         self._42_socket.send(msg.encode())
+
+
+    def run(self):
+        """Start receiving data from the dbus and begin the 42 visualization."""
+        # connect dbus and 42 sockets
+        self._socket.listen()
+        self._42_daemon.run()
+        self._42_socket, addr = self._socket.accept()
+
+        # start dbus
+        self._dbus_thread.start()
 
 
     def destroy(self):
