@@ -29,7 +29,8 @@ class DbusServer(object):
                     <arg name="board_number" type ="i" direction="in"/>
                     <arg name="velocity" type="n" direction="in"/>
                     <arg name="position" type="n" direction="in"/>
-                    <arg name="temp" type="n" direction="in"/>
+                    <arg name="temperature" type="n" direction="in"/>
+                    <arg name="timestamp" type="s" direction="in"/>
                 </method>
                 <method name="NewIMUMagData">
                     <arg name="angular_velocity" type="(nnnn)" direction="in"/>
@@ -134,13 +135,19 @@ class DbusServer(object):
             mag_y_command = 0
             mag_z_command = 0
             self.MagnetorquerCommand(0, 0, 0)
+
+            self._data_lock.acquire()
             self._last_mag_x_command = mag_x_command
             self._last_mag_y_command = mag_y_command
             self._last_mag_z_command = mag_z_command
+            self._data_lock.release()
 
             rw_commands = [0, 0, 0, 0]
             self.ReactionWheelsCommand(*rw_commands)
+
+            self._data_lock.acquire()
             self._last_rw_commands = rw_commands
+            self._data_lock.release()
 
             time.sleep(0.1) # this interval can change
 
@@ -172,7 +179,7 @@ class DbusServer(object):
         self._data_lock.release()
 
 
-    def NewACSData(self, board_number, velocity, position):
+    def NewACSData(self, board_number, velocity, position, temperature, timestamp):
         """
         Receive new data from an ACS board and update the ADCS board.
 
@@ -184,17 +191,23 @@ class DbusServer(object):
             ACS velocity.
         position : int
             ACS position.
+        temperature : int
+            ACS temperature.
+        timestamp : str
+            Timestamp of the most recent ACS data.
         """
 
         self._data_lock.acquire()
-        self._board_data.acs_velocity = velocity
-        self._board_data.acs_position = position
+        self._board_data.acs_data[board_number].velocity = velocity
+        self._board_data.acs_data[board_number].position = position
+        self._board_data.acs_data[board_number].temperature = temperature
+        self._board_data.acs_data[board_number].last_update_dt = timestamp
         self._data_lock.release()
 
 
     def NewIMUMagData(self, angular_velocity, mag_field_vector0, mag_field_vector1):
         """
-        Receive new data from the IMU-Magnetorquer board and update the ADCS board.
+        Receive new data from the IMU-Magnetometer board and update the ADCS board.
 
         Parameters
         ----------
