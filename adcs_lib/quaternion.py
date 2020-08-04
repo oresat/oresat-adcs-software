@@ -65,9 +65,9 @@ def eulerangle_to_quat(RA, dec, orientation):
     c_psi = np.cos(ortn)
     s_psi = np.sin(ortn)
     return np.array([c_phi * c_theta * c_psi  +  s_phi * s_theta * s_psi,
-                     c_phi * c_theta * s_psi  +  s_phi * s_theta * c_psi,
+                     c_phi * c_theta * s_psi  -  s_phi * s_theta * c_psi,
                      c_phi * s_theta * c_psi  +  s_phi * c_theta * s_psi,
-                     s_phi * c_theta * c_psi  +  c_phi * s_theta * s_psi])
+                     s_phi * c_theta * c_psi  -  c_phi * s_theta * s_psi])
 
 def quat_to_startracker(q):
     '''Convert quaternion attitude to RA, DEC, ROLL. I haven't rigorously proved this works yet.

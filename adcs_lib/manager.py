@@ -12,11 +12,11 @@ class ManagerDaemonInterface():
 
     def mission_input(self, mission_data):
         state, mag_field = self.filter.output()
-        if mission_data[0] == 0:
+        if mission_data[0] == 0 or mission_data[0] == 1:
             self.mag_cmd, self.rw_cmd = np.zeros(3), np.zeros(4)
-        elif mission_data[0] == 1:
-            self.mag_cmd, self.rw_cmd = self.mag_controller.detumble(mag_field, state[3]), np.zeros(4)
         elif mission_data[0] == 2:
+            self.mag_cmd, self.rw_cmd = self.mag_controller.detumble(mag_field, state[3]), np.zeros(4)
+        elif mission_data[0] == 3:
             self.mag_cmd = np.zeros(3)
             self.rw_cmd = self.rw_controller.point_and_stare(state[0], state[1], state[3], state[2], mission_data[1], mission_data[2])
 
