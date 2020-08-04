@@ -5,7 +5,6 @@ from datetime import datetime
 from board_data import BoardData
 from state_machine import State, StateMachine
 
-
 class DbusServer(object):
     """
     Defines the dbus interface for the ADCS Manager.
@@ -49,6 +48,17 @@ class DbusServer(object):
                     <arg name="orientation" type="d" direction="in"/>
                     <arg name="timestamp" type="s" direction="in"/>
                     <arg name="output" type="b" direction="out"/>
+                </method>
+                <method name="NewMagCommands">
+                    <arg name="mag_x_command" type="i" direction="in"/>
+                    <arg name="mag_y_command" type="i" direction="in"/>
+                    <arg name="mag_z_command" type="i" direction="in"/>
+                </method>
+                <method name="NewRWCommands">
+                    <arg name="rw1_command" type="i" direction="in"/>
+                    <arg name="rw2_command" type="i" direction="in"/>
+                    <arg name="rw3_command" type="i" direction="in"/>
+                    <arg name="rw4_command" type="i" direction="in"/>
                 </method>
                 <method name="LastRWCommand">
                     <arg name="rw_number" type="i" direction="in"/>
@@ -106,62 +116,6 @@ class DbusServer(object):
     _last_mag_x_command = 0
     _last_mag_y_command = 0
     _last_mag_z_command = 0
-
-
-    def __init__(self):
-        # initialize dbus signals thread
-        self.__running = True
-        self.__working_thread = threading.Thread(target=self.__broadcast_signals)
-        self.__working_thread.start()
-
-
-    def __broadcast_signals(self):
-        """
-        Continuously send out data signals to the other boards.
-        """
-        while(self.__running):
-            # TODO: pull real data from the board, not placeholders
-            self.VisualizationDataSignal(
-                (1.0, 2.0, 3.0),
-                (4.0, 5.0, 6.0),
-                (7.0, 8.0, 9.0),
-                (10.0, 11.0, 12.0),
-                (13.0, 14.0, 15.0, 16.0),
-                (17.0, 18.0, 19.0),
-                (20.0, 21.0, 22.0),
-            )
-
-            mag_x_command = 0
-            mag_y_command = 0
-            mag_z_command = 0
-            self.MagnetorquerCommand(0, 0, 0)
-
-            self._data_lock.acquire()
-            self._last_mag_x_command = mag_x_command
-            self._last_mag_y_command = mag_y_command
-            self._last_mag_z_command = mag_z_command
-            self._data_lock.release()
-
-            rw_commands = [0, 0, 0, 0]
-            self.ReactionWheelsCommand(*rw_commands)
-
-            self._data_lock.acquire()
-            self._last_rw_commands = rw_commands
-            self._data_lock.release()
-
-            time.sleep(0.1) # this interval can change
-
-
-    def quit(self):
-        """
-        Stop the signals thread.
-        """
-        self.__running = False
-        self.__working_thread.join()
-
-
-    def __del__(self):
-        self.quit()
 
 
     def ChangeMode(self, new_mode):
@@ -270,6 +224,48 @@ class DbusServer(object):
         self._board_data.declination = declination
         self._board_data.orientation = orientation
         self._board_data.celestial_coor_timestamp = timestamp
+        self._data_lock.release()
+
+
+    def NewMagCommands(self, mag_x_command, mag_y_command, mag_z_command):
+        """
+        Update the most recent set of magnetorquer commands.
+
+        Parameters
+        ----------
+        mag_x_command : int
+            Last magnetorquer X command.
+        mag_y_command : int
+            Last magnetorquer Y command.
+        mag_z_command : int
+            Last magnetorquer Z command.
+        """
+
+        self._data_lock.acquire()
+        self._last_mag_x_command = mag_x_command
+        self._last_mag_y_command = mag_y_command
+        self._last_mag_z_command = mag_z_command
+        self._data_lock.release()
+
+
+    def NewRWCommands(self, rw1_command, rw2_command, rw3_command, rw4_command):
+        """
+        Update the most recent set of reaction wheel commands.
+
+        Parameters
+        ----------
+        rw1_command : int
+            Last reaction wheel 1 command.
+        rw1_command : int
+            Last reaction wheel 2 command.
+        rw1_command : int
+            Last reaction wheel 3 command.
+        rw1_command : int
+            Last reaction wheel 4 command.
+        """
+
+        self._data_lock.acquire()
+        self._last_rw_commands = [rw1_command, rw2_command, rw3_command, rw4_command]
         self._data_lock.release()
 
 

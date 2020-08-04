@@ -5,6 +5,8 @@ from threading import Thread
 from syslog import syslog
 from state_machine import *
 from dbus_server import DbusServer
+#from ..adcs_lib import controller
+import copy
 
 
 DESTINATION =       "org.OreSat.ADCSManager"
@@ -13,12 +15,15 @@ OBJECT_PATH =       "/org/OreSat/ADCSManager"
 PID_FILE =          "/run/oresat-linux-updater.pid"
 
 
-class Daemon():
+class ADCSManager():
     """
     This class will handle initializing the program (making all class objects
     and starting all thread).
     """
 
+    # controllers
+    #mag_controller = controller.MagnetorquerController()
+    #rw_controller = controller.ReactionWheelsController(None, 0, 0)
 
     def __init__(self):
         """
@@ -106,7 +111,42 @@ class Daemon():
 
         self._running = True
         while(self._running):
-            # TODO check for new mode & swap to new mode if set
+
+            # copy all data from the dbus
+            self._dbus_server._data_lock.acquire()
+            dbus_data = copy.deepcopy(self._dbus_server._board_data)
+            self._dbus_server._data_lock.release()
+
+            # send data to 42
+            self._dbus_server.VisualizationDataSignal(
+                [0.0, 0.0, 0.0],                # sun-pointing unit vector
+                dbus_data.mag_field_vector0,    # magnetic field vector
+                [0.0, 0.0, 0.0],                # angular momentum
+                dbus_data.angular_velocity,     # angular velocity
+                [0.0, 0.0, 0.0, 0.0],           # spacecraft attitude
+                [0.0, 0.0, 0.0],                # central orbit position
+                [0.0, 0.0, 0.0]                 # central orbit velocity
+            )
+            
+            # TODO: integrate these commands with state machine
+
+            # magnetorquer command
+            #mag_x_command = self.mag_controller.detumble(None, 0)
+            #mag_y_command = self.mag_controller.detumble(None, 0)
+            #mag_z_command = self.mag_controller.detumble(None, 0)
+            mag_x_command = 0
+            mag_y_command = 0
+            mag_z_command = 0
+            self._dbus_server.MagnetorquerCommand(mag_x_command, mag_y_command, mag_z_command)
+            self._dbus_server.NewMagCommands(mag_x_command, mag_y_command, mag_z_command)
+
+            # reaction wheels command, call adcs lib functions here eventually
+            rw1_command = 0
+            rw2_command = 0
+            rw3_command = 0
+            rw4_command = 0
+            self._dbus_server.ReactionWheelsCommand(rw1_command, rw2_command, rw3_command, rw4_command)
+            self._dbus_server.NewRWCommands(rw1_command, rw2_command, rw3_command, rw4_command)
 
             current_state = self._dbus_server.CurrentMode
 

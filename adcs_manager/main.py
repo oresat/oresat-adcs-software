@@ -1,5 +1,5 @@
 import sys, os, getopt
-from daemon import Daemon
+from manager import ADCSManager
 
 
 def usage():
@@ -14,7 +14,7 @@ def usage():
 
 
 if __name__ == "__main__":
-    adcs_daemon = Daemon()
+    adcs_manager = ADCSManager()
 
     # deal with flags
     opts, args = getopt.getopt(sys.argv[1:], "h")
@@ -24,7 +24,7 @@ if __name__ == "__main__":
             exit(0)
 
     try:
-        adcs_daemon.run()
+        adcs_manager.run()
     except KeyboardInterrupt as e:
-        adcs_daemon.quit()
+        adcs_manager.quit()
 
