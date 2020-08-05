@@ -1,5 +1,5 @@
 import numpy as np
-import frame, quaternion
+from adcs_lib import frame, quaternion
 
 class Environment():
     '''Environmental models.'''
@@ -9,7 +9,7 @@ class Environment():
         self.G_NEWTON = 6.6743e-11 #m^3 kg^-1 s^-2
         self.EARTH_MASS = 5.972e24 # kg
         #EARTH_MU = 3.986004418e14 # m^3 s^-2, standard gravitational parameter of earth
-        self.MU = G_NEWTON * (satellite.mass + EARTH_MASS) #: Gravitational parameter of satellite w.r.t. Earth.
+        self.MU = self.G_NEWTON * (satellite.mass + self.EARTH_MASS) #: Gravitational parameter of satellite w.r.t. Earth.
 
         # for geocentric magnetic field model
         # see https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html for relevant details
@@ -55,7 +55,7 @@ class Environment():
         return np.array([F, T])
 
     def gravity(self, position, length, attitude):
-        coeff  = MU / length**3
+        coeff  = self.MU / length**3
         F      = -coeff * position * self.satellite.mass
         n      = quaternion.sandwich(attitude, -position / length)
         T      = 3 * coeff * np.cross(n, self.satellite.total_moment.dot(n))
@@ -79,7 +79,7 @@ class Environment():
         B_body       = quaternion.sandwich(attitude, B)
         lat, long, h = frame.ECEF_to_geodetic(r_ecef)
         rho          = self.atmo_density(h)
-        v_rel        = self.relative_vel(postion, velocity)
+        v_rel        = self.relative_vel(position, velocity)
 
         D = self.drag(rho, v_rel, attitude)
         G = self.gravity(position, length, attitude)

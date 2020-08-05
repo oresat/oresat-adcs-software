@@ -1,5 +1,5 @@
 import numpy as np
-import dynamic, sensor
+from adcs_lib import dynamic, sensor
 
 class SimulatorDaemonInterface():
     '''This is the interface with the Simulator Daemon.
@@ -15,7 +15,6 @@ class SimulatorDaemonInterface():
         w_0   = np.array([0.08726646, 0.08726646, 0.08726646]) # 5 degrees/s / axis. worst case
         #w_0 = np.array([0,0,0.1])
         whl_0 = np.array([0, 0, 0, 0])
-        cur_0 = np.array([0, 0, 0])
         t_0   = (2020, 9, 1, 0, 0, 0)
         dt    = 0.05 # perhaps we want to choose this upstream?
         noisy = False
@@ -38,5 +37,11 @@ class SimulatorDaemonInterface():
         v = self.gps_vel.measurement()
         q = self.startracker.measurement()
         w = self.gyro.measurement()
+        W = self.model.state[4]
         B = self.magnetometer.measurement()
-        return (x, v, q, w, B)
+        return (x, v, q, w, W, B)
+
+    def propagate(self, duration, zero_order_hold):
+        '''This function is for the daemon specifically so that it only needs one function call to use the library.'''
+        self.input(duration, zero_order_hold)
+        return self.output()

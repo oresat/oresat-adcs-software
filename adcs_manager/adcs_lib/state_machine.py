@@ -2,7 +2,6 @@ from enum import Enum
 from threading import Lock
 
 
-
 class State(Enum):
     FAILED = 0      # Something failed.
     SLEEP = 1       # ADCS program is not doing anything and waiting for commands.

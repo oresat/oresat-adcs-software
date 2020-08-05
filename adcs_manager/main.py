@@ -14,6 +14,7 @@ def usage():
 
 
 if __name__ == "__main__":
+    sys.path.append("/home/oresat/oresat-adcs-software/")
     adcs_manager = ADCSManager()
 
     # deal with flags

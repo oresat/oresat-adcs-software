@@ -1,4 +1,5 @@
 import numpy as np
+from adcs_lib import quaternion
 
 ## these next few functions are for transformations between coordinate systems
 # transformation from inertial frame to ECEF, Cartesian x, y, z
@@ -12,8 +13,8 @@ def inertial_to_ecef(clock):
 
 # transformation from local orbital frame to inertial frame, Cartesian x, y, z
 def lvlh_to_inertial(r_I, v_I):
-    o_3I = - normalize(r_I)
-    o_2I = - normalize(np.cross(r_I, v_I))
+    o_3I = - quaternion.normalize(r_I)
+    o_2I = - quaternion.normalize(np.cross(r_I, v_I))
     o_1I = np.cross(o_2I, o_3I)
     return np.array([[o_1I[0], o_2I[0], o_3I[0]],
                      [o_1I[1], o_2I[1], o_3I[1]],

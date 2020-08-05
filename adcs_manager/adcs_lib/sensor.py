@@ -1,6 +1,6 @@
-from numpy import default_rng
+from numpy.random import default_rng
 import numpy as np
-import environment, quaternion
+from adcs_lib import quaternion
 
 rng = default_rng()
 
@@ -24,7 +24,7 @@ class Magnetometer(Sensor):
     def true_value(self):
         r_ecef = self.model.GCI_to_ECEF.dot(self.model.state[0])
         length = np.linalg.norm(self.model.state[0])
-        B = environment.magnetic_field(r_ecef, length, self.model.GCI_to_ECEF)
+        B = self.model.enviro.magnetic_field(r_ecef, length, self.model.GCI_to_ECEF)
         B_body = quaternion.sandwich(self.model.state[2], B)
         return B_body
 

@@ -3,10 +3,11 @@ from gi.repository import GLib
 import time
 from threading import Thread
 from syslog import syslog
-from state_machine import *
+from adcs_lib.state_machine import *
 from dbus_server import DbusServer
-#from ..adcs_lib import controller
+from adcs_lib import manager, simulator
 import copy
+import numpy as np
 
 
 DESTINATION =       "org.OreSat.ADCSManager"
@@ -21,9 +22,9 @@ class ADCSManager():
     and starting all thread).
     """
 
-    # controllers
-    #mag_controller = controller.MagnetorquerController()
-    #rw_controller = controller.ReactionWheelsController(None, 0, 0)
+    # adcs library interface
+    sim = simulator.SimulatorDaemonInterface()
+    man = manager.ManagerDaemonInterface(sim.model)
 
     def __init__(self):
         """
@@ -109,6 +110,8 @@ class ADCSManager():
         # start dbus thread
         self._dbus_thread.start()
 
+        self._dbus_server._sm.change_state(State.DETUMBLE.value)
+
         self._running = True
         while(self._running):
 
@@ -117,47 +120,47 @@ class ADCSManager():
             dbus_data = copy.deepcopy(self._dbus_server._board_data)
             self._dbus_server._data_lock.release()
 
-            # send data to 42
-            self._dbus_server.VisualizationDataSignal(
-                [0.0, 0.0, 0.0],                # sun-pointing unit vector
-                dbus_data.mag_field_vector0,    # magnetic field vector
-                [0.0, 0.0, 0.0],                # angular momentum
-                dbus_data.angular_velocity,     # angular velocity
-                [0.0, 0.0, 0.0, 0.0],           # spacecraft attitude
-                [0.0, 0.0, 0.0],                # central orbit position
-                [0.0, 0.0, 0.0]                 # central orbit velocity
-            )
-            
-            # TODO: integrate these commands with state machine
-
-            # magnetorquer command
-            #mag_x_command = self.mag_controller.detumble(None, 0)
-            #mag_y_command = self.mag_controller.detumble(None, 0)
-            #mag_z_command = self.mag_controller.detumble(None, 0)
-            mag_x_command = 0
-            mag_y_command = 0
-            mag_z_command = 0
-            self._dbus_server.MagnetorquerCommand(mag_x_command, mag_y_command, mag_z_command)
-            self._dbus_server.NewMagCommands(mag_x_command, mag_y_command, mag_z_command)
-
-            # reaction wheels command, call adcs lib functions here eventually
-            rw1_command = 0
-            rw2_command = 0
-            rw3_command = 0
-            rw4_command = 0
-            self._dbus_server.ReactionWheelsCommand(rw1_command, rw2_command, rw3_command, rw4_command)
-            self._dbus_server.NewRWCommands(rw1_command, rw2_command, rw3_command, rw4_command)
-
+            # make adcs library calls
             current_state = self._dbus_server.CurrentMode
+            cmds = None
+            sim_output = None
 
             if current_state == State.SLEEP.value or current_state == State.FAILED.value:
                 time.sleep(0.5)
+                continue
+
             elif current_state == State.DETUMBLE.value:
-                temp = 1 # TODO call manager fuction
+                cmds = self.man.propagate(0.5, [State.DETUMBLE.value, np.zeros(3), np.zeros(3)], 0)
+                sim_output = self.sim.propagate(0.5, cmds[:2])
+
             elif current_state == State.POINT.value:
-                temp = 1 # TODO call manager fuction
+                cmds = self.man.propagate(0.5, [State.POINT.value, np.zeros(3), np.array([0, 0, -1])], 0)
+                sim_output = self.sim.propagate(0.5, cmds[:2])
+
             else:
                 syslog(LOG_CRIT, "Unkown state in main loop")
+
+            [mag_commands, rw_commands] = cmds[:2]
+            (x, v, q, w, W, B) = sim_output
+
+            # send data to 42
+            self._dbus_server.VisualizationDataSignal(
+                [0.0,0.0,0.0],  # sun-pointing unit vector
+                B,              # magnetic field vector
+                w,              # angular momentum
+                w,              # angular velocity
+                q,              # spacecraft attitude
+                x,              # central orbit position
+                v               # central orbit velocity
+            )
+
+            # magnetorquer command
+            self._dbus_server.MagnetorquerCommand(*mag_commands)
+            self._dbus_server.NewMagCommands(*mag_commands)
+
+            # reaction wheels command, call adcs lib functions here eventually
+            self._dbus_server.ReactionWheelsCommand(*rw_commands)
+            self._dbus_server.NewRWCommands(*rw_commands)
 
             time.sleep(0.5) # so CPU is not at 100% all the time
 
