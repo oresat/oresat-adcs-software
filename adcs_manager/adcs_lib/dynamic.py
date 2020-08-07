@@ -1,5 +1,5 @@
 import numpy as np
-import frame, structure, environment, jday, quaternion
+from adcs_lib import frame, structure, environment, jday, quaternion
 
 class DynamicalSystem():
     '''This class stores the state vector, Julian date, reference frame transformations,

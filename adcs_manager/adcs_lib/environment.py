@@ -1,5 +1,5 @@
 import numpy as np
-import frame, quaternion
+from adcs_lib import frame, quaternion
 
 class Environment():
     '''Environmental models.'''

@@ -1,5 +1,6 @@
 import numpy as np
-import controller, observer
+from adcs_lib import controller, observer
+from adcs_lib.state_machine import State
 
 # this entire file is a pile of kludge, just trying to get something working
 
@@ -12,11 +13,11 @@ class ManagerDaemonInterface():
 
     def mission_input(self, mission_data):
         state, mag_field = self.filter.output()
-        if mission_data[0] == 0 or mission_data[0] == 1:
+        if mission_data[0] == State.SLEEP.value or mission_data[0] == State.FAILED.value:
             self.mag_cmd, self.rw_cmd = np.zeros(3), np.zeros(4)
-        elif mission_data[0] == 2:
+        elif mission_data[0] == State.DETUMBLE.value:
             self.mag_cmd, self.rw_cmd = self.mag_controller.detumble(mag_field, state[3]), np.zeros(4)
-        elif mission_data[0] == 3:
+        elif mission_data[0] == State.POINT.value:
             self.mag_cmd = np.zeros(3)
             self.rw_cmd = self.rw_controller.point_and_stare(state[0], state[1], state[3], state[2], mission_data[1], mission_data[2])
 

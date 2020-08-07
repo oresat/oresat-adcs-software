@@ -1,5 +1,5 @@
 import numpy as np
-import dynamic, sensor
+from adcs_lib import dynamic, sensor
 
 class SimulatorDaemonInterface():
     '''This is the interface with the Simulator Daemon.

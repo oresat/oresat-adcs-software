@@ -1,5 +1,5 @@
 import numpy as np
-import quaternion
+from adcs_lib import quaternion
 
 class MagnetorquerController:
     '''

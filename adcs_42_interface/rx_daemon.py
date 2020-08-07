@@ -20,7 +20,7 @@ class RxDaemon(object):
             os.chdir("./42Rx")
             os.system("./42 Rx &")
             return 0
-        except OSError as err:
+        except OSError:
             return -1
 
     
@@ -34,7 +34,7 @@ class RxDaemon(object):
                     os.kill(proc.pid, signal.SIGTERM)
                     success = True
                     break
-            except psutil.Error as err:
+            except psutil.Error:
                 pass
 
         if success:

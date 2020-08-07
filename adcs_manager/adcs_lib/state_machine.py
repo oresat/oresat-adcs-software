@@ -2,7 +2,6 @@ from enum import Enum
 from threading import Lock
 
 
-
 class State(Enum):
     FAILED = 0      # Something failed.
     SLEEP = 1       # ADCS program is not doing anything and waiting for commands.
@@ -13,7 +12,7 @@ class State(Enum):
 class StateMachine:
     def __init__(self):
         self._lock = Lock()
-        self._current_state = State.SLEEP.value;
+        self._current_state = State.SLEEP.value
         self._valid_transition = {
                 State.FAILED.value : [State.FAILED.value, State.SLEEP.value],
                 State.SLEEP.value : [State.SLEEP.value, State.DETUMBLE.value, State.POINT.value],
