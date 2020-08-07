@@ -1,10 +1,5 @@
 import numpy as np
-<<<<<<< HEAD:adcs_lib/frame.py
-import quaternion
-||||||| 0b886c4:adcs_lib/frame.py
-=======
 from adcs_lib import quaternion
->>>>>>> adcs_daemon:adcs_manager/adcs_lib/frame.py
 
 ## these next few functions are for transformations between coordinate systems
 # transformation from inertial frame to ECEF, Cartesian x, y, z

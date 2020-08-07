@@ -1,12 +1,6 @@
 from numpy.random import default_rng
 import numpy as np
-<<<<<<< HEAD:adcs_lib/sensor.py
-import quaternion
-||||||| 0b886c4:adcs_lib/sensor.py
-import environment, quaternion
-=======
 from adcs_lib import quaternion
->>>>>>> adcs_daemon:adcs_manager/adcs_lib/sensor.py
 
 rng = default_rng()
 

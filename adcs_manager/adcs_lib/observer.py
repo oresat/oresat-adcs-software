@@ -1,14 +1,6 @@
 import numpy as np
-<<<<<<< HEAD:adcs_lib/observer.py
-from numpy.random import default_rng
-import sensor, dynamic
-||||||| 0b886c4:adcs_lib/observer.py
-from numpy import default_rng
-import sensor
-=======
 from numpy.random import default_rng
 from adcs_lib import sensor, dynamic
->>>>>>> adcs_daemon:adcs_manager/adcs_lib/observer.py
 
 rng = default_rng()
 
