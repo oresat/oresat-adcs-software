@@ -95,7 +95,7 @@ class DbusServer(object):
                 </signal>
             </interface>
         </node>
-        """
+        """ #: The XML definition of the dbus interface. Required by pydbus.
 
     # dbus signals
     MagnetorquerCommand = signal()
@@ -103,10 +103,10 @@ class DbusServer(object):
     VisualizationDataSignal = signal()
 
     # mutex
-    _data_lock = threading.Lock()
+    _data_lock = threading.Lock() #: Mutex for accessing data controlled by this class.
 
     # board data
-    _board_data = BoardData()
+    _board_data = BoardData() #: Holds data for an ADCS board.
 
     # state machine
     _sm = StateMachine()
@@ -324,6 +324,11 @@ class DbusServer(object):
     def GPSStateVector(self):
         """
         Getter for the State Vector (GPS data).
+
+        Returns
+        -------
+        ([float], [float], datetime)
+            GPS position, velocity, and data timestamp.
         """
 
         self._data_lock.acquire()
@@ -341,6 +346,11 @@ class DbusServer(object):
     def STCelestialCoordinates(self):
         """
         Getter for the star tracker celestial coordinates.
+
+        Returns
+        -------
+        (float, float, float, datetime)
+            Star tracker right ascension, decliation, orientation, and data timestamp.
         """
 
         self._data_lock.acquire()
@@ -359,6 +369,10 @@ class DbusServer(object):
     def IMUAcceleration(self):
         """
         Getter for the satellite's acceleration.
+
+        Returns 
+        -------
+        [float]
         """
 
         self._data_lock.acquire()
@@ -372,6 +386,10 @@ class DbusServer(object):
     def IMUAngularVelocity(self):
         """
         Getter for the satellite's angular velocity.
+
+        Returns
+        -------
+        [float]
         """
 
         self._data_lock.acquire()
@@ -385,6 +403,10 @@ class DbusServer(object):
     def LastMagXCommand(self):
         """
         Getter for the last magnetorquer command's x value.
+
+        Returns
+        -------
+        int
         """
 
         self._data_lock.acquire()
@@ -397,6 +419,10 @@ class DbusServer(object):
     def LastMagYCommand(self):
         """
         Getter for the last magnetorquer command's x value.
+
+        Returns
+        -------
+        int
         """
 
         self._data_lock.acquire()
@@ -410,6 +436,10 @@ class DbusServer(object):
     def LastMagZCommand(self):
         """
         Getter for the last magnetorquer command's x value.
+
+        Returns
+        -------
+        int
         """
 
         self._data_lock.acquire()

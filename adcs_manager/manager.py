@@ -22,10 +22,6 @@ class ADCSManager():
     and starting all thread).
     """
 
-    # adcs library interface
-    sim = simulator.SimulatorDaemonInterface()
-    man = manager.ManagerDaemonInterface(sim.model)
-
     def __init__(self):
         """
         Make pid file / check if daemon is already running.
@@ -37,6 +33,10 @@ class ADCSManager():
         self._bus = SystemBus()
         self._bus.publish(INTERFACE_NAME, self._dbus_server)
         self._dbus_loop = GLib.MainLoop()
+
+        # adcs library interface
+        self.sim = simulator.SimulatorDaemonInterface()
+        self.man = manager.ManagerDaemonInterface(sim.model)
 
         # Check for a pidfile to see if the daemon is already running
         #try:
@@ -167,7 +167,7 @@ class ADCSManager():
 
     def quit(self):
         """
-        Stop all thread.
+        Stop all threads.
         """
 
         self._running = False
