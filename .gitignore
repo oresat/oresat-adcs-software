@@ -9,6 +9,7 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+deb_dist/
 develop-eggs/
 dist/
 downloads/
@@ -25,6 +26,8 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.tar
+*.tar.gz
 MANIFEST
 
 # PyInstaller
@@ -70,6 +73,7 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+docs/html/
 
 # PyBuilder
 target/

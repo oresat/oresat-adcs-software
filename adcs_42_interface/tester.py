@@ -5,8 +5,9 @@ from gi.repository import GLib
 from visualization_interface import VisualizationInterface
 from time import sleep
 
+"""A test module for 42 Rx, to be used alongside test_dbus.py"""
 
-def cleanup(vi):
+def _cleanup(vi):
     # clean up visualization resources
     print("Starting cleanup...")
     vi.destroy()
@@ -17,4 +18,4 @@ if __name__ == "__main__":
 
     vi = VisualizationInterface()
     vi.run()
-    atexit.register(cleanup, vi)
+    atexit.register(_cleanup, vi)

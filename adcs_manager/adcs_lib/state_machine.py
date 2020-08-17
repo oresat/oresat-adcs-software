@@ -44,4 +44,5 @@ class StateMachine:
 
 
     def get_current_state(self):
+        """Returns the state machine's current state."""
         return self._current_state
