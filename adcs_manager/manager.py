@@ -36,7 +36,7 @@ class ADCSManager():
 
         # adcs library interface
         self.sim = simulator.SimulatorDaemonInterface()
-        self.man = manager.ManagerDaemonInterface(sim.model)
+        self.man = manager.ManagerDaemonInterface(self.sim.model)
 
         # Check for a pidfile to see if the daemon is already running
         #try:

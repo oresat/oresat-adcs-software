@@ -9,10 +9,7 @@ software-in-the-loop testing.
 display a simulation of what the satellite is doing.
 
 ## Package setup
-First, install the following dependencies:
-`sudo apt install python3-stdeb python-all dh-python`
-Then, in the folder containing `setup.py`, run:
-`python3 setup.py --command-packages=stdeb.command bdist_deb`
-This will produce a .deb file for this package.
+To install this package, simply run `make all` in the top level directory. Run
+`make help` for information about the other available installation commands.
 
 [42]:https://github.com/ericstoneking/42

@@ -1,4 +1,4 @@
-import threading, atexit
+import threading, atexit, sys
 # from test_dbus import TestDBus
 from pydbus import SystemBus
 from gi.repository import GLib
@@ -16,6 +16,7 @@ def _cleanup(vi):
 
 if __name__ == "__main__":
 
+    sys.path.append(".")
     vi = VisualizationInterface()
     vi.run()
     atexit.register(_cleanup, vi)

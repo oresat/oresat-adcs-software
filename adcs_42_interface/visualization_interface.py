@@ -21,7 +21,6 @@ class VisualizationInterface:
 
     def __init__(self):
         """Initializes dbus connection, socket to 42 Rx, and simulation variables."""
-        # TODO: split into __init__() and run() methods now that dbus loops automatically
 
         # initialize dbus
         self._dbus = SystemBus()
@@ -51,9 +50,6 @@ class VisualizationInterface:
         self._spacecraft_attitude = (0.0, 0.0, 0.0, 0.0)
         self._central_orbit_position = (0.0, 0.0, 0.0)
         self._central_orbit_velocity = (0.0, 0.0, 0.0)
-        #self._earth_posh = (0.0, 0.0, 0.0)
-        #self._earth_orbit_position = (0.0, 0.0, 0.0)
-        #self._earth_orbit_velocity = (0.0, 0.0, 0.0)
 
         # allocate a new thread to listen for data signals
         self._dbus_thread = threading.Thread(target=self._receive_signals, name="dbus-thread")
@@ -83,14 +79,11 @@ class VisualizationInterface:
         f"SC[0].bvb = {join_tpl(self._magnetic_field_vector)}\n" +
         f"SC[0].Hvb = {join_tpl(self._angular_momentum)}\n" +
         f"SC[0].AC.ParmLoadEnabled = 0\n" +
-        f"SC[0].AC.ParmDumpEnabled = 0\n" + # not sure what these two commands do, hard-coded for now
+        f"SC[0].AC.ParmDumpEnabled = 0\n" +
         f"SC[0].B[0].wn = {join_tpl(self._angular_velocity)}\n" +
         f"SC[0].B[0].qn = {join_tpl(self._spacecraft_attitude)}\n" +
         f"Orb[0].PosN = {join_tpl(self._central_orbit_position)}\n" +
         f"Orb[0].VelN = {join_tpl(self._central_orbit_velocity)}\n" +
-        #f"World[3].PosH = {join_tpl(self._earth_posh)}\n" +
-        #f"World[3].eph.PosN = {join_tpl(self._earth_orbit_position)}\n" +
-        #f"World[3].eph.VelN = {join_tpl(self._earth_orbit_velocity)}\n" +
         f"[EOF]\n")
 
         self._42_socket.send(msg.encode())

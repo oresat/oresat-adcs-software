@@ -12,11 +12,11 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('/home/jh42/oresat/'))
-sys.path.insert(0, os.path.abspath('/home/jh42/oresat/oresat_adcs_software'))
-sys.path.insert(0, os.path.abspath('/home/jh42/oresat/oresat_adcs_software/adcs_manager'))
-sys.path.insert(0, os.path.abspath('/home/jh42/oresat/oresat_adcs_software/adcs_manager/adcs_lib'))
-sys.path.insert(0, os.path.abspath('/home/jh42/oresat/oresat_adcs_software/adcs_42_interface'))
+sys.path.insert(0, os.path.abspath('../../..'))
+sys.path.insert(0, os.path.abspath('../..'))
+sys.path.insert(0, os.path.abspath('../../adcs_manager'))
+sys.path.insert(0, os.path.abspath('../../adcs_manager/adcs_lib'))
+sys.path.insert(0, os.path.abspath('../../adcs_42_interface'))
 
 # -- Project information -----------------------------------------------------
 
@@ -38,7 +38,7 @@ templates_path = []
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = []
+exclude_patterns = ['*test*', '*main*']
 
 
 # -- Options for HTML output -------------------------------------------------
