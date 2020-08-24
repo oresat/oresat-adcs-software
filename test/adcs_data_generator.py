@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# note that I changed the ADCS dataframe, so this is currently broken
+
+
 from pydbus import SystemBus
 from gi.repository import GLib
 import time, random, datetime
@@ -186,3 +187,4 @@ if __name__=="__main__":
         loop.run()
     except KeyboardInterrupt as e:
         loop.quit()
+

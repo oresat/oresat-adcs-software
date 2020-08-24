@@ -1,0 +1,352 @@
+import numpy as np
+from numpy.random import default_rng
+from adcs_lib import sensor, dynamic, quaternion
+
+rng = default_rng()
+
+class DiscreteAttitudeKalman():
+    '''
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    '''
+    def __init__(self, q_initial, dt):
+        self.GYRO_SIGMA   = 2.79e-4 # angular random walk, rad/s/sqrt(Hz), https://jpieper.com/2020/03/09/bringing-up-the-imu-on-the-pi3-hat/
+        self.DRIFT_SIGMA  = 8.73e-4 # rate random walk, same website
+        self.INITIAL_BIAS = 3.15e-5 # bias stability, same website
+
+        #self.GYRO_SIGMA   = 0.00174533 # angular random walk, rad/s, from datasheet
+        #self.DRIFT_SIGMA  = 1.9391e-5 # rad/s^2, assuming 200 C/s temp change #1.713e-8 # rate random walk, rad / s^(3/2), guestimate
+        #self.INITIAL_BIAS = 0.0174533 # rad/s, from datasheet (1 deg/s)
+        self.SENSOR_SIGMA = 1.5e-7/2 # rad, star tracker measurement noise, guestimate
+
+        self.dt = dt
+        self.dq = np.zeros(3)
+        self.db = np.zeros(3)
+        self.P = np.block([[np.eye(3) * self.SENSOR_SIGMA**2, np.zeros((3,3))],
+                            [np.zeros((3,3)), np.eye(3)*self.INITIAL_BIAS**2]])
+        self.q = q_initial
+        self.b = np.zeros(3)
+
+        Q11 = self.GYRO_SIGMA**2 * dt + 1/3 * self.DRIFT_SIGMA**2 * dt**3
+        Q12 = -1/2 * self.DRIFT_SIGMA**2 * dt**2
+        Q22 = self.DRIFT_SIGMA**2 * dt
+        # untuned process noise model, assuming variance is independent
+        self.Q = np.array([
+                [Q11, 0, 0, Q12, 0, 0],
+                [0, Q11, 0, 0, Q12, 0],
+                [0, 0, Q11, 0, 0, Q12],
+                [Q12, 0, 0, Q22, 0, 0],
+                [0, Q12, 0, 0, Q22, 0],
+                [0, 0, Q12, 0, 0, Q22]
+                ])
+        # change in linear EKF with respect to noise
+        self.G = np.array([
+                [-1, 0, 0, 0, 0, 0],
+                [0, -1, 0, 0, 0, 0],
+                [0, 0, -1, 0, 0, 0],
+                [0, 0, 0, 1, 0, 0],
+                [0, 0, 0, 0, 1, 0],
+                [0, 0, 0, 0, 0, 1.]
+                ])
+
+        self.GQG_T = self.G.dot(self.Q.dot(self.G.T))
+
+        # measurement covariance
+        self.R = np.diag([self.SENSOR_SIGMA**2 for i in range(3)])
+
+    def measurement(self, q_ref):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        self.K = np.hsplit(self.P, 2)[0].dot(np.linalg.inv(self.R + np.vsplit(np.hsplit(self.P, 2)[0], 2)[0]))
+        temp = np.eye(6) - np.block([self.K, np.zeros((6,3))])
+        self.P  = temp.dot(self.P) # investigate the claim that the expression below is more numerically stable
+        #self.P = temp.dot(self.P.dot(temp.T)) + self.K.dot(self.R.dot(self.K.T))
+        dx = self.K.dot(quaternion.product(quaternion.conjugate(self.q), q_ref)[1:] - self.dq)
+        self.dq = dx[:3]
+        self.db = dx[3:]
+        self.reset()
+
+    def reset(self):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        self.q  = quaternion.normalize(self.q + quaternion.xi(self.q).dot(self.dq) / 2)
+        self.dq = np.zeros(3)
+        self.b += self.db
+        self.db = np.zeros(3)
+
+    # matrices for discrete propagation
+    def state_transition(self, w, dt):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        w_X = quaternion.cross(w)
+        w_X2 = w_X.dot(w_X)
+        norm_w = np.linalg.norm(w)
+        w_square = norm_w ** 2
+        s = np.sin(norm_w * dt)
+        c = np.cos(norm_w * dt)
+
+        phi_11 = np.eye(3) - s / norm_w * w_X + (1 - c) / w_square * w_X2
+        phi_12 = -np.eye(3) * dt + (1 - c) / w_square * w_X - (norm_w * dt - s) / norm_w**3 * w_X2
+
+        phi = np.block([
+                [phi_11, phi_12],
+                [np.zeros((3,3)), np.eye(3)]
+        ])
+
+        s = np.sin(norm_w * dt / 2)
+        c = np.cos(norm_w * dt / 2)
+        psi = s / norm_w * w
+
+        omegaleft = np.array([[c, *psi]]).T
+        omegaright = np.block([[-psi],
+                                [np.eye(3) - quaternion.cross(psi)]])
+        omega = np.block([omegaleft, omegaright])
+
+        return phi, omega
+
+    def propagate(self, w_sensor, dt):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        w = w_sensor - self.b
+        phi, omega = self.state_transition(w, dt)
+        self.P = phi.dot(self.P.dot(phi.T)) + self.GQG_T
+        self.q = omega.dot(self.q)
+
+    def output(self):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        return self.q, self.b
+
+class DiscretePositionKalman():
+    '''
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    '''
+    def __init__(self, x, v, date_and_time, step_size, gps_sample_time):
+        x_sigma = 10.0598 # m
+        v_sigma = 0.52038 # m/s
+        a_sigma = 0.018166 # m/s^2
+        # system noise covariance
+        a_var = a_sigma**2
+        self.Q = np.diag([0, 0, 0, a_var, a_var, a_var])
+        # measurement noise covariance
+        x_var = x_sigma**2
+        v_var = v_sigma**2
+        self.R = np.diag([x_var, x_var, x_var, v_var, v_var, v_var])
+        self.P = np.eye(6)
+        self.t_s = gps_sample_time
+
+        # at a later point, calculate these parameters from the model, JIC
+        self.a = 1.28e-6   # s^-2, mu/r^3 for circular orbit
+        self.b = 1.618e-10 # s^-1, drag coeff assuming constant speed and density
+
+        self.model = dynamic.ReducedDynamicalSystem(x, v, date_and_time)
+        #self.integrator = dynamic.Integrator(self.model, step_size)
+        self.x = np.block([self.model.state[0], self.model.state[1]])
+
+    def F_continuous(self):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        F11      = np.zeros((3,3))
+        F12      = np.eye(3)
+        mu = -self.model.enviro.MU
+        r = np.linalg.norm(self.x[:3])
+        r3term = -1/r**3
+        r5term = 3/r**5
+        x = self.x[0]
+        y = self.x[1]
+        z = self.x[2]
+        grad_a_1 = mu * np.array([r3term + r5term * x**2, r5term * x * y, r5term * x * z])
+        grad_a_2 = np.array([grad_a_1[1], mu * (r3term + r5term * y**2), mu * r5term * z * y])
+        grad_a_3 = np.array([grad_a_1[2], grad_a_2[2], mu * (r3term + r5term * z**2)])
+        F21      = np.block([[grad_a_1], [grad_a_2], [grad_a_3]])
+        F22      = np.zeros((3,3)) # neglecting drag for now, add when bored
+        F        = np.block([[F11, F12],
+                             [F21, F22]])
+        return F
+
+    def F_discrete(self, dt):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        F = self.F_continuous()
+        F2 = F.dot(F)
+        return np.eye(6) + F * dt + 0.5 * F2 * dt**2# + 0.1666 * F.dot(F2) * dt**3
+
+    def A_discrete(self, dt):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        t2  = dt**2
+        A11 = 1 - 0.5 * self.a * t2
+        A12 = dt - 0.5 * self.b * t2 - 0.1666 * self.a * dt * t2
+        A21 = - self.a * dt
+        A22 = A11 - self.b * dt
+        return np.block([[A11*np.eye(3), A12*np.eye(3)],
+                         [A21*np.eye(3), A22*np.eye(3)]])
+
+    def update(self, x_ref, v_ref):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        y      = np.block([x_ref, v_ref])
+        self.K = self.P.dot(np.linalg.inv(self.P + self.R))
+        self.P = (np.eye(6) - self.K).dot(self.P)
+        self.x = self.x + self.K.dot(y - self.x)
+        self.model.state = np.array([self.x[:3], self.x[3:]])
+
+    def propagate(self, dt):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        F = self.F_discrete(dt)
+        A = self.A_discrete(dt)
+        self.P = F.dot(self.P.dot(F.T)) + self.Q
+        self.x = A.dot(self.x)
+        #self.integrator.integrate(self.t_s, None)
+        #self.x = np.block([self.model.state[0], self.model.state[1]])
+
+    def output(self):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        return self.x[:3], self.x[3:]
+
+class KalmanFilters():
+    '''
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    '''
+    def __init__(self, gyro_step_size, gps_step_size, truth_model):
+        self.truth_model = truth_model
+        init_state = self.truth_model.measurement(noisy=True)
+        x_init, v_init, q_init = init_state[:3]
+        self.gyro_dt = gyro_step_size
+        self.gps_dt  = gps_step_size
+        self.PosFilter = DiscretePositionKalman(x_init, v_init, truth_model.init_date, 0.05, gps_step_size)
+        self.AttFilter = DiscreteAttitudeKalman(q_init, self.gyro_dt)
+
+    def output(self):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        state = self.truth_model.measurement(noisy=True)
+        x, v  = self.PosFilter.output()
+        q, b  = self.AttFilter.output()
+        state[0] = x
+        state[1] = v
+        state[2] = q
+        state[3] -= b
+        self.last_w = state[3]
+        return state
+
+    def update(self, sensor_data):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        self.PosFilter.update(*sensor_data[:2])
+        self.AttFilter.measurement(sensor_data[2])
+
+    def propagate(self, duration):
+        '''
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        '''
+        t = self.gyro_dt
+        w = self.last_w #self.truth_model.sensors[3].measurement(noisy=True)
+        while t < duration or abs(t - duration) < 0.001:
+            self.AttFilter.propagate(w, self.gyro_dt)
+            t += self.gyro_dt
+        t = self.gps_dt
+        while t < duration or abs(t - duration) < 0.001:
+            self.PosFilter.propagate(self.gps_dt)
+            self.PosFilter.model.clock.tick(self.gps_dt)
+            self.PosFilter.model.update_transformation_matrices()
+            t += self.gps_dt
