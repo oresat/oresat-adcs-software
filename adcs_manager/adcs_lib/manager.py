@@ -16,7 +16,7 @@ class ManagerDaemonInterface():
     def __init__(self, gyro_step_size, gps_step_size, truth_model):
         self.filter = observer.KalmanFilters(gyro_step_size, gps_step_size, truth_model)
         self.mag_controller = controller.MagnetorquerController(self.filter.PosFilter.model.satellite.magnetorquers, bang_bang=False)
-        self.rw_controller  = controller.ReactionWheelsController(self.filter.PosFilter.model, .707, 0.1)
+        self.rw_controller  = controller.ReactionWheelsController(self.filter.PosFilter.model, .707, 0.025)
         self.mag_cmd, self.rw_cmd = np.zeros(3), np.zeros(4)
 
     def mission_input(self, mission_data):

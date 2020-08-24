@@ -8,7 +8,7 @@ from mpl_toolkits.mplot3d import Axes3D
 true   = pd.read_csv('./true_states.csv')
 kalman = pd.read_csv('./kalman_states.csv')
 start = None
-end = 10000
+end = None
 endt = None if end is None else end + 1
 absolute = True
 #fig, (ax1, ax2, ax3, ax4) = plt.subplots(4)

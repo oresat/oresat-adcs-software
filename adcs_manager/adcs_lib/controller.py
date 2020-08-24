@@ -1,18 +1,20 @@
 import numpy as np
 from adcs_lib import quaternion
 
-class WescottTrigger():
+class MayhewTrigger():
     '''
-    The use of the sign() function can lead to the "chattering" phenomenon when noise is injected into state estimates.
-    This is one way to implement an alternative with hysteresis-like behavior to trade some efficiency for robustness.
+    The use of the sign function in a controller can lead to the "chattering" phenomenon when noise is injected into state estimates.
+    This is one way to implement an alternative to sign() with hysteretic behavior, in order to trade some efficiency for robustness.
     We lose the guarantee of taking the shortest angular path for attitude errors close to 180 deg, but it's worth it.
     For the mathematical details of a hybrid control system, refer to Mayhew, Sanfelice, Teel 2011.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    x : float
+        Initial value of whichever variable whose sign we will be monitoring.
+    half_width : float
+        Hysteresis half-width, between 0 and 1. The rigorous way of determining this given sensor error is in that paper.
+        If 0, this becomes a simple sign function. If >= 1, this becomes a constant.
     '''
     def __init__(self, x, half_width):
         sign = np.sign(x)
@@ -21,26 +23,32 @@ class WescottTrigger():
 
     def step(self, x):
         '''
+        Discrete dynamics for the memory variable so that sign only changes when variable pushes past half-width.
+        Handles case of half-width = 0 by making sure memory variable retains value rather than being set to 0.
 
         Parameters
         ----------
-
-        Returns
-        -------
+        x : float
+            Present value of variable.
         '''
         if x * self.memory_state <= - self.half_width:
             sign = np.sign(x)
             self.memory_state = sign if sign != 0 else self.memory_state
-            print("sign switch!")
+            print("sign switch!") # for debugging
 
     def sign(self, x):
         '''
+        Replicates the functionality of the sign function but with hysteresis near 0.
 
         Parameters
         ----------
+        x : float
+            Variable whose sign we are extracting.
 
         Returns
         -------
+        int
+            Either 1 or -1, depending on present value of variable and its recent history.
         '''
         self.step(x)
         return self.memory_state
@@ -61,14 +69,15 @@ class MagnetorquerController:
     '''
     def __init__(self, torquers, bang_bang):
         # approximate control gain, see page 310 formula
-        self.gain      = 1.72192143 * 5.09404743e-3 * 4 * np.pi / 5560.8 * 10
+        self.gain      = 1.72192143 * 5.09404743e-3 * 4 * np.pi / 5560.8
+        print(self.gain)
         self.bang_bang = bang_bang
         self.torquers  = torquers
 
         self.saturates = True
         self.max_moment = 1.243 # A m^2
         if bang_bang:
-            self.triggers = [WescottTrigger(1, 0.3) for i in range(3)]
+            self.triggers = [MayhewTrigger(1, 0.3) for i in range(3)]
 
     def actuator_commands(self, state, torque_command):
         '''
@@ -144,7 +153,7 @@ class ReactionWheelsController:
         self.reaction_wheels   = model.satellite.reaction_wheels
         self.clock             = model.clock
         self.enviro            = model.enviro
-        self.error_trigger     = WescottTrigger(1, 0.3)
+        self.error_trigger     = MayhewTrigger(1, 0.3)
 
         #self.orbital_ref = np.array([0, -2* np.pi / 5560.8, 0]) # might not need this
 
@@ -161,6 +170,7 @@ class ReactionWheelsController:
         self.quat_gain = 2 * nat_freq**2 * self.MoI
         self.rate_gain = 2 * damping * nat_freq * self.MoI
         self.wheel_gain = self.rate_gain[0][0] * 0.75
+        print(np.linalg.norm(self.quat_gain), np.linalg.norm(self.rate_gain))
 
     def acquire_target(self, position, attitude, target, boresight):
         '''
@@ -319,8 +329,8 @@ class ReactionWheelsController:
         slide = np.cross(w, self.MoI.dot(w - w_cmd)) # might be faster, but might have larger steady state amplitudes
         #slide = quaternion.cross(w_cmd).dot(self.MoI.dot(w_cmd)) # this tried switching a few items
 
-        tracking_rotation = np.linalg.norm(w[:2]) < 6.4e-3 and np.abs(w[2] - self.w_b) < 1.5e-3
-        colinear = np.linalg.norm(error_quat[1:3]/2) < 0.075
+        tracking_rotation = np.linalg.norm(w[:2]) < 6.4e-4 and np.abs(w[2] - w_cmd[2]) < 1.5e-3
+        colinear = np.linalg.norm(error_quat[1:3]/2) < 0.05
         self.converged = colinear and tracking_rotation
 
         bbq_setup = self.tracking(state, [w_cmd, q_cmd])
