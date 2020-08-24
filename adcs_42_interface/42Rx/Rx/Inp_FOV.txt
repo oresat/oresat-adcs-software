@@ -6,9 +6,9 @@
 4   0.5                            !  Number of Sides, Length [m]
 15.0  15.0                           !  X Width, Y Height [deg]
 1.0 0.0 0.0 1.0                    !  Color RGB+Alpha
-SOLID                              !  WIREFRAME, SOLID, VECTOR, or PLANE 
+SOLID                              !  WIREFRAME, SOLID, VECTOR, or PLANE
 TRUE  TRUE                         !  Draw Near Field, Draw Far Field
-0  0                               !  SC, Body 
+0  0                               !  SC, Body
 0.0  0.0  0.15                      !  Position in Body [m]
 0.0  0.0  0.0  321                 !  Euler Angles [deg], Sequence
 --------------------------------------------------------------------
@@ -16,9 +16,9 @@ TRUE  TRUE                         !  Draw Near Field, Draw Far Field
 4   0.5                           !  Number of Sides, Length [m]
 15.0  15.0                          !  X Width, Y Height [deg]
 1.0 0.0 0.0 1.0                    !  Color RGB+Alpha
-SOLID                          !  WIREFRAME, SOLID, VECTOR, or PLANE 
+SOLID                          !  WIREFRAME, SOLID, VECTOR, or PLANE
 TRUE  TRUE                         !  Draw Near Field, Draw Far Field
-0  0                               !  SC, Body 
+0  0                               !  SC, Body
 0.0  0.0  -0.1                      !  Position in Body [m]
 0.0  0.0  0.0  213                !  Euler Angles [deg], Sequence
 --------------------------------------------------------------------
@@ -26,9 +26,9 @@ TRUE  TRUE                         !  Draw Near Field, Draw Far Field
 4   0.5                           !  Number of Sides, Length [m]
 100.0  100.0                          !  X Width, Y Height [deg]
 0.0 1.0 0.0 1.0                    !  Color RGB+Alpha
-WIREFRAME                          !  WIREFRAME, SOLID, VECTOR, or PLANE 
+WIREFRAME                          !  WIREFRAME, SOLID, VECTOR, or PLANE
 TRUE  TRUE                         !  Draw Near Field, Draw Far Field
-0  0                               !  SC, Body 
+0  0                               !  SC, Body
 0.05  0.0  0.0                      !  Position in Body [m]
 0.0  90.0  0.0  312               !  Euler Angles [deg], Sequence
 --------------------------------------------------------------------

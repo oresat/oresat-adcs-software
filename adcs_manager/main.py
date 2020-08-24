@@ -14,7 +14,8 @@ def usage():
 
 
 if __name__ == "__main__":
-    sys.path.append("/home/oresat/oresat-adcs-software/")
+    sys.path.append(".")
+    sys.path.append("..")
     adcs_manager = ADCSManager()
 
     # deal with flags
@@ -28,4 +29,3 @@ if __name__ == "__main__":
         adcs_manager.run()
     except KeyboardInterrupt as e:
         adcs_manager.quit()
-

@@ -1,1 +1,3 @@
 pydbus
+numpy
+psutil

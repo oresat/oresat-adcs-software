@@ -76,7 +76,7 @@ FALSE  FALSE  FALSE           ! TrnDOF Locked
 0                             ! Number of Thrusters
 ==============================  Thr 0  =================================
  1.0                          ! Thrust Force (N)
-0  -1.0  0.0  0.0             ! Body, Thrust Axis 
+0  -1.0  0.0  0.0             ! Body, Thrust Axis
  1.0  1.0  1.0                ! Location in B0, m
 0                             ! Flex Node Index
 ******************************* Gyro ************************************
@@ -86,7 +86,7 @@ FALSE  FALSE  FALSE           ! TrnDOF Locked
 1.0  0.0  0.0                 ! Axis expressed in Body Frame
 1000.0                        ! Max Rate, deg/sec
 100.0                         ! Scale Factor Error, ppm
-1.0                           ! Quantization, arcsec 
+1.0                           ! Quantization, arcsec
 0.07                          ! Angle Random Walk (deg/rt-hr)
 0.1  1.0                      ! Bias Stability (deg/hr) over timespan (hr)
 0.1                           ! Angle Noise, arcsec RMS
@@ -99,7 +99,7 @@ FALSE  FALSE  FALSE           ! TrnDOF Locked
 1.0  0.0  0.0                 ! Axis expressed in Body Frame
 60.0E-6                       ! Saturation, Tesla
 0.0                           ! Scale Factor Error, ppm
-1.0E-6                        ! Quantization, Tesla 
+1.0E-6                        ! Quantization, Tesla
 1.0E-6                        ! Noise, Tesla RMS
 0                             ! Flex Node Index
 *********************** Coarse Sun Sensor *******************************

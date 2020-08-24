@@ -95,18 +95,18 @@ class DbusServer(object):
                 </signal>
             </interface>
         </node>
-        """
+        """ #: The XML definition of the dbus interface. Required by pydbus.
 
     # dbus signals
-    MagnetorquerCommand = signal()
-    ReactionWheelsCommand = signal()
-    VisualizationDataSignal = signal()
+    MagnetorquerCommand = signal()      #: Magnetorquer command signal. Takes 3 float arguments (x, y, z).
+    ReactionWheelsCommand = signal()    #: Reaction wheels command signal. Takes 4 float arguments, one for each wheel.
+    VisualizationDataSignal = signal()  #: 42 data signal, consisting of the sun pointing unit vector, magnetic field vector, angular momentum, angular velocity, spacecraft attitude quaternion, central orbit position, and central orbit velocity. All values are in R\ :sup:`3`\ , except for the quaternion, which is in R\ :sup:`4`\ .
 
     # mutex
-    _data_lock = threading.Lock()
+    _data_lock = threading.Lock() #: Mutex for accessing data controlled by this class.
 
     # board data
-    _board_data = BoardData()
+    _board_data = BoardData() #: Holds data for an ADCS board.
 
     # state machine
     _sm = StateMachine()
@@ -256,11 +256,11 @@ class DbusServer(object):
         ----------
         rw1_command : int
             Last reaction wheel 1 command.
-        rw1_command : int
+        rw2_command : int
             Last reaction wheel 2 command.
-        rw1_command : int
+        rw3_command : int
             Last reaction wheel 3 command.
-        rw1_command : int
+        rw4_command : int
             Last reaction wheel 4 command.
         """
 
@@ -324,6 +324,9 @@ class DbusServer(object):
     def GPSStateVector(self):
         """
         Getter for the State Vector (GPS data).
+
+        :rtype: ([float], [float], datetime)
+        :return: GPS position, velocity, and data timestamp.
         """
 
         self._data_lock.acquire()
@@ -341,6 +344,9 @@ class DbusServer(object):
     def STCelestialCoordinates(self):
         """
         Getter for the star tracker celestial coordinates.
+
+        :rtype: (float, float, float, datetime)
+        :return: Star tracker right ascension, decliation, orientation, and data timestamp.
         """
 
         self._data_lock.acquire()
@@ -359,6 +365,8 @@ class DbusServer(object):
     def IMUAcceleration(self):
         """
         Getter for the satellite's acceleration.
+
+        :rtype: [float]
         """
 
         self._data_lock.acquire()
@@ -372,6 +380,8 @@ class DbusServer(object):
     def IMUAngularVelocity(self):
         """
         Getter for the satellite's angular velocity.
+
+        :rtype: [float]
         """
 
         self._data_lock.acquire()
@@ -379,12 +389,14 @@ class DbusServer(object):
         self._data_lock.release()
 
         return imu_av
- 
+
 
     @property
     def LastMagXCommand(self):
         """
         Getter for the last magnetorquer command's x value.
+
+        :rtype: int
         """
 
         self._data_lock.acquire()
@@ -397,6 +409,8 @@ class DbusServer(object):
     def LastMagYCommand(self):
         """
         Getter for the last magnetorquer command's x value.
+
+        :rtype: int
         """
 
         self._data_lock.acquire()
@@ -410,6 +424,8 @@ class DbusServer(object):
     def LastMagZCommand(self):
         """
         Getter for the last magnetorquer command's x value.
+
+        :rtype: int
         """
 
         self._data_lock.acquire()

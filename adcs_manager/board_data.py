@@ -10,86 +10,41 @@ ACS4 = 3 # RW: +x -y
 class ACSData():
     """
     This class holds the attributes for a single ACS board.
-
-    Attributes
-    ----------
-    position : int
-        Reaction wheel position.
-    velocity : int
-        Reaction wheel (angular) velocity.
-    temperature : int
-        Reaction wheel temperature.
-    last_update_dt : datetime
-        Timestamp for when the board was last updated.
     """
 
-    position = 0
-    velocity = 0
-    temperature = 0
-    last_update_dt = None
+    def __init__(self):
+        self.position = 0           #: Reaction wheel position. **Type:** int
+        self.velocity = 0           #: Reaction wheel (angular) velocity. **Type:** int
+        self.temperature = 0        #: Reaction wheel temperature. **Type:** int
+        self.last_update_dt = None  #: Timestamp for when the board was last updated. **Type:** datetime
 
 
 class BoardData():
     """
-    This POD class should hold all data on the CANbus from a ADCS board.
-
-    Attributes
-    ----------
-    position : [float]
-        Position of satelitte in km using ECEF coordinates.
-    velocity : [float]
-        Satellite's velocity in km/s XYZ.
-    pos_vel_timestamp : datetime
-        timestamp for position and velocity from SDR GPS.
-    right_ascension : float
-        Satellite's right ascension in degrees.
-    declination : float
-        Satellite's declination in degrees.
-    orientation : float
-        Satellite's orientation in degrees.
-    celestial_coor_timestamp : datetime
-        timestamp for the celestial coordinates from Star Tracker.
-    acceleration : [float]
-        Satellite's acceleration in km/s^2 XYZ.
-    angular_velocity : [float]
-        Satellite's angular velocity in rad/second XYZ.
-    mag_field_vector0 : [int]
-        IMU-Magnetometer magnetic field vector (1 of 2).
-    mag_field_vector1 : [int]
-        IMU-Magnetometer magnetic field vector (2 of 2).
-    imu_last_update_dt : datetime
-        Datetime when the imu and magnetorquer data was last updated.
-    reaction_wheels_data : [TODO]
-        TODO
-    magnetorquer_data : [TODO]
-        TODO
-    acs_data : [ACSData]
-        List of containers for ACS board data.
-    adc_last_update_dt : [datetime]
-        List of datetimes when an adc board's data was last updated. One
-        datetime for each board.
+    This POD class holds all data on the CANbus from a ADCS board.
     """
 
-    # SDR GPS board data (state vector)
-    position = [0.0, 0.0, 0.0] # xyz
-    velocity = [0.0, 0.0, 0.0] # xyz
-    pos_vel_timestamp = None
+    def __init__(self):
+        # SDR GPS board data (state vector)
+        self.position = [0.0, 0.0, 0.0] #: Position of satellite in km using ECEF coordinates. **Type:** [float]
+        self.velocity = [0.0, 0.0, 0.0] #: Satellite's velocity in km/s XYZ. **Type:** [float]
+        self.pos_vel_timestamp = None   #: Timestamp for position and velocity from SDR GPS. **Type:** datetime
 
-    # Star Tracker board data (celestial coordinates)
-    right_ascension = 0.0
-    declination = 0.0
-    orientation = 0.0
-    celestial_coor_timestamp = None
+        # Star Tracker board data (celestial coordinates)
+        self.right_ascension = 0.0              #: Satellite's right ascension in degrees. **Type:** [float]
+        self.declination = 0.0                  #: Satellite's declination in degrees. **Type:** [float]
+        self.orientation = 0.0                  #: Satellite's orientation in degrees. **Type:** [float]
+        self.celestial_coor_timestamp = None    #: Timestamp for the celestial coordinates from Star Tracker. **Type:** datetime
 
-    # IMU and Magnetometer board data
-    # acceleration = [0, 0, 0] # xyz
-    angular_velocity = [0, 0, 0] # xyz
-    # NOTE / TODO need Magnetometer data?
-    mag_field_vector0 = [0, 0, 0]
-    mag_field_vector1 = [0, 0, 0]
-    imu_last_update_dt = None
+        # IMU and Magnetometer board data
+        # acceleration = [0, 0, 0] # xyz
+        self.angular_velocity = [0, 0, 0]       #: Satellite's angular velocity in rad/second XYZ. **Type:** [float]
+        # NOTE / TODO need Magnetometer data?
+        self.mag_field_vector0 = [0, 0, 0]      #: IMU-Magnetometer magnetic field vector (1 of 2). **Type:** [float]
+        self.mag_field_vector1 = [0, 0, 0]      #: IMU-Magnetometer magnetic field vector (2 of 2). **Type:** [float]
+        self.imu_last_update_dt = None          #: Datetime when the IMU-Magnetorquer data was last updated. **Type:** datetime
 
-    # ACS board data
-    reaction_wheels_data = [0, 0, 0, 0] # TODO replace with real data
-    magnetorquer_data = [0, 0, 0] # TODO replace with real data
-    acs_data = [ACSData() for _ in range(4)]
+        # ACS board data
+        self.reaction_wheels_data = [0, 0, 0, 0]        #: description TBD **Type:** TBD
+        self.magnetorquer_data = [0, 0, 0]              #: description TBD **Type:** TBD
+        self.acs_data = [ACSData() for _ in range(4)]   #: description TBD **Type:** [ACSData]
