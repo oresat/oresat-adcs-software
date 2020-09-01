@@ -1,5 +1,5 @@
 import numpy as np
-import simulator, manager
+from adcs_manager.adcs_lib import simulator, manager
 # throwaway test file
 
 if __name__ == "__main__":

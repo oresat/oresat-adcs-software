@@ -1,5 +1,5 @@
 import numpy as np
-from adcs_lib import simulator, manager
+from adcs_manager.adcs_lib import simulator, manager
 # throwaway test file
 
 sim = simulator.SimulatorDaemonInterface()

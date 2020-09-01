@@ -2,8 +2,8 @@ from pydbus.generic import signal
 import threading
 import time
 from datetime import datetime
-from board_data import BoardData
-from adcs_lib.state_machine import State, StateMachine
+from adcs_manager.board_data import BoardData
+from adcs_manager.adcs_lib.state_machine import State, StateMachine
 
 class DbusServer(object):
     """

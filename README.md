@@ -9,7 +9,10 @@ software-in-the-loop testing.
 display a simulation of what the satellite is doing.
 
 ## Package setup
-To install this package, simply run `make all` in the top level directory. Run
+To clone this package, run
+`git clone https://github.com/oresat/oresat-adcs-software.git --recurse-submodules`
+
+To install this package, run `make all` in its top level directory. Run
 `make help` for information about the other available installation commands.
 
 [42]:https://github.com/ericstoneking/42

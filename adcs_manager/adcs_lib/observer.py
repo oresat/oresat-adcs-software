@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.random import default_rng
-from adcs_lib import sensor, dynamic
+from adcs_manager.adcs_lib import sensor, dynamic
 
 rng = default_rng()
 

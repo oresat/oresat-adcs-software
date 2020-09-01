@@ -14,7 +14,7 @@ INTERFACE_NAME =  "org.OreSat.ADCSManager"
 OBJECT_PATH =     "/org/OreSat/ADCSManager"
 PID_FILE =        "/run/oresat-linux-updater.pid"
 HOST = "localhost"
-PORT = 7778
+PORT = 10001
 
 
 class VisualizationInterface:

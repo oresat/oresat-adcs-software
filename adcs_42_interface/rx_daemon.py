@@ -17,7 +17,7 @@ class RxDaemon(object):
     def run(self):
         """Launch 42 Rx as its own process."""
         try:
-            os.chdir("./42Rx")
+            os.chdir("./42")
             os.system("./42 Rx &")
             return 0
         except OSError:

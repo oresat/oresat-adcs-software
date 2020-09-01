@@ -3,9 +3,9 @@ from gi.repository import GLib
 import time
 from threading import Thread
 from syslog import syslog
-from adcs_lib.state_machine import *
-from dbus_server import DbusServer
-from adcs_lib import manager, simulator
+from adcs_manager.adcs_lib.state_machine import *
+from adcs_manager.dbus_server import DbusServer
+from adcs_manager.adcs_lib import manager, simulator
 import copy
 import numpy as np
 

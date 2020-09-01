@@ -1,6 +1,6 @@
 from numpy.random import default_rng
 import numpy as np
-from adcs_lib import quaternion
+from adcs_manager.adcs_lib import quaternion
 
 rng = default_rng()
 

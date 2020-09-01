@@ -1,6 +1,6 @@
 import numpy as np
-from adcs_lib import controller, observer
-from adcs_lib.state_machine import State
+from adcs_manager.adcs_lib import controller, observer
+from adcs_manager.adcs_lib.state_machine import State
 
 # this entire file is a pile of kludge, just trying to get something working
 
