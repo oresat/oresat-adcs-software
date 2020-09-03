@@ -2,24 +2,24 @@
 ************************* Fields of View ***************************
 1                                  !  Number of FOVs
 --------------------------------------------------------------------
-"EXCLUSION +Z"                            !  Label
+"EXCLUSION -Z"                            !  Label
 4   0.5                            !  Number of Sides, Length [m]
 15.0  15.0                           !  X Width, Y Height [deg]
 1.0 0.0 0.0 1.0                    !  Color RGB+Alpha
 SOLID                              !  WIREFRAME, SOLID, VECTOR, or PLANE
 TRUE  TRUE                         !  Draw Near Field, Draw Far Field
 0  0                               !  SC, Body
-0.0  0.0  0.15                      !  Position in Body [m]
-0.0  0.0  0.0  321                 !  Euler Angles [deg], Sequence
+0.0  0.0  -0.15                      !  Position in Body [m]
+0.0  180.0  0.0  321                 !  Euler Angles [deg], Sequence
 --------------------------------------------------------------------
-"EXCLUSION -Z"                             !  Label
+"EXCLUSION +Z"                             !  Label
 4   0.5                           !  Number of Sides, Length [m]
 15.0  15.0                          !  X Width, Y Height [deg]
 1.0 0.0 0.0 1.0                    !  Color RGB+Alpha
 SOLID                          !  WIREFRAME, SOLID, VECTOR, or PLANE
 TRUE  TRUE                         !  Draw Near Field, Draw Far Field
 0  0                               !  SC, Body
-0.0  0.0  -0.1                      !  Position in Body [m]
+0.0  0.0  -0.15                      !  Position in Body [m]
 0.0  0.0  0.0  213                !  Euler Angles [deg], Sequence
 --------------------------------------------------------------------
 "INCLUSION +X"                             !  Label

@@ -1,16 +1,21 @@
 import numpy as np
-from adcs_lib import quaternion
+from adcs_lib import vector
 
-## these next few functions are for transformations between coordinate systems
-# transformation from inertial frame to ECEF, Cartesian x, y, z
+'''These functions are for transformations between coordinate systems'''
+
 def inertial_to_ecef(clock):
     '''
+    Transformation from inertial frame to ECEF. Cartesian x, y, z for both.
 
     Parameters
     ----------
+    clock : jday.Clock
+        These reference frames differ by rotation around z-axis depending on what time it is.
 
     Returns
     -------
+    numpy.ndarray
+        Matrix for coordinate transformation from inertial frame to ECEF frame.
     '''
     gmst = clock.theta_gmst()
     C = np.cos(gmst)
@@ -19,33 +24,47 @@ def inertial_to_ecef(clock):
                      [-S, C, 0],
                      [0, 0, 1]])
 
-# transformation from local orbital frame to inertial frame, Cartesian x, y, z
 def lvlh_to_inertial(r_I, v_I):
     '''
+    Transformation from local-vertical local-horizontal orbital frame to inertial frame.
 
     Parameters
     ----------
+    r_I : numpy.ndarray
+        Position of satellite in inertial frame.
+    v_I : numpy.ndarray
+        Velocity of satellite in inertial frame.
 
     Returns
     -------
+    numpy.ndarray
+        Matrix for coordinate transformation from local-vertical local-horizontal frame to inertial frame.
     '''
-    o_3I = - quaternion.normalize(r_I)
-    o_2I = - quaternion.normalize(np.cross(r_I, v_I))
+    o_3I = - vector.normalize(r_I)
+    o_2I = - vector.normalize(np.cross(r_I, v_I))
     o_1I = np.cross(o_2I, o_3I)
     return np.array([[o_1I[0], o_2I[0], o_3I[0]],
                      [o_1I[1], o_2I[1], o_3I[1]],
                      [o_1I[2], o_2I[2], o_3I[2]]])
 
-# transformation from WGS-84 geodetic coordinates to ECEF geocentric coordinates
-# might not need this if GPS is already in ECEF
 def geodetic_to_ECEF(lat, long, h):
     '''
+    Coordinate transformation from WGS-84 geodetic coordinates to ECEF geocentric coordinates.
+    Might not need this if GPS is already in ECEF.
 
     Parameters
     ----------
+    lat : float
+        Latitude.
+    long : float
+        Longitude.
+    h : float
+        Vertical distance above geode along surface normal.
 
     Returns
     -------
+    numpy.ndarray
+        Position of satellite in ECEF frame.
     '''
     a = 6378137.0 # m, semimajor axis
     e = 0.0818 # eccentricity approximation
@@ -56,94 +75,105 @@ def geodetic_to_ECEF(lat, long, h):
     z = (N*(1 - e**2) + h) * np.sin(lat)
     return np.array([x, y, z])
 
-# transformation from ECEF geocentric coordinates to WGS-84 geodetic coordinates
-# might be useful for modeling atmospheric drag
 def ECEF_to_geodetic(r):
+    '''Transformation from ECEF geocentric coordinates to WGS-84 geodetic coordinates.
+    Paper referenced on page 35 of Markely & Crassidis claimed this was non-singular and numerically stable.
+    However, it divides by zero and I'm not sure why.
 
-     a = 6378137.0 # m, semimajor axis
-     b = 6356752.3142 # m, semiminor axis
-     x = r[0]
-     y = r[1]
-     z = r[2]
-     # convert from ECEF to geodetic coords
-     # see page 35 and pray there are no typos in the book
-     def geo_rho(x, y):
-         return np.linalg.norm(np.array([x, y]))
+    Parameters
+    ----------
+    r : numpy.ndarray
+        Position of satellite in ECEF frame.
 
-     def geo_e_squared(a, b):
-         return 1 - (b**2/a**2)
+    Returns
+    -------
+    numpy.ndarray
+        Latitude, longitude, and vertical distance above geode along surface normal.
+    '''
 
-     def geo_eps_squared(a, b):
-         return (a**2/b**2) - 1
+    a = 6378137.0 # m, semimajor axis
+    b = 6356752.3142 # m, semiminor axis
+    x = r[0]
+    y = r[1]
+    z = r[2]
 
-     def geo_p(z, eps2):
-         return abs(z) / eps2
+    def geo_rho(x, y):
+     return np.linalg.norm(np.array([x, y]))
 
-     def geo_s(rho, e2, eps2):
-         return rho**2 / (e2*eps2)
+    def geo_e_squared(a, b):
+     return 1 - (b**2/a**2)
 
-     def geo_q(p, b, s):
-         return p**2 - b**2 + s
+    def geo_eps_squared(a, b):
+     return (a**2/b**2) - 1
 
-     def geo_u(p, q):
-         return p / np.sqrt(q)
+    def geo_p(z, eps2):
+     return abs(z) / eps2
 
-     def geo_v(b, u, q):
-         return (b**2 * u**2) / q
+    def geo_s(rho, e2, eps2):
+     return rho**2 / (e2*eps2)
 
-     def geo_P(v, s, q):
-         return 27*v*s/q
+    def geo_q(p, b, s):
+     return p**2 - b**2 + s
 
-     def geo_Q(P):
-         return (np.sqrt(P+1) + np.sqrt(P))**(2/3)
+    def geo_u(p, q):
+     return p / np.sqrt(q)
 
-     def geo_t(Q):
-         return (1 + Q + 1/Q)/6
+    def geo_v(b, u, q):
+     return (b**2 * u**2) / q
 
-     def geo_c(u, t):
-         return np.sqrt(u**2 - 1 + 2*t)
+    def geo_P(v, s, q):
+     return 27*v*s/q
 
-     def geo_w(c, u):
-         return (c - u)/2
+    def geo_Q(P):
+     return (np.sqrt(P+1) + np.sqrt(P))**(2/3)
 
-     def geo_d(z, q, u, v, w, t):
-         return np.sign(z)*np.sqrt(q)*(w + np.sqrt(np.sqrt(t**2 + v) - u * w - t*0.5 - 0.25))
+    def geo_t(Q):
+     return (1 + Q + 1/Q)/6
 
-     def geo_N(a, eps2, d, b):
-         return a * np.sqrt(1+ eps2*(d**2/b**2))
+    def geo_c(u, t):
+     return np.sqrt(u**2 - 1 + 2*t)
 
-     # latitude
-     def geo_lam(eps2, d, N):
-         return np.arcsin((eps2 + 1)*d/N)
+    def geo_w(c, u):
+     return (c - u)/2
 
-     # height
-     def geo_h(rho, z, a, N, lam): # height above geode
-         return rho*np.cos(lam) + z*np.sin(lam) - a**2 / N
+    def geo_d(z, q, u, v, w, t):
+     return np.sign(z)*np.sqrt(q)*(w + np.sqrt(np.sqrt(t**2 + v) - u * w - t*0.5 - 0.25))
 
-     # longitude
-     def geo_phi(x, y):
-         return np.arctan2(y, x)
+    def geo_N(a, eps2, d, b):
+     return a * np.sqrt(1+ eps2*(d**2/b**2))
 
-     e2 = geo_e_squared(a, b)
-     eps2 = geo_eps_squared(a, b)
-     rho = geo_rho(x, y)
-     p = geo_p(z, eps2)
-     s = geo_s(rho, e2, eps2)
-     q = geo_q(p, b, s)
-     u = geo_u(p, q)
-     v = geo_v(b, u, q)
-     P = geo_P(v, s, q)
-     Q = geo_Q(P)
-     t = geo_t(Q)
-     c = geo_c(u, t)
-     w = geo_w(c, u)
-     d = geo_d(z, q, u, v, w, t)
-     N = geo_N(a, eps2, d, b)
+    # latitude
+    def geo_lam(eps2, d, N):
+     return np.arcsin((eps2 + 1)*d/N)
 
-     lam = geo_lam(eps2, d, N)
-     h = geo_h(rho, z, a, N, lam)
-     phi = geo_phi(x, y)
-     return np.array([lam, phi, h]) # lat, long, height
+    # height
+    def geo_h(rho, z, a, N, lam): # height above geode
+     return rho*np.cos(lam) + z*np.sin(lam) - a**2 / N
+
+    # longitude
+    def geo_phi(x, y):
+     return np.arctan2(y, x)
+
+    e2 = geo_e_squared(a, b)
+    eps2 = geo_eps_squared(a, b)
+    rho = geo_rho(x, y)
+    p = geo_p(z, eps2)
+    s = geo_s(rho, e2, eps2)
+    q = geo_q(p, b, s)
+    u = geo_u(p, q)
+    v = geo_v(b, u, q)
+    P = geo_P(v, s, q)
+    Q = geo_Q(P)
+    t = geo_t(Q)
+    c = geo_c(u, t)
+    w = geo_w(c, u)
+    d = geo_d(z, q, u, v, w, t)
+    N = geo_N(a, eps2, d, b)
+
+    lam = geo_lam(eps2, d, N)
+    h = geo_h(rho, z, a, N, lam)
+    phi = geo_phi(x, y)
+    return np.array([lam, phi, h]) # lat, long, height
 
 import math
 
@@ -160,21 +190,27 @@ a4 = 2.5 * a2
 a5 = a1 + a3
 a6 = 1 - e2
 
-# source: https://possiblywrong.wordpress.com/2014/02/14/when-approximate-is-better-than-exact/
 def ecef_to_lla(ecef):
-    """Convert ECEF (meters) to LLA (radians and meters).
-    """
-    '''
+    '''Convert ECEF (meters) coordinates to geodetic coordinates (degrees and meters).
+    It would be good to check out the OG source and make sure this is appropriate.
+    Uses those parameters right above here.
+
+    Sourced from https://possiblywrong.wordpress.com/2014/02/14/when-approximate-is-better-than-exact/
+    Originally from
+    Olson, D. K., Converting Earth-Centered, Earth-Fixed Coordinates to
+    Geodetic Coordinates, IEEE Transactions on Aerospace and Electronic
+    Systems, 32 (1996) 473-476.
 
     Parameters
     ----------
+    ecef : numpy.ndarray
+        Position of satellite in ECEF frame.
 
     Returns
     -------
+    list
+        Latitude, longitude, and vertical distance above geode along surface normal.
     '''
-    # Olson, D. K., Converting Earth-Centered, Earth-Fixed Coordinates to
-    # Geodetic Coordinates, IEEE Transactions on Aerospace and Electronic
-    # Systems, 32 (1996) 473-476.
     w = math.sqrt(ecef[0] * ecef[0] + ecef[1] * ecef[1])
     z = ecef[2]
     zp = abs(z)
@@ -206,4 +242,4 @@ def ecef_to_lla(ecef):
     lat = lat + p
     if z < 0:
         lat = -lat
-    return (lat, math.atan2(ecef[1], ecef[0]), f + m * p / 2)
+    return (np.degrees(lat), np.degrees(math.atan2(ecef[1], ecef[0])), f + m * p / 2)

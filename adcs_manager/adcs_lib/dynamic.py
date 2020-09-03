@@ -1,16 +1,24 @@
 import numpy as np
-from adcs_lib import frame, structure, environment, jday, quaternion, sensor
+from adcs_lib import frame, structure, environment, jday, quaternion, sensor, vector
 
 class DynamicalSystem():
     '''This class stores the state vector, Julian date, reference frame transformations,
-    satellite structural model, and environmental models. It also calculates the vector field for the states.'''
-    '''
+    satellite structural model, sensor models, and environmental models. It also calculates the vector field for the states.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    position : numpy.ndarray
+        Initial position in ECI coordinates
+    lin_vel : numpy.ndarray
+        Initial velocity in ECI coordinates
+    attitude : numpy.ndarray
+        Initial attitude quaternion with respect to inertial frame.
+    body_ang_vel : numpy.ndarray
+        Initial angular velocity in body frame coordinates with respect to inertial frame.
+    wheel_vel : numpy.ndarray
+        Initial velocities of reaction wheels.
+    date_and_time : list
+        Initial date and time. (Y, M, D, h, m, s) format.
     '''
     def __init__(self, position, lin_vel, attitude, body_ang_vel, wheel_vel, date_and_time):
         self.state       = np.array([position, lin_vel, attitude, body_ang_vel, wheel_vel], dtype=object)
@@ -21,7 +29,7 @@ class DynamicalSystem():
         self.satellite   = structure.Satellite(structure.LENGTH, structure.WIDTH, structure.HEIGHT, structure.PRINCIPAL,
                                                structure.INCLINATION, structure.AZIMUTH, structure.PARALLEL, structure.ORTHOGONAL,
                                                0.0005, False)
-        self.enviro      = environment.Environment(self.satellite, hi_fi=True)
+        self.enviro      = environment.Environment(self.satellite, hi_fi=False)
         self.simulator   = True
         #making up std dev as placeholders
         self.sensors     = [sensor.GPS_pos(mean=0, std_dev=30, model=self),
@@ -34,29 +42,41 @@ class DynamicalSystem():
                             ]
 
     def update_transformation_matrices(self):
-        '''Some of the reference frame transformations depend on the current state vector.'''
-        '''
-
-        Parameters
-        ----------
-
-        Returns
-        -------
+        '''Some of the reference frame transformations depend on the current state vector.
+        At the moment, the only other reference frame we care about is ECEF, which the GPS uses.
+        This method just updates the transformations to the current state.
         '''
         self.GCI_to_ECEF = frame.inertial_to_ecef(self.clock)
 
     def vector_field(self, position, lin_vel, attitude, body_ang_vel, wheel_vel,
                      body_ang_accl, cur_cmd, whl_accl):
-        '''This is the vector field for our state space. It defines the differential equation to be solved.'''
-        '''
+        '''This is the vector field for our state space. It defines the differential equation to be solved.
 
         Parameters
         ----------
+        position : numpy.ndarray
+            Present position in ECI coordinates
+        lin_vel : numpy.ndarray
+            Present velocity in ECI coordinates
+        attitude : numpy.ndarray
+            Present attitude quaternion with respect to inertial frame.
+        body_ang_vel : numpy.ndarray
+            Present angular velocity in body frame coordinates with respect to inertial frame.
+        wheel_vel : numpy.ndarray
+            Present velocities of reaction wheels.
+        body_ang_accl : numpy.ndarray
+            Present (i.e. last) angular acceleration
+        cur_cmd : numpy.ndarray
+            Magnetorquer commands for currents.
+        whl_accl : numpy.ndarray
+            Reaction wheel acceleration commands.
 
         Returns
         -------
+        numpy.ndarray
+            Array of arrays for derivatives of state variables.
         '''
-        attitude     = quaternion.normalize(attitude) # we do this for the intermediate RK4 steps
+        attitude     = vector.normalize(attitude) # we do this for the intermediate RK4 steps
         mag_moment   = self.satellite.magnetorquers.actuate(cur_cmd)
         F_env, T_env = self.enviro.env_F_and_T(position, lin_vel, attitude, self.GCI_to_ECEF, mag_moment)
         T_whl        = self.satellite.reaction_wheels.torque(whl_accl, body_ang_accl)
@@ -69,24 +89,34 @@ class DynamicalSystem():
         return np.array([dxdt, dvdt, dqdt, dwdt, dw_rw_dt], dtype=object)
 
     def measurement(self, noisy):
-        '''
+        '''Measures the present state of the system. In order:
+        position, velocity, attitude, angular rate, wheel velocities, magnetic field, sun vector.
 
         Parameters
         ----------
+        noisy : bool
+            True if measurements should contain noise, False if the true state should be returned.
 
         Returns
         -------
+        list
+            Contains numpy.ndarrays for measurements.
         '''
         return [sens.measurement(noisy) for sens in self.sensors]
 
 class ReducedDynamicalSystem(DynamicalSystem):
-    '''
+    '''This class stores the state vector, Julian date, reference frame transformations,
+    satellite structural model, sensor models, and environmental models. It also calculates the vector field for the states.
+    This is a reduced version of dynamical system which only cares about position and velocity.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    position : numpy.ndarray
+        Initial position in ECI coordinates
+    lin_vel : numpy.ndarray
+        Initial velocity in ECI coordinates
+    date_and_time : list
+        Initial date and time. (Y, M, D, h, m, s) format.
     '''
     def __init__(self, position, lin_vel, date_and_time):
         self.state       = np.array([position, lin_vel])
@@ -100,27 +130,33 @@ class ReducedDynamicalSystem(DynamicalSystem):
         self.simulator   = False
 
     def vector_field(self, position, lin_vel):
-        '''
+        '''This is the vector field for our state space. It defines the differential equation to be solved.
 
         Parameters
         ----------
+        position : numpy.ndarray
+            Present position in ECI coordinates
+        lin_vel : numpy.ndarray
+            Present velocity in ECI coordinates
 
         Returns
         -------
+        numpy.ndarray
+            Array of arrays for derivatives of state variables.
         '''
         F = self.enviro.forces(position, lin_vel)
         dxdt, dvdt = lin_vel, F / self.enviro.M
         return np.array([dxdt, dvdt])
 
 class Integrator():
-    '''This is a numerical integrator for propagating an initial state through state space.'''
-    '''
+    '''This is a numerical integrator for propagating an initial state through state space.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    model : DynamicalSystem
+        Model that is to be numerically integrated.
+    dt : float
+        Fixed time-step.
     '''
     def __init__(self, model, dt):
         self.model         = model
@@ -130,14 +166,21 @@ class Integrator():
 
     def RK4_step(self, state, param):
         '''This is the 4th order Runge-Kutta method. We could exchange this method for any other algorithm.
-        However, this is a nice general purpose tool. Error is on the order of dt^5.'''
-        '''
+        However, this is a nice general purpose tool. Error is on the order of dt^5.
 
         Parameters
         ----------
+        state : numpy.ndarray
+            Last state of system.
+        param : list
+            Any exogenous inputs to system.
 
         Returns
         -------
+        numpy.ndarray
+            State of system at next time step.
+        numpy.ndarray
+            The angular acceleration, in the case of a DynamicalSystem model.
         '''
         k1     = self.f(*state, *param)
         k2     = self.f(*(state + k1 * self.dt/2), *param)
@@ -147,18 +190,18 @@ class Integrator():
         return state + change * self.dt, change[-2]
 
     def update(self, state, param):
-        '''This takes the model one step forward and updates its clock, transformations, and sensors.'''
-        '''
+        '''This takes the model one step forward and updates its clock, transformations, and sensors.
 
         Parameters
         ----------
-
-        Returns
-        -------
+        state : numpy.ndarray
+            Last state of system.
+        param : list
+            Any exogenous inputs to system.
         '''
         next_step, self.last_ang_accl = self.RK4_step(state, param)
         if self.model.simulator:
-            next_step[2]                  = quaternion.normalize(next_step[2])
+            next_step[2]                  = vector.normalize(next_step[2])
         self.model.state              = next_step
         self.model.clock.tick(self.dt)
         self.model.update_transformation_matrices()
@@ -166,15 +209,15 @@ class Integrator():
             self.model.sensors[3].propagate(self.dt)
 
     def integrate(self, duration, zero_order_hold):
-        '''This is the front-facing interface for the library. It takes an integration duration and a set of fixed exogenous commands.
-        Then it propagates the dynamic model for that duration using those commands.'''
-        '''
+        '''This is a front-facing interface for the library. It takes an integration duration and a set of fixed exogenous commands.
+        Then it propagates the dynamic model for that duration using those commands.
 
         Parameters
         ----------
-
-        Returns
-        -------
+        duration : float
+            The length of time (s) to integrate over.
+        zero_order_hold : list
+            Two numpy.ndarrays, for current commands and acceleration commands.
         '''
         t = self.dt
         while t < duration or abs(t - duration) < 0.001:

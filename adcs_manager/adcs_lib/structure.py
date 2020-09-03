@@ -1,5 +1,5 @@
 import numpy as np
-from adcs_lib import quaternion
+from adcs_lib import vector
 
 '''This module contains the physical constants and useful methods for OreSat's structure.'''
 
@@ -122,6 +122,7 @@ class Magnetorquer():
     def getCurrent(self, m):
         '''
         Control commands for magnetorquer.
+
         Parameters
         ----------
         m : numpy.ndarray
@@ -195,7 +196,7 @@ class MagnetorquerSystem():
         if abs(m[2]) > self.torquers[2].max_m:
             m = m * self.torquers[2].max_m / abs(m[2])
 
-        m     = quaternion.saturation(m, self.torquers[0].max_m)
+        m     = vector.saturation(m, self.torquers[0].max_m)
 
         return np.array([torquer.getCurrent(m[i]) for i, torquer in enumerate(self.torquers)])
 
@@ -354,53 +355,74 @@ class ReactionWheelSystem():
 
     def accelerations(self, commanded_torque):
         '''
+        Wheel angular accelerations produced by commanded torque, modulo wheel dynamics.
+        If system is torque limited, makes sure accelerations are within bounds.
 
         Parameters
         ----------
+        commanded_torque : numpy.ndarray
+            Commanded torque (N m).
 
         Returns
         -------
+        numpy.ndarray
+            Produced acceleration (rad/s^2).
         '''
         T     = self.distribution.dot(commanded_torque)
         if self.torque_limited:
-            T = quaternion.saturation(T, self.max_T)
+            T = vector.saturation(T, self.max_T)
 
         return np.array([wheel.acceleration(T[i]) for i, wheel in enumerate(self.wheels)])
 
     def momentum(self, velocities, ang_vel):
-        '''Angular momentum of all wheels together (along their respective spin axes), body referenced.'''
-        '''
+        '''Angular momentum of all wheels together along their respective spin axes in the body frame,
+        including the body's momentum around said spin axes.
 
         Parameters
         ----------
+        velocity : numpy.ndarray
+            Present wheel velocity.
+        ang_vel : numpy.ndarray
+            Angular velocity of satellite.
 
         Returns
         -------
+        numpy.ndarray
+            Angular momentum of wheel system (kg rad/s).
         '''
         return sum([wheel.momentum(velocities[i], ang_vel) for i , wheel in enumerate(self.wheels)])
 
     def torque(self, accls, ang_accl):
-        '''Torque of wheel system (body referenced), assuming acceleration command is instantaneous.
-        At some point, we will need to either model internal wheel dynamics or compensate for them'''
-        '''
+        '''Torque of wheel system in body-coordinates, including contribution from body's acceleration around wheel axes.
+        Assumes acceleration command is instantaneous, at some point, we will need to either model internal wheel dynamics or compensate for them.
 
         Parameters
         ----------
+        accls : numpy.ndarray
+            Present wheel acceleration.
+        ang_accl : numpy.ndarray
+            Angular acceleration of satellite.
 
         Returns
         -------
+        numpy.ndarray
+            Torque of wheel system (N m).
         '''
         return sum([wheel.torque(accls[i], ang_accl) for i, wheel in enumerate(self.wheels)])
 
 class Wall():
-    '''One of the satellite's walls.'''
-    '''
+    '''One of the satellite's walls. The purpose of this is for aerodynamic drag (and eventually solar radiation pressure).
 
     Parameters
     ----------
-
-    Returns
-    -------
+    distance : float
+        Distance (m) from origin.
+    normal : numpy.ndarray
+        Surface normal vector.
+    length : float
+        Length (m) of wall.
+    width : float
+        Width (m) of wall.
     '''
     def __init__(self, distance, normal, length, width):
         self.distance = distance
@@ -411,28 +433,35 @@ class Wall():
         self.centroid = normal * distance
 
     def projected_area(self, v_ref):
-        '''Projected surface area as function of reference vector'''
-        '''
+        '''Projected surface area as function of reference unit vector.
+        0 in the case that the surface faces away from the reference vector.
 
         Parameters
         ----------
+        v_ref : numpy.ndarray
+            Vector defining the plane the surface is projected onto.
 
         Returns
         -------
+        float
+            Projected surface area.
         '''
         c_beta = max(0, np.dot(self.normal, v_ref))
 
         return c_beta * self.area
 
     def center_of_pressure(self, v_ref):
-        '''Exposed area and area-weighted centroid, we ignore shading.'''
-        '''
+        '''Exposed area and area-weighted centroid.
 
         Parameters
         ----------
+        v_ref : numpy.ndarray
+            Vector defining the plane the surface is projected onto.
 
         Returns
         -------
+        numpy.ndarray
+            First entry is the projected surface area, second is the center of pressure vector.
         '''
         A  = self.projected_area(v_ref)
         cp = A * self.centroid
@@ -440,14 +469,31 @@ class Wall():
         return np.array([A, cp], dtype=object)
 
 class Satellite():
-    '''A rectangular satellite and its material properties'''
-    '''
+    '''A rectangular prism satellite and its relevant material properties.
+    At some point, add support for products of inertia, and parametrize magnetorquers.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    length : float
+        Length (m) of walls.
+    width : float
+        Width (m) of walls.
+    height : float
+        Height (m) of walls.
+    principal_moments : numpy.ndarray
+        Principal moments of inertia for satellite, minus reaction wheels.
+    inclination : float
+        Angle of reaction wheel axis above XY plane.
+    azimuth : float
+        Angle of reaction wheel axis from X-Y axes.
+    parallel_moment : float
+        Axial moment of reaction wheels.
+    orthogonal_moment : float
+        Transverse moment of reaction wheels.
+    max_T : float
+        Maximum torque any given wheel can produce.
+    torque_limited : bool
+        True if reaction wheels are limited by the amount of torque they can produce.
     '''
     def __init__(self, length, width, height, principal_moments,
                 inclination, azimuth, parallel_moment, orthogonal_moment,
@@ -464,9 +510,7 @@ class Satellite():
 
         self.reaction_wheels = ReactionWheelSystem(inclination, azimuth, parallel_moment, orthogonal_moment, max_T, torque_limited)
         self.magnetorquers   = MagnetorquerSystem(linearized=True, max_A_sys=0.675)
-        self.instruments     = [SensitiveInstrument(np.array([0,0,1]), 15, forbidden=True),]
-                                #SensitiveInstrument(np.array([0,0,-1]), 15, forbidden=True),
-                                #SensitiveInstrument(np.array([-1,0,0]), 150, forbidden=False)]
+        self.instruments     = [SensitiveInstrument(np.array([0, 0, -1]), 15, forbidden=True)]
 
         #: Estimated drag coefficient.
         self.drag_coeff      = 2 # could be anywhere from 1 - 2.5
@@ -483,16 +527,20 @@ class Satellite():
         self.inv_red_moment  = np.linalg.inv(self.reduced_moment)
 
     def area_and_cop(self, v_ref):
-        '''Projected surface area and center of pressure (ignoring shading).
-        Note that I (Cory) don't have a great deal of confidence in this CoP calculation.'''
-        '''
+        '''Projected surface area and center of pressure for whole satellite.
+        Note that I (Cory) don't have a great deal of confidence in this CoP calculation.
+        At some point, take a more rigorous look at this.
 
         Parameters
         ----------
+        v_ref : numpy.ndarray
+            Vector defining the plane the surfaces are projected onto.
 
         Returns
         -------
+        tuple
+            First entry is the projected surface area, second is the center of pressure vector.
         '''
         (A, CoP) = sum([wall.center_of_pressure(v_ref) for wall in self.walls])
 
-        return (A, CoP/A)
+        return (A, CoP / A)

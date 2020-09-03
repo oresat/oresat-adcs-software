@@ -3,18 +3,18 @@ import numpy as np
 class Clock():
     '''Calculations from Fundamentals of Spacecraft Attitude Determination and Control
     by Markely and Crassidis. Please pardon the magic numbers.
-    The purpose of this class is to translate between ECEF and ECI reference frames
-    '''
-    '''
+    Parameters are for the Gregorian calendar date and time.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    year : int
+    month : int
+    day : int
+    hour : int
+    minute : int
+    second : float
     '''
     def __init__(self, year, month, day, hour, minute, second):
-        ''':param arg: the Gregorian calendar date and time'''
         self.absolute = 0
         self.year = year
         self.month = month
@@ -26,38 +26,32 @@ class Clock():
         self.leap_second = False
 
     def schedule_leap_second(self, year, month, day, hour, minute, second):
-        '''Not implemented. Will eventually need method to set leap seconds.'''
-        '''
+        '''Not implemented. Might eventually need method to set leap seconds.
 
         Parameters
         ----------
-
-        Returns
-        -------
+        year : int
+        month : int
+        day : int
+        hour : int
+        minute : int
+        second : float
         '''
         pass # figure it out later
 
     def is_leap_second(self):
-        '''Not implemented. Will eventually need method to check leap seconds.'''
-        '''
-
-        Parameters
-        ----------
-
-        Returns
-        -------
+        '''Not implemented. Might eventually need method to check leap seconds.
         '''
         pass # probably just check whether state matches schedule
 
     def is_leap_year(self):
-        ''':returns: True if it is a leap year, and False otherwise.'''
         '''
-
-        Parameters
-        ----------
+        Check to see whether it is a leap year.
 
         Returns
         -------
+        bool
+            True if it is a leap year, and False otherwise.
         '''
         if not (self.year % 4 == 0):
             return False
@@ -69,14 +63,12 @@ class Clock():
             return True
 
     def tick(self, dt):
-        '''This method is for advancing the clock by one time step, it is a somewhat naive implementation.'''
-        '''
+        '''This method is for advancing the clock by one time step, it is a somewhat naive implementation.
 
         Parameters
         ----------
-
-        Returns
-        -------
+        dt : float
+            The length of time to move forward by.
         '''
         self.second += dt
         self.absolute += dt
@@ -106,15 +98,17 @@ class Clock():
 
     def julian_date(self, hour, minute, second):
         '''This method calculates the Julian date.
-        :param args: time
-        :returns: The Julian date.'''
-        '''
 
         Parameters
         ----------
+        hour : int
+        minute : int
+        second : float
 
         Returns
         -------
+        float
+            The Julian date.
         '''
         term1 = int(7/4 * (self.year + int((self.month + 9) / 12)))
         term2 = int(275*self.month / 9)
@@ -122,27 +116,23 @@ class Clock():
         return 1721013.5 + 367*self.year + self.day - term1 + term2 + term3
 
     def centuries_elapsed(self):
-        '''This calulates how many centuries have elapsed from epoch J2000.0 to zero hour now'''
-        '''
-
-        Parameters
-        ----------
+        '''This calulates how many centuries have elapsed from epoch J2000.0 to zero hour now
 
         Returns
         -------
+        float
+            Centuries elapsed since epoch.
         '''
         return (self.julian_date(0,0,0) - 2451545) / 36525
 
 
     def gmst_seconds(self):
-        ''':returns: Greenwich Mean Sidereal time in seconds'''
-        '''
-
-        Parameters
-        ----------
+        '''Greenwich Mean Sidereal time in seconds
 
         Returns
         -------
+        float
+            Greenwich Mean Sidereal time in seconds.
         '''
         centuries = self.centuries_elapsed()
         term1 = 8640184.812866 * centuries + 0.093104 * centuries**2 - 6.2*10**(-6) * centuries**3
@@ -150,15 +140,12 @@ class Clock():
         return 24110.54841 + term1 + term2
 
     def theta_gmst(self):
-        '''This angle is the offset between the ECEF and ECI frames of reference.
-        :returns: angle between vernal equinox and Greenwich mean line'''
-        '''
-
-        Parameters
-        ----------
+        '''This angle is the angle between vernal equinox and Greenwich mean line.
 
         Returns
         -------
+        float
+            Angle offset (rad) between the ECEF and ECI frames of reference.
         '''
         gmst = self.gmst_seconds() % 86400
         return np.radians(gmst / 240)

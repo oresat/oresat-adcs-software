@@ -1,14 +1,9 @@
 import numpy as np
-from adcs_lib import frame, quaternion
+from adcs_lib import frame, quaternion, vector
 
 class ReducedEnvironment():
     '''
-
-    Parameters
-    ----------
-
-    Returns
-    -------
+    Simplified environmental models for sun, aerodynamics, and gravity.
     '''
     def __init__(self):
         self.AU    = 1.496e11 # m, 1 mean distance from earth to sun
@@ -27,14 +22,21 @@ class ReducedEnvironment():
         self.M = 2.2 # kg, satellite mass
 
     def sun_vector(self, clock, x):
-        '''More details on page 420 of Markely & Crassidis. For now assume the sun is infinitely far away.'''
         '''
+        Unit vector in inertial coordinates pointing from satellite to the sun.
+        More details on page 420 of Markely & Crassidis. For now assume the sun is a constant distance away.
 
         Parameters
         ----------
+        clock : jday.Clock
+            Clock is needed because the position of the sun depends on the date and time (obviously).
+        x : numpy.ndarray
+            Position of the satellite in inertial frame.
 
         Returns
         -------
+        numpy.ndarray
+            Inertial unit vector pointing at sun from satellite.
         '''
         T_UT1      = (clock.julian_date(clock.hour, clock.minute, clock.second) - 2451545) / 36525
         mean_long  = (280.46 + 36000.771 * T_UT1) % 360 # degrees mean longitude
@@ -44,35 +46,44 @@ class ReducedEnvironment():
         earth_to_sun = np.array([np.cos(ecl_long),
                                 np.cos(ecl_oblq) * np.sin(ecl_long),
                                 np.sin(ecl_oblq) * np.sin(ecl_long)])
-        S_inertial = self.AU * earth_to_sun - x
-        return quaternion.normalize(S_inertial)
+        S_inertial = vector.pointing_vector(x, self.AU * earth_to_sun)
+        return S_inertial
 
-    # assume atmosphere rotates with earth
-    # relative velocity of satellite with respect to atmosphere at location on earth
-    # with respect to inertial frame and expressed in body frame
     def relative_vel(self, x, v):
         '''
+        Relative velocity of satellite, with respect to the atmosphere at this location,
+        assuming atmosphere rotates with earth with respect to inertial frame.
 
         Parameters
         ----------
+        x : numpy.ndarray
+            Position of satellite in inertial frame.
+        v : numpy.ndarray
+            Velocity of satellite in inertial frame.
 
         Returns
         -------
+        numpy.ndarray
+            Relative velocity of satellite.
         '''
         v_rel = np.array([v[0] + self.EARTH_ROTATION * x[1],
                           v[1] + self.EARTH_ROTATION * x[0],
                           v[2]])
         return v_rel # m/s
 
-    # drag equation, unit agnostic
     def drag(self, v):
         '''
+        Equation for drag. Assumes constant frontal area and atmospheric density for simplicity.
 
         Parameters
         ----------
+        v : numpy.ndarray
+            Velocity of satellite in inertial frame.
 
         Returns
         -------
+        numpy.ndarray
+            Drag force on satellite.
         '''
         v_norm   = np.linalg.norm(v)
         F        = -0.5 * self.RHO * self.CD * self.A * v_norm * v
@@ -80,12 +91,17 @@ class ReducedEnvironment():
 
     def gravity(self, position):
         '''
+        First order gravity model, per Newton.
 
         Parameters
         ----------
+        x : numpy.ndarray
+            Position of satellite in inertial frame.
 
         Returns
         -------
+        numpy.ndarray
+            Gravitational force on satellite.
         '''
         length = np.linalg.norm(position)
         coeff  = self.MU / length**3
@@ -94,12 +110,19 @@ class ReducedEnvironment():
 
     def forces(self, x, v):
         '''
+        Forces acting on satellite.
 
         Parameters
         ----------
+        x : numpy.ndarray
+            Position of satellite in inertial frame.
+        v : numpy.ndarray
+            Velocity of satellite in inertial frame.
 
         Returns
         -------
+        numpy.ndarray
+            Total forces acting on satellite.
         '''
         v_rel = self.relative_vel(x, v)
         D = self.drag(v_rel)
@@ -107,14 +130,14 @@ class ReducedEnvironment():
         return D + G
 
 class Environment():
-    '''Environmental models.'''
-    '''
+    '''Environmental models for sun, aerodynamics, magnetic field, and gravity.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    satellite : structure.Satellite
+        Object representing the satellite.
+    hi_fi : bool
+        True if using higher order terms of gravity model. False if using first order approximation.
     '''
     def __init__(self, satellite, hi_fi):
         self.hi_fi = hi_fi # high fidelity
@@ -139,14 +162,20 @@ class Environment():
         self.satellite = satellite
 
     def sun_vector(self, clock, x):
-        '''More details on page 420 of Markely & Crassidis. For now assume the sun is infinitely far away.'''
-        '''
+        '''Unit vector in inertial coordinates pointing from satellite to the sun.
+        More details on page 420 of Markely & Crassidis. For now assume the sun is a constant distance away.
 
         Parameters
         ----------
+        clock : jday.Clock
+            Clock is needed because the position of the sun depends on the date and time (obviously).
+        x : numpy.ndarray
+            Position of the satellite in inertial frame.
 
         Returns
         -------
+        numpy.ndarray
+            Inertial unit vector pointing at sun from satellite.
         '''
         T_UT1      = (clock.julian_date(clock.hour, clock.minute, clock.second) - 2451545) / 36525
         mean_long  = (280.46 + 36000.771 * T_UT1) % 360 # degrees mean longitude
@@ -157,19 +186,24 @@ class Environment():
                                 np.cos(ecl_oblq) * np.sin(ecl_long),
                                 np.sin(ecl_oblq) * np.sin(ecl_long)])
 
-        S_inertial = self.AU * earth_to_sun - x
-        return quaternion.normalize(S_inertial)
+        S_inertial = vector.pointing_vector(x, self.AU * earth_to_sun)
+        return S_inertial
 
-    # exponentially decaying model atmosphere page 406
-    # h is height above geode in m (i.e., in geodetic coordinates)
     def atmo_density(self, h):
         '''
+        Exponentially decaying atmosphere model. Refer to page 406 of Markely & Crassidis.
+        Eventually we may want a higher fidelity model.
+        Be aware that this is undefined outside of 250 - 500 km.
 
         Parameters
         ----------
+        h : float
+            Height (m) above geode in geodetic coordinates.
 
         Returns
         -------
+        float
+            Atmospheric density (kg/m^3).
         '''
         if 250000 <= h and h < 300000:
             h_0   = 250000 # m
@@ -195,17 +229,22 @@ class Environment():
             print("height out of bounds!", h) # when less lazy, allow for decaying orbit
         return rho_0 * np.exp((h_0 - h) / H) # kg/m^3
 
-    # assume atmosphere rotates with earth
-    # relative velocity of satellite with respect to atmosphere at location on earth
-    # with respect to inertial frame and expressed in body frame
     def relative_vel(self, x, v):
         '''
+        Relative velocity of satellite, with respect to the atmosphere at this location,
+        assuming atmosphere rotates with earth with respect to inertial frame.
 
         Parameters
         ----------
+        x : numpy.ndarray
+            Position of satellite in inertial frame.
+        v : numpy.ndarray
+            Velocity of satellite in inertial frame.
 
         Returns
         -------
+        numpy.ndarray
+            Relative velocity of satellite.
         '''
         v_rel = np.array([v[0] + self.EARTH_ROTATION * x[1],
                           v[1] + self.EARTH_ROTATION * x[0],
@@ -215,12 +254,21 @@ class Environment():
     # drag equation, unit agnostic
     def drag(self, rho, v, attitude):
         '''
+        Equation for drag taking satellite altitude and orientation into account.
 
         Parameters
         ----------
+        rho : float
+            Atmospheric density.
+        v : numpy.ndarray
+            Velocity of satellite in inertial frame.
+        attitude : numpy.ndarray
+            Attitude of satellite.
 
         Returns
         -------
+        numpy.ndarray
+            Array of arrays for drag force and torque on satellite.
         '''
         v_norm   = np.linalg.norm(v)
         v_ref    = quaternion.sandwich(attitude, v / v_norm)
@@ -229,15 +277,24 @@ class Environment():
         T        = np.cross(CoP, quaternion.sandwich(attitude, F))
         return np.array([F, T])
 
-    # refer to Markely and Crassidis
     def hi_fi_gravity(self, position, r, coeff):
         '''
+        Higher order gravity model including J2, J3, and J4 zonal terms.
+        Refer to Markely and Crassidis.
 
         Parameters
         ----------
+        position : numpy.ndarray
+            Position of satellite in inertial frame.
+        r : float
+            Norm of position vector.
+        coeff : float
+            For computational convenience, mu / r^2.
 
         Returns
         -------
+        numpy.ndarray
+            Gravitational acceleration.
         '''
         xoverr = position[0] / r
         yoverr = position[1] / r
@@ -260,12 +317,22 @@ class Environment():
 
     def gravity(self, position, length, attitude):
         '''
+        Gravitational forces and torques.
+        Note that gravity torque is fairly predictable and we could even use it for feedforward in controls.
 
         Parameters
         ----------
+        position : numpy.ndarray
+            Position of satellite in inertial frame.
+        length : float
+            Norm of position vector.
+        attitude : numpy.ndarray
+            Attitude of satellite.
 
         Returns
         -------
+        numpy.ndarray
+            Array of arrays for gravitational force and torque.
         '''
         coeff  = self.MU / length**2
         if self.hi_fi:
@@ -277,20 +344,26 @@ class Environment():
         T      = 3 * coeff / length * np.cross(n, self.satellite.total_moment.dot(n))
         return np.array([F, T])
 
-
-    # dipole model
-    # gradient of 1st order term of IGRF model of magnetic potential
-    # see https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html for relevant details
-    # be aware that every year, these approximated coefficients change a little
-    # see page 403 - 406 for details. i expect 20-50 uT magnitude
     def magnetic_field(self, r_ecef, length, GCI_to_ECEF):
         '''
+        Magnetic field dipole model, average 20-50 uT magnitude. Gradient of 1st order term of IGRF model of magnetic potential.
+        See page 403 - 406 or https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html for relevant details.
+        Be aware that every year, the approximated coefficients change a little.
+
 
         Parameters
         ----------
+        r_ecef : numpy.ndarray
+            Position of satellite in Earth-centered Earth-fixed frame.
+        length : float
+            Norm of position vector.
+        GCI_to_ECEF : numpy.ndarray
+            Matrix for coordinate transformation from inertial frame to ECEF frame.
 
         Returns
         -------
+        numpy.ndarray
+            Magnetic B-field (nT) in inertial coordinates.
         '''
         R      = (3 * np.dot(self.m, r_ecef) * r_ecef - self.m * length**2) / length**5 # nT
         B      = GCI_to_ECEF.T.dot(R)
@@ -298,23 +371,37 @@ class Environment():
 
     def env_F_and_T(self, position, velocity, attitude, GCI_to_ECEF, mag_moment):
         '''
+        External forces and torques acting on satellite.
 
         Parameters
         ----------
+        position : numpy.ndarray
+            Position of satellite in inertial frame.
+        velocity : numpy.ndarray
+            Velocity of satellite in inertial frame.
+        attitude : numpy.ndarray
+            Attitude of satellite.
+        GCI_to_ECEF : numpy.ndarray
+            Matrix for coordinate transformation from inertial frame to ECEF frame.
+        mag_moment : numpy.ndarray
+            Magnetic dipole moment of satellite.
 
         Returns
         -------
+        numpy.ndarray
+            Array of arrays for all forces and torques acting on satellite.
         '''
         r_ecef       = GCI_to_ECEF.dot(position)
         length       = np.linalg.norm(position)
         B            = self.magnetic_field(r_ecef, length, GCI_to_ECEF)
         B_body       = quaternion.sandwich(attitude, B)
-        lat, long, h = frame.ecef_to_lla(r_ecef)
+        #lat, long, h = frame.ecef_to_lla(r_ecef)
         #lat, long, h = frame.ECEF_to_geodetic(r_ecef)
-        rho          = self.atmo_density(h)
+        rho          = 3.29e-12#self.atmo_density(h)
         v_rel        = self.relative_vel(position, velocity)
 
         D = self.drag(rho, v_rel, attitude)
         G = self.gravity(position, length, attitude)
         M = np.array([np.zeros(3), np.cross(mag_moment, B_body)])
+        #print(np.linalg.norm(M[1]), np.linalg.norm(D[1] + G[1]))
         return D + G + M

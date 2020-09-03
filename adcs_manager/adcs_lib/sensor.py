@@ -1,17 +1,21 @@
 from numpy.random import default_rng
 import numpy as np
-from adcs_lib import quaternion
+from adcs_lib import quaternion, vector
 
 rng = default_rng()
 
 class Sensor():
     '''
+    Basic model of a sensor. Accesses a state of the satellite and possibly adds noise.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    mean : float
+        Mean value of noise (generally 0).
+    std_dev : float
+        Standard deviation of noise.
+    model : dynamic.DynamicalSystem
+        Truth model of satellite.
     '''
     def __init__(self, mean, std_dev, model):
         self.mean = mean
@@ -20,44 +24,53 @@ class Sensor():
 
     def true_value(self):
         '''
-
-        Parameters
-        ----------
+        Actual value of state.
 
         Returns
         -------
+        numpy.ndarray
+            Actual value of state.
         '''
         return np.zeros(3)
 
     def measurement(self, noisy):
         '''
+        Possibly noisy measurement of state.
 
         Parameters
         ----------
+        noisy : bool
+            True if random noise should be added to measurement.
 
         Returns
         -------
+        numpy.ndarray
+            Possibly noisy measurement of state.
         '''
         noise = np.zeros(3) if not noisy else rng.normal(self.mean, self.std_dev, 3)
         return self.true_value() + noise
 
 class Magnetometer(Sensor):
     '''
+    Model of magnetometers.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    mean : float
+        Mean value of noise (generally 0).
+    std_dev : float
+        Standard deviation of noise.
+    model : dynamic.DynamicalSystem
+        Truth model of satellite.
     '''
     def true_value(self):
         '''
-
-        Parameters
-        ----------
+        Actual value of magnetic field in body-coordinates.
 
         Returns
         -------
+        numpy.ndarray
+            Actual value of magnetic field in body-coordinates.
         '''
         r_ecef = self.model.GCI_to_ECEF.dot(self.model.state[0])
         length = np.linalg.norm(self.model.state[0])
@@ -68,21 +81,25 @@ class Magnetometer(Sensor):
 
 class SunSensor(Sensor):
     '''
+    Model of sun sensors. More for convenience, the satellite won't have sun sensors.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    mean : float
+        Mean value of noise (generally 0).
+    std_dev : float
+        Standard deviation of noise.
+    model : dynamic.DynamicalSystem
+        Truth model of satellite.
     '''
     def true_value(self):
         '''
-
-        Parameters
-        ----------
+        Actual value of state.
 
         Returns
         -------
+        numpy.ndarray
+            Actual value of state.
         '''
         S_inertial = self.model.enviro.sun_vector(self.model.clock, self.model.state[0])
         S_body     = quaternion.sandwich(self.model.state[2], S_inertial)
@@ -90,24 +107,41 @@ class SunSensor(Sensor):
 
     def measurement(self, noisy):
         '''
+        Since the sun vector just represents direction, we normalize it after adding noise.
 
         Parameters
         ----------
+        noisy : bool
+            True if random noise should be added to measurement.
 
         Returns
         -------
+        numpy.ndarray
+            Possibly noisy measurement of state.
         '''
         noise = np.zeros(3) if not noisy else rng.normal(self.mean, self.std_dev, 3)
-        return quaternion.normalize(self.true_value() + noise)
+        return vector.normalize(self.true_value() + noise)
 
 class Gyro(Sensor):
     '''
+    Model of gyroscopes in IMU including bias drifting.
+    I'm not entirely confident of the drift model, must consult Markely & Crassidis again.
+    For comparison see https://gitlab.com/acubesat/adcs/matlab/adcs-simulation/-/blob/master/src/gyro%20modeling/gyro_noise_func.m
 
     Parameters
     ----------
-
-    Returns
-    -------
+    arw_mean : float
+        Mean value of measurement noise (generally 0).
+    arw_std_dev : float
+        Standard deviation of measurement noise.
+    rrw_mean : float
+        Mean value of bias drift (generally 0).
+    rrw_std_dev : float
+        Standard deviation of bias drift.
+    init_bias : float
+        Standard deviation of initial bias.
+    model : dynamic.DynamicalSystem
+        Truth model of satellite.
     '''
     def __init__(self, arw_mean, arw_std_dev, rrw_mean, rrw_std_dev, init_bias, model):
         super().__init__(arw_mean, arw_std_dev, model)
@@ -116,139 +150,173 @@ class Gyro(Sensor):
 
     def propagate(self, dt):
         '''
+        A gyroscope is itself a dynamical system, driven by what amounts to random noise.
+        This propagates the gyros to the next time step.
 
         Parameters
         ----------
-
-        Returns
-        -------
+        dt : float
+            Size of step to take in seconds.
         '''
         self.bias += dt * np.random.normal(self.rrw_mean, self.rrw_std_dev, 3)
 
     def true_value(self):
         '''
-
-        Parameters
-        ----------
+        Actual value of state.
 
         Returns
         -------
+        numpy.ndarray
+            Actual value of state.
         '''
         return self.model.state[3]
 
     def measurement(self, noisy):
         '''
+        If noisy measurements are used, accounts for both drift bias and measurement noise.
 
         Parameters
         ----------
+        noisy : bool
+            True if random noise should be added to measurement.
 
         Returns
         -------
+        numpy.ndarray
+            Possibly noisy measurement of state.
         '''
         noise = np.zeros(3) if not noisy else (self.bias + rng.normal(self.mean, self.std_dev, 3))
         return self.true_value() + noise
 
 class StarTracker(Sensor):
     '''
+    Model of star tracker, assuming star tracker returns quaternion measurements.
+    Might need to adjust the standard deviation by 0.5 to convert from Euler angle error to quaternion error.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    mean : float
+        Mean value of noise (generally 0).
+    std_dev : float
+        Standard deviation of noise.
+    model : dynamic.DynamicalSystem
+        Truth model of satellite.
     '''
     def true_value(self):
         '''
-
-        Parameters
-        ----------
+        Actual value of state.
 
         Returns
         -------
+        numpy.ndarray
+            Actual value of state.
         '''
         return self.model.state[2]
 
     def measurement(self, noisy):
         '''
+        Attitude measurement. If noisy, we only inject noise into the vector part of the quaternion, then renormalize.
 
         Parameters
         ----------
+        noisy : bool
+            True if random noise should be added to measurement.
 
         Returns
         -------
+        numpy.ndarray
+            Possibly noisy measurement of state.
         '''
         noise_v = np.zeros(3) if not noisy else rng.normal(self.mean, self.std_dev, 3)
         noise = np.array([0, *noise_v])
-        return quaternion.normalize(self.true_value() + noise)
+        return vector.normalize(self.true_value() + noise)
 
 class GPS_pos(Sensor):
     '''
+    GPS position measurement.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    mean : float
+        Mean value of noise (generally 0).
+    std_dev : float
+        Standard deviation of noise.
+    model : dynamic.DynamicalSystem
+        Truth model of satellite.
     '''
     def true_value(self):
         '''
-
-        Parameters
-        ----------
+        Actual value of state.
 
         Returns
         -------
+        numpy.ndarray
+            Actual value of state.
         '''
         return self.model.state[0]
 
 class GPS_vel(Sensor):
     '''
+    GPS velocity measurement.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    mean : float
+        Mean value of noise (generally 0).
+    std_dev : float
+        Standard deviation of noise.
+    model : dynamic.DynamicalSystem
+        Truth model of satellite.
     '''
     def true_value(self):
         '''
-
-        Parameters
-        ----------
+        Actual value of state.
 
         Returns
         -------
+        numpy.ndarray
+            Actual value of state.
         '''
         return self.model.state[1]
 
 class Wheel_vel(Sensor):
     '''
+    Measurement of wheel velocities.
 
     Parameters
     ----------
-
-    Returns
-    -------
+    mean : float
+        Mean value of noise (generally 0).
+    std_dev : float
+        Standard deviation of noise.
+    model : dynamic.DynamicalSystem
+        Truth model of satellite.
     '''
     def true_value(self):
         '''
 
-        Parameters
-        ----------
+        Actual value of state.
 
         Returns
         -------
+        numpy.ndarray
+            Actual value of state.
         '''
         return self.model.state[4]
 
     def measurement(self, noisy):
         '''
+        Measures the four wheel velocities.
 
         Parameters
         ----------
+        noisy : bool
+            True if random noise should be added to measurement.
 
         Returns
         -------
+        numpy.ndarray
+            Possibly noisy measurement of state.
         '''
         noise = np.zeros(4) if not noisy else rng.normal(self.mean, self.std_dev, 4)
         return self.true_value() + noise
