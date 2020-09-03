@@ -23,6 +23,7 @@ helpers:
 	sudo apt install python3 python3-stdeb python-all dh-python
 
 install:
+	cd adcs_42_interface/42 && make
 	sudo python3 setup.py --command-packages=stdeb.command install_deb
 
 # Assumes you made no changes to the package's structure or docstrings
@@ -34,8 +35,9 @@ docs:
 	sphinx-build -b html docs/rst docs/html
 
 uninstall: cleandocs
-	sudo rm -rf $(PKGNAME)-$(PKGVERSION).tar.gz $(PKGNAME)-$(PKGVERSION).egg-info deb_dist dist
+	sudo rm -rf $(PKGNAME)-$(PKGVERSION).tar.gz $(PKGNAME).egg-info deb_dist dist
 	sudo apt-get remove python3-$(PKGNAME)
+	rm adcs_42_interface/42/42
 
 cleandocs:
 	rm -rf docs/html
