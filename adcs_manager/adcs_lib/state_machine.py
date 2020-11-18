@@ -8,6 +8,7 @@ class State(Enum):
     DETUMBLE = 2    # Detumble the satellite after deployement
     POINT = 3       # Point the satellite for CFC / Oresat Live
     BBQ = 4
+    POWERDOWN = 5
 
 
 class StateMachine:
@@ -16,10 +17,11 @@ class StateMachine:
         self._current_state = State.SLEEP.value
         self._valid_transition = {
                 State.FAILED.value : [State.FAILED.value, State.SLEEP.value],
-                State.SLEEP.value : [State.SLEEP.value, State.DETUMBLE.value, State.POINT.value, State.BBQ.value],
+                State.SLEEP.value : [State.SLEEP.value, State.DETUMBLE.value, State.POINT.value, State.BBQ.value, State.POWERDOWN.value],
                 State.DETUMBLE.value : [State.DETUMBLE.value, State.BBQ.value, State.SLEEP.value, State.FAILED.value],
-                State.POINT.value : [State.POINT.value, State.SLEEP.value, State.FAILED.value],
-                State.BBQ.value : [State.BBQ.value, State.SLEEP.value, State.FAILED.value]
+                State.POINT.value : [State.POINT.value, State.SLEEP.value, State.FAILED.value, State.POWERDOWN.value],
+                State.BBQ.value : [State.BBQ.value, State.SLEEP.value, State.FAILED.value, State.POWERDOWN.value],
+                State.POWERDOWN.value : [State.POWERDOWN.value, State.SLEEP.value, State.FAILED.value, State.BBQ.value]
             }
 
 

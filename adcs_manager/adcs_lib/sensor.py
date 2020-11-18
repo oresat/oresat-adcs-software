@@ -78,6 +78,37 @@ class Magnetometer(Sensor):
         B_body = quaternion.sandwich(self.model.state[2], B)
         return B_body
 
+class Accelerometer(Sensor):
+    '''
+    Model of accelerometer.
+
+    Parameters
+    ----------
+    mean : float
+        Mean value of noise (generally 0).
+    std_dev : float
+        Standard deviation of noise.
+    model : dynamic.DynamicalSystem
+        Truth model of satellite.
+    '''
+    def true_value(self):
+        '''
+        Actual value of magnetic field in body-coordinates.
+
+        Returns
+        -------
+        numpy.ndarray
+            Actual value of magnetic field in body-coordinates.
+        '''
+        a_intl = self.model.enviro.env_F_and_T(self.model.state[0],
+                                                self.model.state[1],
+                                                self.model.state[2],
+                                                self.model.clock,
+                                                self.model.GCI_to_ECEF,
+                                                np.zeros(3))[0] / self.model.satellite.mass
+        a_intl -= self.model.enviro.gravity(self.model.state[0], np.linalg.norm(self.model.state[0]), self.model.state[2])[0]
+        a_body = quaternion.sandwich(self.model.state[2], a_intl)
+        return a_body
 
 class SunSensor(Sensor):
     '''
@@ -101,7 +132,7 @@ class SunSensor(Sensor):
         numpy.ndarray
             Actual value of state.
         '''
-        S_inertial = self.model.enviro.sun_vector(self.model.clock, self.model.state[0])
+        S_inertial = self.model.enviro.sun_vector(self.model.clock, self.model.state[0], self.model.state[2])[0]
         S_body     = quaternion.sandwich(self.model.state[2], S_inertial)
         return S_body
 
@@ -124,9 +155,8 @@ class SunSensor(Sensor):
 
 class Gyro(Sensor):
     '''
-    Model of gyroscopes in IMU including bias drifting.
-    I'm not entirely confident of the drift model, must consult Markely & Crassidis again.
-    For comparison see https://gitlab.com/acubesat/adcs/matlab/adcs-simulation/-/blob/master/src/gyro%20modeling/gyro_noise_func.m
+    Discrete model of gyroscopes in IMU including bias drifting.
+    From eq 4.54 in Markely & Crassidis, pg 147.
 
     Parameters
     ----------
@@ -146,7 +176,11 @@ class Gyro(Sensor):
     def __init__(self, arw_mean, arw_std_dev, rrw_mean, rrw_std_dev, init_bias, model):
         super().__init__(arw_mean, arw_std_dev, model)
         self.rrw_mean, self.rrw_std_dev = rrw_mean, rrw_std_dev
-        self.bias = np.random.normal(0, init_bias, 3)
+        self.bias                       = np.random.normal(0, init_bias, 3)
+        self.last_bias                  = np.zeros(3)
+        self.w                          = self.true_value()
+        self.arw_var                    = arw_std_dev**2
+        self.rrw_var                    = rrw_std_dev**2 / 12
 
     def propagate(self, dt):
         '''
@@ -158,7 +192,10 @@ class Gyro(Sensor):
         dt : float
             Size of step to take in seconds.
         '''
-        self.bias += dt * np.random.normal(self.rrw_mean, self.rrw_std_dev, 3)
+        self.last_bias = self.bias
+        self.new_bias  = self.bias + np.sqrt(dt) * np.random.normal(self.rrw_mean, self.rrw_std_dev, 3)
+        self.w         = self.true_value() + 0.5 * (self.new_bias + self.last_bias) + np.sqrt(self.arw_var / dt + self.rrw_var * dt) * np.random.normal(0, 1, 3)
+        self.bias      = self.new_bias
 
     def true_value(self):
         '''
@@ -185,8 +222,8 @@ class Gyro(Sensor):
         numpy.ndarray
             Possibly noisy measurement of state.
         '''
-        noise = np.zeros(3) if not noisy else (self.bias + rng.normal(self.mean, self.std_dev, 3))
-        return self.true_value() + noise
+        value = self.w if noisy else self.true_value()
+        return value
 
 class StarTracker(Sensor):
     '''

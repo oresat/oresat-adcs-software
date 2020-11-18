@@ -19,6 +19,7 @@ def saturation(x, x_max):
     largest_x = np.max(np.abs(x))
     if largest_x > x_max:
         x = x_max * x / largest_x
+        #print('saturated')
     return x
 
 def cross(v):

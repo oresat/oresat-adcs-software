@@ -4,6 +4,7 @@ from adcs_lib import vector
 '''This module contains the physical constants and useful methods for OreSat's structure.'''
 
 # MKS units
+ABSORPTION  = 0.84 # black anno
 ORESAT_MASS = (21.66*4 + 2419.56) / 1000
 INCLINATION = np.pi / 3 # of reaction wheel axes above XY plane
 AZIMUTH     = np.pi / 4 # of reaction wheel axes from X-Y axes
@@ -19,6 +20,8 @@ HEIGHT      = 0.2
 PRINCIPAL   = np.array([1.378574142e-2,
                         1.378854578e-2,
                         5.49370596e-3])
+# products of inertia, xy, xz, yz
+PRODUCTS    = PRINCIPAL * 0.1
 
 class SensitiveInstrument():
     '''
@@ -34,11 +37,21 @@ class SensitiveInstrument():
         True if the instrument is forbidden from getting closer than the exclusion angle.
         False if the instrument is required to stay within the inclusion angle.
     '''
-    def __init__(self, boresight, bound, forbidden):
-        self.forbidden = forbidden
-        self.bound     = bound
-        self.term      = np.cos(np.radians(bound))
+    def __init__(self, boresight, bounds, forbidden, obj_ids):
+        self.sign      = [-1.0 if val else 1.0 for val in forbidden]
+        self.bounds    = [np.radians(val) for val in bounds]
+        self.cos_psi   = [np.cos(bound) for bound in self.bounds]
         self.boresight = boresight
+        self.obj_ids   = obj_ids
+
+    def set_gains(self, stop, gains):
+        self.sigma     = [0.5 * np.abs(np.cos(bound - self.sign[j] * stop) - self.cos_psi[j]) for j, bound in enumerate(self.bounds)]
+        self.iota      = [0.25 * sig for sig in self.sigma]
+        self.gains     = [val for val in gains]
+        self.push      = [val * 0.5 for val in self.gains]
+
+    def cares_about(self, i, psi):
+        return i in self.obj_ids and psi < self.sigma[i]
 
     def quadratic_form(self, object):
         '''
@@ -59,9 +72,11 @@ class SensitiveInstrument():
         '''
         y       = self.boresight
         dotprod = np.dot(object, y)
-        a       = dotprod - self.term
-        b       = np.cross(object, y)
-        C       = np.outer(object, y) + np.outer(y, object) - np.eye(3) * (dotprod + self.term)
+        a       = dotprod - self.cos_psi[0]
+        b       = np.cross(y, object)
+        #C       = np.outer(y, object) - self.term * np.eye(3)
+        #C       = np.outer(object, y) + np.outer(y, object) - np.eye(3) * (dotprod + self.term)
+        C       = 2 * np.outer(y, object) - np.eye(3) * (dotprod + self.cos_psi[0])
         top     = np.block([a, *b])
         bot     = np.block([np.array([[b[0]], [b[1]], [b[2]]]), C])
 
@@ -195,6 +210,7 @@ class MagnetorquerSystem():
         '''
         if abs(m[2]) > self.torquers[2].max_m:
             m = m * self.torquers[2].max_m / abs(m[2])
+            #print('saturated')
 
         m     = vector.saturation(m, self.torquers[0].max_m)
 
@@ -283,7 +299,7 @@ class Wheel():
 
         return a
 
-    def momentum(self, velocity, ang_vel):
+    def momentum(self, velocity):
         '''
         Angular momentum of wheel in body-coordinates, including contribution from body's velocity around wheel axis.
 
@@ -299,9 +315,9 @@ class Wheel():
         numpy.ndarray
             Angular momentum of wheel (kg rad/s).
         '''
-        return self.axis * (velocity + np.dot(ang_vel, self.axis)) * self.par_mom_scalar
+        return self.axis * velocity * self.par_mom_scalar
 
-    def torque(self, accl, ang_accl):
+    def torque(self, accl):
         '''
         Torque of wheel in body-coordinates, including contribution from body's acceleration around wheel axis.
 
@@ -317,11 +333,12 @@ class Wheel():
         numpy.ndarray
             Torque of wheel (Nm).
         '''
-        return self.axis * (accl + np.dot(ang_accl, self.axis)) * self.par_mom_scalar
+        return self.axis * accl * self.par_mom_scalar
 
 class ReactionWheelSystem():
     '''
     Represents the whole system of reaction wheels, mostly for convenience.
+    Note that the null space of the given configuration is spanned by [-1, 1, -1, 1]^T.
 
     Parameters
     ----------
@@ -374,7 +391,7 @@ class ReactionWheelSystem():
 
         return np.array([wheel.acceleration(T[i]) for i, wheel in enumerate(self.wheels)])
 
-    def momentum(self, velocities, ang_vel):
+    def momentum(self, velocities):
         '''Angular momentum of all wheels together along their respective spin axes in the body frame,
         including the body's momentum around said spin axes.
 
@@ -390,9 +407,9 @@ class ReactionWheelSystem():
         numpy.ndarray
             Angular momentum of wheel system (kg rad/s).
         '''
-        return sum([wheel.momentum(velocities[i], ang_vel) for i , wheel in enumerate(self.wheels)])
+        return sum([wheel.momentum(velocities[i]) for i , wheel in enumerate(self.wheels)])
 
-    def torque(self, accls, ang_accl):
+    def torque(self, accls):
         '''Torque of wheel system in body-coordinates, including contribution from body's acceleration around wheel axes.
         Assumes acceleration command is instantaneous, at some point, we will need to either model internal wheel dynamics or compensate for them.
 
@@ -408,7 +425,7 @@ class ReactionWheelSystem():
         numpy.ndarray
             Torque of wheel system (N m).
         '''
-        return sum([wheel.torque(accls[i], ang_accl) for i, wheel in enumerate(self.wheels)])
+        return sum([wheel.torque(accls[i]) for i, wheel in enumerate(self.wheels)])
 
 class Wall():
     '''One of the satellite's walls. The purpose of this is for aerodynamic drag (and eventually solar radiation pressure).
@@ -423,14 +440,18 @@ class Wall():
         Length (m) of wall.
     width : float
         Width (m) of wall.
+    absorption : float
+        Absorption coefficient of surface.
     '''
-    def __init__(self, distance, normal, length, width):
-        self.distance = distance
-        self.normal   = normal
-        self.length   = length
-        self.width    = width
-        self.area     = length * width
-        self.centroid = normal * distance
+    def __init__(self, distance, normal, length, width, absorption):
+        self.distance   = distance
+        self.normal     = normal
+        self.length     = length
+        self.width      = width
+        self.area       = length * width
+        self.centroid   = normal * distance
+        self.absorption = absorption
+        self.reflection = 1 - absorption
 
     def projected_area(self, v_ref):
         '''Projected surface area as function of reference unit vector.
@@ -468,6 +489,51 @@ class Wall():
 
         return np.array([A, cp], dtype=object)
 
+    def srp_force(self, SRP, S):
+        '''Calculates solar radiation pressure torque on this wall.
+        Assumes there is no diffuse reflection.
+
+        Parameters
+        ----------
+        SRP : float
+            Solar radiation pressure.
+        S : numpy.ndarray
+            Sun vector in body coordinates.
+
+        Returns
+        -------
+        numpy.ndarray
+            Force (N) and torque (N m) on satellite.
+        '''
+        c_beta = np.dot(self.normal, S)
+        A, cp  = self.center_of_pressure(S)
+        F      = - SRP * A * (2 * self.reflection * c_beta * self.normal + self.absorption * S)
+        T      = np.cross(cp, F)
+        return np.array([F, T])
+
+    def drag_force(self, drag_pressure, v):
+        '''Calculates solar radiation pressure torque on this wall.
+        Assumes there is no diffuse reflection.
+
+        Parameters
+        ----------
+        SRP : float
+            Solar radiation pressure.
+        S : numpy.ndarray
+            Sun vector in body coordinates.
+
+        Returns
+        -------
+        numpy.ndarray
+            Force (N) and torque (N m) on satellite.
+        '''
+        c_beta = np.dot(self.normal, v)
+        A, cp  = self.center_of_pressure(v)
+        F      = drag_pressure * A * v
+        T      = np.cross(cp, F)
+        return np.array([F, T])
+
+
 class Satellite():
     '''A rectangular prism satellite and its relevant material properties.
     At some point, add support for products of inertia, and parametrize magnetorquers.
@@ -495,22 +561,22 @@ class Satellite():
     torque_limited : bool
         True if reaction wheels are limited by the amount of torque they can produce.
     '''
-    def __init__(self, length, width, height, principal_moments,
-                inclination, azimuth, parallel_moment, orthogonal_moment,
-                max_T, torque_limited):
-        self.length         = length
-        self.width          = width
-        self.height         = height
-        self.walls          = (Wall(length/2, np.array([1, 0, 0]), width, height),
-                               Wall(length/2, np.array([-1, 0, 0]), width, height),
-                               Wall(width/2, np.array([0, 1, 0]), length, height),
-                               Wall(width/2, np.array([0, -1, 0]), length, height),
-                               Wall(height/2, np.array([0, 0, 1]), width, length),
-                               Wall(height/2, np.array([0, 0, -1]), width, length))
+    def __init__(self, max_T, torque_limited, products_of_inertia):
+        self.length         = LENGTH
+        self.width          = WIDTH
+        self.height         = HEIGHT
+        self.walls          = (Wall(self.length/2, np.array([1, 0, 0]), self.width, self.height, ABSORPTION),
+                               Wall(self.length/2, np.array([-1, 0, 0]), self.width, self.height, ABSORPTION),
+                               Wall(self.width/2, np.array([0, 1, 0]), self.length, self.height, ABSORPTION),
+                               Wall(self.width/2, np.array([0, -1, 0]), self.length, self.height, ABSORPTION),
+                               Wall(self.height/2, np.array([0, 0, 1]), self.width, self.length, ABSORPTION),
+                               Wall(self.height/2, np.array([0, 0, -1]), self.width, self.length, ABSORPTION))
 
-        self.reaction_wheels = ReactionWheelSystem(inclination, azimuth, parallel_moment, orthogonal_moment, max_T, torque_limited)
+        self.reaction_wheels = ReactionWheelSystem(INCLINATION, AZIMUTH, PARALLEL, ORTHOGONAL, max_T, torque_limited)
         self.magnetorquers   = MagnetorquerSystem(linearized=True, max_A_sys=0.675)
-        self.instruments     = [SensitiveInstrument(np.array([0, 0, -1]), 15, forbidden=True)]
+        self.instruments     = [SensitiveInstrument(np.array([0, 0, -1]), bounds=[15, 100], forbidden=[True, False], obj_ids=[0]),
+                                SensitiveInstrument(np.array([0, -1, 0]), bounds=[180, 180], forbidden=[False, False], obj_ids=[])
+                                ]
 
         #: Estimated drag coefficient.
         self.drag_coeff      = 2 # could be anywhere from 1 - 2.5
@@ -518,13 +584,18 @@ class Satellite():
         self.mass            = ORESAT_MASS
 
         #: Moment of inertia for the satellite except the moments of wheels about spin axes.
-        self.reduced_moment  = np.diag(principal_moments) + self.reaction_wheels.orthogonal_moment
+        self.reduced_moment  = np.diag(PRINCIPAL) + self.reaction_wheels.orthogonal_moment
+        if products_of_inertia:
+            self.reduced_moment += np.array([[0 if i == j else PRODUCTS[i + j - 1]
+                                                for i in range(3)]
+                                            for j in range(3)])
         #: Moment of inertia for reaction wheels about spin axes with respect to principal axes.
         self.wheel_moment    = self.reaction_wheels.parallel_moment
         #: Total moment of inertia of the satellite.
         self.total_moment    = self.reduced_moment + self.wheel_moment
         #: Inverse of the moment of inertia for the satellite except the moments of wheels about spin axes.
         self.inv_red_moment  = np.linalg.inv(self.reduced_moment)
+        self.inv_tot_moment  = np.linalg.inv(self.total_moment)
 
     def area_and_cop(self, v_ref):
         '''Projected surface area and center of pressure for whole satellite.
@@ -544,3 +615,41 @@ class Satellite():
         (A, CoP) = sum([wall.center_of_pressure(v_ref) for wall in self.walls])
 
         return (A, CoP / A)
+
+    def srp_forces(self, SRP, S):
+        '''Calculates solar radiation pressure torque on this wall.
+        Assumes there is no diffuse reflection.
+
+        Parameters
+        ----------
+        SRP : float
+            Solar radiation pressure.
+        S : numpy.ndarray
+            Sun vector in body coordinates.
+
+        Returns
+        -------
+        numpy.ndarray
+            Force (N) and torque (N m) on satellite.
+        '''
+        F_and_T = sum([wall.srp_force(SRP, S) for wall in self.walls])
+        return F_and_T
+
+    def drag_forces(self, drag_pressure, v):
+        '''Calculates solar radiation pressure torque on this wall.
+        Assumes there is no diffuse reflection.
+
+        Parameters
+        ----------
+        SRP : float
+            Solar radiation pressure.
+        S : numpy.ndarray
+            Sun vector in body coordinates.
+
+        Returns
+        -------
+        numpy.ndarray
+            Force (N) and torque (N m) on satellite.
+        '''
+        F_and_T = sum([wall.drag_force(drag_pressure, v) for wall in self.walls])
+        return F_and_T

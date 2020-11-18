@@ -20,6 +20,15 @@ class ReducedEnvironment():
         self.CD = 2 # satellite drag coeff
         self.A = 0.0166 # m^2, mean surface area
         self.M = 2.2 # kg, satellite mass
+        # for geocentric magnetic field model
+        # see https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html for relevant details
+        self.MAG_REF_RADIUS = 6.3712e6 # m, magnetic spherical ref. radius
+        # these coefficients are in nT. from IGRF-13, 2020.0
+        self.G_1_1 = -1450.9 # secular variation 7.4 / year
+        self.H_1_1 = 4652.5 # secular variation -25.9 / year
+        self.G_1_0 = -29404.8 # secular variation 5.7 / year
+        self.m     = self.MAG_REF_RADIUS**3 * 1E-09 * np.array([self.G_1_1, self.H_1_1, self.G_1_0]) # magnetic dipole in ECEF
+
 
     def sun_vector(self, clock, x):
         '''
@@ -101,12 +110,19 @@ class ReducedEnvironment():
         Returns
         -------
         numpy.ndarray
-            Gravitational force on satellite.
+            Gravitational acceleration (m/s^2) of satellite.
         '''
         length = np.linalg.norm(position)
         coeff  = self.MU / length**3
-        F      = -coeff * position * self.M
-        return F
+        a      = -coeff * position
+        return a
+
+    def grav_torque(self, position, attitude, MoI):
+        length = np.linalg.norm(position)
+        coeff  = self.MU / length**2
+        n      = quaternion.sandwich(attitude, -position / length)
+        T      = 3 * coeff / length * np.cross(n, MoI.dot(n))
+        return T
 
     def forces(self, x, v):
         '''
@@ -126,8 +142,35 @@ class ReducedEnvironment():
         '''
         v_rel = self.relative_vel(x, v)
         D = self.drag(v_rel)
-        G = self.gravity(x)
+        G = self.gravity(x) * self.M
         return D + G
+
+    def magnetic_field(self, x, GCI_to_ECEF):
+        '''
+        Magnetic field dipole model, average 20-50 uT magnitude. Gradient of 1st order term of IGRF model of magnetic potential.
+        See page 403 - 406 or https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html for relevant details.
+        Be aware that every year, the approximated coefficients change a little.
+
+
+        Parameters
+        ----------
+        r_ecef : numpy.ndarray
+            Position of satellite in Earth-centered Earth-fixed frame.
+        length : float
+            Norm of position vector.
+        GCI_to_ECEF : numpy.ndarray
+            Matrix for coordinate transformation from inertial frame to ECEF frame.
+
+        Returns
+        -------
+        numpy.ndarray
+            Magnetic B-field (T) in inertial coordinates.
+        '''
+        r_ecef = GCI_to_ECEF.dot(x)
+        length = np.linalg.norm(x)
+        R      = (3 * np.dot(self.m, r_ecef) * r_ecef - self.m * length**2) / length**5 # nT
+        B      = GCI_to_ECEF.T.dot(R)
+        return B
 
 class Environment():
     '''Environmental models for sun, aerodynamics, magnetic field, and gravity.
@@ -160,8 +203,9 @@ class Environment():
         self.G_1_0 = -29404.8 # secular variation 5.7 / year
         self.m     = self.MAG_REF_RADIUS**3 * 1E-09 * np.array([self.G_1_1, self.H_1_1, self.G_1_0]) # magnetic dipole in ECEF
         self.satellite = satellite
+        self.SRP_coeff = 1362 * self.AU**2 / 299792458 # Newtons, eq D.56
 
-    def sun_vector(self, clock, x):
+    def sun_vector(self, clock, x, q):
         '''Unit vector in inertial coordinates pointing from satellite to the sun.
         More details on page 420 of Markely & Crassidis. For now assume the sun is a constant distance away.
 
@@ -171,23 +215,37 @@ class Environment():
             Clock is needed because the position of the sun depends on the date and time (obviously).
         x : numpy.ndarray
             Position of the satellite in inertial frame.
+        q : numpy.ndarray
+            Attitude of satellite.
 
         Returns
         -------
         numpy.ndarray
             Inertial unit vector pointing at sun from satellite.
         '''
-        T_UT1      = (clock.julian_date(clock.hour, clock.minute, clock.second) - 2451545) / 36525
-        mean_long  = (280.46 + 36000.771 * T_UT1) % 360 # degrees mean longitude
-        mean_anom  = np.radians((357.5277233 + 35999.05034 * T_UT1) % 360) # rad mean anomaly
-        ecl_long   = np.radians(mean_long + 1.914666471 * np.sin(mean_anom) + 0.019994643 * np.sin(2*mean_anom)) # ecliptic longitude
-        ecl_oblq   = np.radians(23.439291 - 0.0130042 * T_UT1)
+        T_UT1        = (clock.julian_date(clock.hour, clock.minute, clock.second) - 2451545) / 36525
+        mean_long    = (280.46 + 36000.771 * T_UT1) % 360 # degrees mean longitude
+        mean_anom    = np.radians((357.5277233 + 35999.05034 * T_UT1) % 360) # rad mean anomaly
+        ecl_long     = np.radians(mean_long + 1.914666471 * np.sin(mean_anom) + 0.019994643 * np.sin(2*mean_anom)) # ecliptic longitude
+        ecl_oblq     = np.radians(23.439291 - 0.0130042 * T_UT1)
         earth_to_sun = np.array([np.cos(ecl_long),
                                 np.cos(ecl_oblq) * np.sin(ecl_long),
                                 np.sin(ecl_oblq) * np.sin(ecl_long)])
 
-        S_inertial = vector.pointing_vector(x, self.AU * earth_to_sun)
-        return S_inertial
+        sat_to_sun   = self.AU * earth_to_sun - x
+        S_inertial   = vector.normalize(sat_to_sun)
+
+        in_shadow    = np.dot(x, earth_to_sun) < - np.sqrt(np.dot(x, x) - self.EARTH_RAD**2) # cylindrical approx for earth shadowing
+
+        SRP          = self.SRP_coeff / np.dot(sat_to_sun, sat_to_sun) # solar radiation pressure
+
+        if in_shadow:
+            solar_F_and_T = np.array([np.zeros(3), np.zeros(3)])
+        else:
+            solar_F_and_T = self.satellite.srp_forces(SRP, quaternion.sandwich(q, S_inertial))
+            solar_F_and_T[0] = quaternion.sandwich_opp(q, solar_F_and_T[0])
+
+        return S_inertial, in_shadow, solar_F_and_T
 
     def atmo_density(self, h):
         '''
@@ -272,10 +330,10 @@ class Environment():
         '''
         v_norm   = np.linalg.norm(v)
         v_ref    = quaternion.sandwich(attitude, v / v_norm)
-        (A, CoP) = self.satellite.area_and_cop(v_ref)
-        F        = -0.5 * rho * self.satellite.drag_coeff * v_norm * v * A
-        T        = np.cross(CoP, quaternion.sandwich(attitude, F))
-        return np.array([F, T])
+        pressure = -0.5 * rho * self.satellite.drag_coeff * v_norm**2
+        F_and_T  = self.satellite.drag_forces(pressure, v_ref)
+        F_and_T[0] = quaternion.sandwich_opp(attitude, F_and_T[0])
+        return F_and_T
 
     def hi_fi_gravity(self, position, r, coeff):
         '''
@@ -332,17 +390,16 @@ class Environment():
         Returns
         -------
         numpy.ndarray
-            Array of arrays for gravitational force and torque.
+            Array of arrays for gravitational acceleration and torque.
         '''
         coeff  = self.MU / length**2
         if self.hi_fi:
             accel = self.hi_fi_gravity(position, length, coeff)
         else:
             accel = -coeff * position / length
-        F      = accel * self.satellite.mass
         n      = quaternion.sandwich(attitude, -position / length)
         T      = 3 * coeff / length * np.cross(n, self.satellite.total_moment.dot(n))
-        return np.array([F, T])
+        return np.array([accel, T])
 
     def magnetic_field(self, r_ecef, length, GCI_to_ECEF):
         '''
@@ -363,13 +420,13 @@ class Environment():
         Returns
         -------
         numpy.ndarray
-            Magnetic B-field (nT) in inertial coordinates.
+            Magnetic B-field (T) in inertial coordinates.
         '''
         R      = (3 * np.dot(self.m, r_ecef) * r_ecef - self.m * length**2) / length**5 # nT
         B      = GCI_to_ECEF.T.dot(R)
         return B
 
-    def env_F_and_T(self, position, velocity, attitude, GCI_to_ECEF, mag_moment):
+    def env_F_and_T(self, position, velocity, attitude, clock, GCI_to_ECEF, mag_moment):
         '''
         External forces and torques acting on satellite.
 
@@ -395,13 +452,18 @@ class Environment():
         length       = np.linalg.norm(position)
         B            = self.magnetic_field(r_ecef, length, GCI_to_ECEF)
         B_body       = quaternion.sandwich(attitude, B)
-        #lat, long, h = frame.ecef_to_lla(r_ecef)
-        #lat, long, h = frame.ECEF_to_geodetic(r_ecef)
-        rho          = 3.29e-12#self.atmo_density(h)
+        if self.hi_fi:
+            lat, long, h = frame.ecef_to_lla(r_ecef)
+            rho          = self.atmo_density(h)
+            _, _, srp    = self.sun_vector(clock, position, attitude)
+        else:
+            rho          = 3.29e-12 # typical at 400 km
+            srp          = np.array([np.zeros(3), np.zeros(3)])
+
         v_rel        = self.relative_vel(position, velocity)
 
         D = self.drag(rho, v_rel, attitude)
         G = self.gravity(position, length, attitude)
+        G[0] *= self.satellite.mass
         M = np.array([np.zeros(3), np.cross(mag_moment, B_body)])
-        #print(np.linalg.norm(M[1]), np.linalg.norm(D[1] + G[1]))
-        return D + G + M
+        return D + G + M + srp

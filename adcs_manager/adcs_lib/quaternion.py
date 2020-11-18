@@ -201,6 +201,46 @@ def quat_to_startracker(q):
     roll = np.arcsin(2 * (q[1]*q[0] + q[3]*q[2]) / cos_dec)
     return [ra, dec, roll]
 
+def _quat2equatorial(q):
+    """
+    https://cxc.cfa.harvard.edu/mta/ASPECT/tool_doc/Quaternion/_modules/Quaternion/Quaternion.html
+    Determine Right Ascension, Declination, and Roll for the quaternion
+
+    :returns: N x (RA, Dec, Roll)
+    :rtype: numpy array [ra,dec,roll]
+    """
+
+    q = np.atleast_2d(q)
+    q2 = q ** 2
+
+    # calculate direction cosine matrix elements from $quaternions
+    xa = q2[..., 0] - q2[..., 1] - q2[..., 2] + q2[..., 3]
+    xb = 2 * (q[..., 0] * q[..., 1] + q[..., 2] * q[..., 3])
+    xn = 2 * (q[..., 0] * q[..., 2] - q[..., 1] * q[..., 3])
+    yn = 2 * (q[..., 1] * q[..., 2] + q[..., 0] * q[..., 3])
+    zn = q2[..., 3] + q2[..., 2] - q2[..., 0] - q2[..., 1]
+
+    # Due to numerical precision this can go negative.  Allow *slightly* negative
+    # values but raise an exception otherwise.
+    one_minus_xn2 = 1 - xn**2
+    if np.any(one_minus_xn2 < 0):
+        if np.any(one_minus_xn2 < -1e-12):
+            raise ValueError('Unexpected negative norm: {}'.format(one_minus_xn2))
+        one_minus_xn2[one_minus_xn2 < 0] = 0
+
+    # ; calculate RA, Dec, Roll from cosine matrix elements
+    ra = np.degrees(np.arctan2(xb, xa))
+    dec = np.degrees(np.arctan2(xn, np.sqrt(one_minus_xn2)))
+    roll = np.degrees(np.arctan2(yn, zn))
+    # all negative angles are incremented by 360,
+    # the output is in the (0,360) interval instead of in (-180, 180)
+    ra[ra < 0] = ra[ra < 0] + 360
+    roll[roll < 0] = roll[roll < 0] + 360
+    # moveaxis in the following line is a "transpose"
+    # from shape (3, N) to (N, 3), where N can be an arbitrary tuple
+    # e.g. (3, 2, 5) -> (2, 5, 3) (np.transpose would give (2, 3, 5))
+    return np.array([ra, dec, roll])
+
 def path_lift(RA, dec, roll, q_ref):
     '''The most computationally efficient way to do this is to initially store q_ref=(1,0,0,0) in filter.
     Then take 1-q0 of the startracker measurement and if it's below a threshold, use measurement.

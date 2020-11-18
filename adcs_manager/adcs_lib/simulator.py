@@ -1,5 +1,5 @@
 import numpy as np
-from adcs_lib import dynamic, sensor, vector
+from adcs_lib import dynamic, sensor, vector, quaternion
 
 class SimulatorDaemonInterface():
     '''This is the interface with the Simulator Daemon.
@@ -13,12 +13,15 @@ class SimulatorDaemonInterface():
 
         x_0   = np.array([-9.468352e+05,  5.007523e+06 , 4.487994e+06])
         v_0   = np.array([-6765.933175 , 1600.723099, -3222.908767])
-        q_0   = vector.normalize(np.array([np.sqrt(2)/2, np.sqrt(2)/2, 0, 0]))
-        #q_0   = np.array([1, 0,0 ,0])
+        #q_0   = vector.normalize(np.array([np.sqrt(2)/2, np.sqrt(2)/2, 0, 0]))
+        #q_0   = vector.normalize([.25, 0.7, 0.2, 0.2])
+        #q_0 = quaternion.product(np.array([np.cos(np.pi/2.5), 0, np.sin(np.pi/2.5), 0]), np.array([np.cos(np.pi/8.5), np.sin(np.pi/8.5), 0, 0]))
+        q_0   = np.array([1, 0,0 ,0])
+        print('init q:', q_0)
         w_0   = np.array([0.08726646, 0.08726646, 0.08726646]) # 5 degrees/s / axis. worst case
-        #w_0 = np.array([0.0025, 0.0025, 0.0025])
+        #w_0 = np.array([0.0005, 0.0005, 0.0075]) * 2
         #w_0 = np.zeros(3)
-        whl_0 = np.array([0, 0, 0, 0])
+        whl_0 = np.array([300, -300, -300, 300]) * 0
         t_0   = (2020, 9, 1, 0, 0, 0)
         dt    = 0.05 # perhaps we want to choose this upstream?
         noisy = False

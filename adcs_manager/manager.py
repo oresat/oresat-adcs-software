@@ -9,7 +9,7 @@ from adcs_lib import manager_class, simulator, quaternion
 import copy
 import numpy as np
 
-T_SLEEP  = 0.5
+T_SLEEP  = 0.0
 T_CTRL   = 0.05
 DEBUG    = True
 
@@ -118,10 +118,14 @@ class ADCSManager():
         # start dbus thread
         self._dbus_thread.start()
 
-        self._dbus_server._sm.change_state(State.SLEEP.value)
+        self._dbus_server._sm.change_state(State.DETUMBLE.value)
 
         self._running = True
         counter       = 0 # for testing out periodic sensor measurements
+        t0 = 0
+        t1 = 0
+        cmds          = [np.zeros(3), np.zeros(4)]
+        sim_output    = None
 
         while(self._running):
 
@@ -132,51 +136,63 @@ class ADCSManager():
 
             # make adcs library calls
             current_state = self._dbus_server.CurrentMode
-            cmds          = None
-            sim_output    = None
 
             # for testing out periodic sensor measurements
-            raw_sensor_data = None if counter != 0 else self.sim.output(noisy=True)
-            counter         = (counter + 1) % 1200
+            measure_this_cycle = counter == 0
+            #control_this_cycle = counter % (0.25 / T_CTRL) == 0 #or True
+            control_this_cycle = counter % (0.25 / T_CTRL) == 0 #or True
+            raw_sensor_data = self.sim.output(noisy=True) if measure_this_cycle else None
+            counter         = (counter + 1) % (60 / T_CTRL)
+            #if counter == 0: print("true: ",self.sim.model.state[2])
 
             if current_state == State.SLEEP.value or current_state == State.FAILED.value:
-                cmds       = self.man.propagate(T_SLEEP + T_CTRL, [current_state, np.zeros(3), np.zeros(3), np.zeros(3)], raw_sensor_data)
-                sim_output = self.sim.propagate(T_SLEEP + T_CTRL, cmds[:2])
+                man_output = self.man.propagate(T_SLEEP + T_CTRL, [current_state, np.zeros(3), np.zeros(3), np.zeros(3)], raw_sensor_data)
+                cmds       = man_output[:2] if control_this_cycle else cmds
+                sim_output = self.sim.propagate(T_SLEEP + T_CTRL, cmds)
                 if not DEBUG:
                     time.sleep(T_SLEEP)
 
-            elif current_state == State.DETUMBLE.value:
-                cmds       = self.man.propagate(T_CTRL, [State.DETUMBLE.value, np.zeros(3), np.zeros(3), np.zeros(3)], raw_sensor_data)
-                sim_output = self.sim.propagate(T_CTRL, cmds[:2])
-
-            elif current_state == State.POINT.value:
-                cmds       = self.man.propagate(T_CTRL, [State.POINT.value, np.array([0, 0, -1]), np.zeros(3), np.zeros(3)], raw_sensor_data)
-                sim_output = self.sim.propagate(T_CTRL, cmds[:2])
-            elif current_state == State.BBQ.value:
-                cmds       = self.man.propagate(T_CTRL, [State.BBQ.value, np.zeros(3), np.zeros(3), np.zeros(3)], raw_sensor_data)
-                sim_output = self.sim.propagate(T_CTRL, cmds[:2])
-
             else:
-                syslog(LOG_CRIT, "Unknown state in main loop")
+                man_output = self.man.propagate(T_CTRL, [current_state, np.array([0, 0, -1]), np.zeros(3), np.zeros(3)], raw_sensor_data)
+                cmds       = man_output[:2] if control_this_cycle else cmds
+                sim_output = self.sim.propagate(T_CTRL, cmds[:2])
 
-            [mag_commands, rw_commands] = cmds[:2]
-            (x, v, q, w, W, S, B)       = sim_output
+            #else:
+            #    syslog(LOG_CRIT, "Unknown state in main loop")
+
+            [mag_commands, rw_commands]    = cmds
+            (x, v, q, w, W, B, S, a)       = sim_output
 
             if DEBUG:
-                q_d = self.man.mag_controller.ecliptic_attitude(True, q)
+                q_d = self.man.rw_controller.ecliptic_attitude(True)
                 self.true_states.append(np.block([x, v, q, w, W, B, S, self.man.filter.PosFilter.model.satellite.magnetorquers.power(mag_commands), np.sum([* np.abs(mag_commands)]), q_d]))
-                self.kalman_states.append(np.block([*cmds[-1], *quaternion.error_quat(q, cmds[-1][2])[1:]*0.5])) # to look at error between state and estimate
-                #self.kalman_states.append(np.block([*cmds[-1], *quaternion.error_quat(q, q_d)[1:] * 0.5])) # to look at error between state and command
+                #self.kalman_states.append(np.block([*man_output[-1][:-2], *quaternion.error_quat(q, cmds[-1][2])[1:]*0.5])) # to look at error between state and estimate
+                self.kalman_states.append(np.block([*man_output[-1][:-2], *quaternion.error_quat(q, q_d)[1:] * 0.5])) # to look at error between state and command
 
             if DEBUG:
+                if measure_this_cycle: print('t:',self.man.filter.PosFilter.model.clock.absolute,'. d:', self.man.mag_controller.check(q, w), 'W:', np.linalg.norm(self.man.rw_controller.satellite.reaction_wheels.axes.dot(W)))
+                #if control_this_cycle: print('t:',self.man.filter.PosFilter.model.clock.absolute,'. W:', np.linalg.norm(self.man.rw_controller.satellite.reaction_wheels.axes.dot(W)))
                 # need to figure out a systematic way to transition between states
-                if current_state == State.DETUMBLE.value and np.linalg.norm(w) < 0.0075:
-                    print('done detumbling')
-                    self._dbus_server._sm.change_state(State.BBQ.value)
                 #if current_state == State.BBQ.value and self.man.mag_controller.converged:
                     #print('done bbqing')
                     #self._dbus_server._sm.change_state(State.SLEEP.value)
-                if self.man.filter.PosFilter.model.clock.absolute > 5560*4:
+                if current_state == State.POWERDOWN.value and False and np.linalg.norm(man_output[-1][4]) < 1:
+                    self._dbus_server._sm.change_state(State.SLEEP.value)
+                    print('starting BBQ', self.man.filter.PosFilter.model.clock.absolute)
+                #if current_state == State.SLEEP.value and self.man.filter.PosFilter.model.clock.absolute > 1800 and self.man.filter.PosFilter.model.clock.absolute < 1802:
+                #    self._dbus_server._sm.change_state(State.DETUMBLE.value)
+                #    print('starting detumble', self.man.filter.PosFilter.model.clock.absolute)
+                if current_state == State.DETUMBLE.value and np.linalg.norm(w) < 0.03:
+                    print('done detumbling', self.man.filter.PosFilter.model.clock.absolute)
+                    self._dbus_server._sm.change_state(State.BBQ.value)
+                    t0 = self.man.filter.PosFilter.model.clock.absolute
+                if current_state == State.BBQ.value and control_this_cycle and self.man.mag_controller.check(q, w) < 1e-5 and np.linalg.norm(self.man.rw_controller.satellite.reaction_wheels.axes.dot(W)) < 15 and self.man.filter.PosFilter.model.clock.absolute > t0 + 60: #np.linalg.norm(W) < 6 and self.man.filter.PosFilter.model.clock.absolute > t0 + 60: #self.man.filter.PosFilter.model.clock.absolute > 5560*2:
+                    self._dbus_server._sm.change_state(State.POWERDOWN.value)
+                    #self.sim.model.state[4] = np.zeros(4)
+                    t1 = self.man.filter.PosFilter.model.clock.absolute
+                    print('stopping actuators', self.man.filter.PosFilter.model.clock.absolute)
+                if (t1 != 0 and self.man.filter.PosFilter.model.clock.absolute > t1 + 5560) or self.man.filter.PosFilter.model.clock.absolute > 5560*6:
+                    print('stopping simulation', self.man.filter.PosFilter.model.clock.absolute)
                     self.quit()
 
 
