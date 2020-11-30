@@ -124,15 +124,6 @@ class MagnetorquerController:
 
         return current_commands
 
-    def desaturate2(self, state, wheel_ref):
-        h_w                      = self.satellite.reaction_wheels.momentum(state[4])
-        mag_field                = state[5]
-        # why are we rotating the desired wheel momentum? reread paper
-        torque_command           = - self.k_bbq * (self.MoI.dot(state[3]) + h_w - quaternion.sandwich(state[2], self.satellite.reaction_wheels.momentum(wheel_ref)))
-        current_commands = self.actuator_commands(state, torque_command)
-
-        return current_commands
-
     def detumble(self, state):
         '''
         Global asymptotically stable control law for detumbling a satellite.
@@ -154,7 +145,7 @@ class MagnetorquerController:
         '''
 
         gyro             = state[3]
-        #torque_command   = - self.detumble_gain * gyro # uniform gain
+        #torque_command   = - self.k_bbq * self.MoI[0][0] * gyro # uniform gain
         torque_command   = - self.k_bbq * self.MoI.dot(gyro) # axis-sensitive gain
         currents_command = self.actuator_commands(state, torque_command)
 
@@ -178,7 +169,7 @@ class MagnetorquerController:
         Hd = quaternion.sandwich(state[2], self.Hd_intl)
         purespin = h - self.hd_body
         spinaxis = h - Hd
-        torque_command   = - self.k_bbq * 0.5 * (purespin + spinaxis)
+        torque_command   = - self.k_bbq * (purespin + spinaxis)
         currents_command = self.actuator_commands(state, torque_command)
 
         return currents_command
@@ -188,7 +179,7 @@ class MagnetorquerController:
         Hd = quaternion.sandwich(q, self.Hd_intl)
         purespin = h - self.hd_body
         spinaxis = h - Hd
-        return np.linalg.norm(0.5 * (purespin + spinaxis))
+        return np.linalg.norm(purespin + spinaxis)
 
 
 class ReactionWheelsController:
@@ -209,7 +200,7 @@ class ReactionWheelsController:
         self.MoI               = model.satellite.total_moment
         self.reaction_wheels   = model.satellite.reaction_wheels
         self.clock             = model.clock
-        self.obj_avoidance     = False
+        self.obj_avoidance     = True
         self.objects           = [lambda state: quaternion.sandwich(state[2], model.enviro.sun_vector(model.clock, state[0])),
                                 lambda state: -vector.normalize(state[0])]
         self.error_trigger     = MayhewTrigger(1, 0.3)
@@ -229,14 +220,16 @@ class ReactionWheelsController:
         #self.quat_gain = np.linalg.inv(alpha*self.MoI + beta*np.identity(3))
 
         # these gains correspond to linearized system, should be good for < 90 deg maneuvers
-        stop         = np.pi / 5
-        self.epsilon = 0.5 * np.sin(stop)
+        stop         = np.pi#0.5 * self.MoI[0][0] * 0.25**2 / 0.005 #2/5 * np.pi
+        self.epsilon = 1#0.95#np.cos(stop) #stop * 3 / 5 #0.75
+        print(stop, self.epsilon)
         self.alpha   = 2 * nat_freq**2
         for instr in self.satellite.instruments:
             instr.set_gains(stop, [self.alpha * self.epsilon for obj in self.objects])
             print('sigma:', instr.sigma)
-        #self.J     = self.MoI
-        self.J     = np.eye(3) * np.amax(self.MoI)
+        self.J     = self.MoI
+        self.alpha *= 1#0.05
+        #self.J     = np.eye(3) * np.amax(self.MoI)
         self.gamma = 2 * damping * nat_freq
         #self.beta  = 2 / damping * nat_freq * self.delta# * 5.49370596e-3
         print('alpha', self.alpha*self.J[0][0], 'beta', self.alpha*self.J[0][0] * self.epsilon, 'gamma', self.gamma*self.J[0][0])
@@ -247,10 +240,6 @@ class ReactionWheelsController:
         mag_term = np.cross(state[5], magnetorque)
         torque = u + mag_term
         return self.actuator_commands(torque)
-
-    def track_and_desaturate2(self, state, mission_data):
-        u = self.tracking(state, mission_data)
-        return self.actuator_commands(u)
 
     def ecliptic_attitude(self, roll):
         '''Attitude for BBQ roll manuever, which puts satellite into its standby mode.
@@ -291,25 +280,6 @@ class ReactionWheelsController:
         q_cmd            = self.ecliptic_attitude(True)
         w_cmd            = self.bbq
         bbq_setup        = self.track_and_desaturate(state, magnetorque, [w_cmd, np.zeros(3), q_cmd])
-        return bbq_setup
-
-    def induce_bbq_roll_momentum(self, state):
-        '''
-        Maneuver satellite into spin-stabilized trajectory orthogonal to the sun for safe mode.
-
-        Parameters
-        ----------
-        state : numpy.ndarray
-            Array full of arrays for state variables and measurements in their usual ordering.
-
-        Returns
-        -------
-        numpy.ndarray
-            Current (A) for x, y, z magnetorquers to induce required magnetic moment in order to rotate around z-axis in ecliptic plane.
-        '''
-        q_cmd            = self.ecliptic_attitude(True)
-        w_cmd            = self.bbq
-        bbq_setup        = self.track_and_desaturate2(state, [w_cmd, np.zeros(3), q_cmd])
         return bbq_setup
 
     def acquire_target(self, position, attitude, boresight, target):
@@ -362,8 +332,13 @@ class ReactionWheelsController:
         attitude           = state[2]
         boresight          = mission_data[1]
         target_point       = mission_data[2]
-        w_ref              = mission_data[3]
-        w_ref = np.array([2*np.pi/5560, 0, 0])
+        #w_ref              = mission_data[3]
+        #w_ref = np.array([2*np.pi/5560, 0, 0])
+        h = position - target_point
+        w_ref_intl = np.cross(h, state[1]) / np.dot(h, h)
+        w_ref = quaternion.sandwich(attitude, w_ref_intl)
+        #w_ref = np.array([np.linalg.norm(w_ref_intl), 0, 0])
+        #w_ref = np.zeros(3)
 
         commanded_rotation = self.acquire_target(position, attitude, boresight, target_point)
         q_cmd              = quaternion.product(attitude, commanded_rotation)
@@ -507,12 +482,20 @@ class ReactionWheelsController:
 
         for instr in self.satellite.instruments:
             for j, obj in enumerate(objects):
-                psi = 0.5 * instr.sign[j] * (np.dot(instr.boresight, obj)- instr.cos_psi[j])
+                psi = 0.5 * instr.sign[j] * (np.dot(instr.boresight, obj) - instr.cos_psi[j])
                 if instr.cares_about(j, psi):
+                    if psi <= 0: # a kludge, just in case we feed it garbage
+                        print('attitude constraint violated:',psi)
+                        psi = 1e-4
+                    #t = np.min([1, psi/instr.sigma[j]])
+                    #t = 3 * (psi/instr.sigma[j])**2 - 2 * (psi/instr.sigma[j])**3
+                    #c *= t
                     c               -= instr.gains[j] * np.log(psi)
+                    #print(self.alpha, -instr.gains[j] * np.log(psi))
+                    #print(t,self.alpha*t, -instr.gains[j] * np.log(psi))
                     perp             = np.cross(instr.boresight, obj)
-                    constraint_axis += 0.5 * instr.gains[j] * instr.sign[j] / psi * perp
-                    if psi < instr.sigma[j] and del_q[1:] is not np.zeros(3):
+                    constraint_axis += instr.gains[j] * instr.sign[j] / psi * perp
+                    if psi < instr.iota[j] and del_q[1:] is not np.zeros(3):
                         z = s * np.cross(del_q[1:], perp)
                         if z is np.zeros(3):
                             z = s * np.cross(del_q[1:], np.random.uniform(size=3))
@@ -522,5 +505,8 @@ class ReactionWheelsController:
                         nudge_term -= instr.push[j] * dir * z
 
         attractive_term  = -s * c * del_q[1:]
-        repulsive_term   = (1 - s * del_q[0]) * constraint_axis
+        repulsive_term   = 0.5 * (1 - s * del_q[0]) * constraint_axis
+        #print(c, 0.5 * (1 - s * del_q[0]))
+        #print(del_q[1:], constraint_axis)
+        #print(np.linalg.norm(attractive_term ), np.linalg.norm(repulsive_term) , np.linalg.norm(nudge_term))
         return attractive_term + repulsive_term + nudge_term

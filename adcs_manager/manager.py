@@ -118,7 +118,7 @@ class ADCSManager():
         # start dbus thread
         self._dbus_thread.start()
 
-        self._dbus_server._sm.change_state(State.DETUMBLE.value)
+        self._dbus_server._sm.change_state(State.SLEEP.value)
 
         self._running = True
         counter       = 0 # for testing out periodic sensor measurements
@@ -153,7 +153,7 @@ class ADCSManager():
                     time.sleep(T_SLEEP)
 
             else:
-                man_output = self.man.propagate(T_CTRL, [current_state, np.array([0, 0, -1]), np.zeros(3), np.zeros(3)], raw_sensor_data)
+                man_output = self.man.propagate(T_CTRL, [current_state, np.array([0, 0, -1]), np.array([2.02380046188191e6, 2.66669072154869e6, 7.94226900857267e6]), np.zeros(3)], raw_sensor_data)
                 cmds       = man_output[:2] if control_this_cycle else cmds
                 sim_output = self.sim.propagate(T_CTRL, cmds[:2])
 
@@ -170,7 +170,11 @@ class ADCSManager():
                 self.kalman_states.append(np.block([*man_output[-1][:-2], *quaternion.error_quat(q, q_d)[1:] * 0.5])) # to look at error between state and command
 
             if DEBUG:
-                if measure_this_cycle: print('t:',self.man.filter.PosFilter.model.clock.absolute,'. d:', self.man.mag_controller.check(q, w), 'W:', np.linalg.norm(self.man.rw_controller.satellite.reaction_wheels.axes.dot(W)))
+                if measure_this_cycle:
+                    norm_W = np.linalg.norm(self.man.rw_controller.satellite.reaction_wheels.axes.dot(W))
+                    print('t:',self.man.filter.PosFilter.model.clock.absolute,'. d:', self.man.mag_controller.check(q, w), '. i:', np.linalg.norm(mag_commands), '. W:', norm_W)
+                #if measure_this_cycle and norm_W != 0:
+                #    print('B dot W:', np.dot(self.man.rw_controller.satellite.reaction_wheels.axes.dot(W) / norm_W, B / np.linalg.norm(B)))
                 #if control_this_cycle: print('t:',self.man.filter.PosFilter.model.clock.absolute,'. W:', np.linalg.norm(self.man.rw_controller.satellite.reaction_wheels.axes.dot(W)))
                 # need to figure out a systematic way to transition between states
                 #if current_state == State.BBQ.value and self.man.mag_controller.converged:
@@ -182,17 +186,26 @@ class ADCSManager():
                 #if current_state == State.SLEEP.value and self.man.filter.PosFilter.model.clock.absolute > 1800 and self.man.filter.PosFilter.model.clock.absolute < 1802:
                 #    self._dbus_server._sm.change_state(State.DETUMBLE.value)
                 #    print('starting detumble', self.man.filter.PosFilter.model.clock.absolute)
-                if current_state == State.DETUMBLE.value and np.linalg.norm(w) < 0.03:
+                if current_state == State.SLEEP.value and self.man.filter.PosFilter.model.clock.absolute > 0:
+                    print('starting pointing')
+                    self._dbus_server._sm.change_state(State.POINT.value)
+                if current_state == State.DETUMBLE.value and np.linalg.norm(w) < 0.025:
                     print('done detumbling', self.man.filter.PosFilter.model.clock.absolute)
                     self._dbus_server._sm.change_state(State.BBQ.value)
                     t0 = self.man.filter.PosFilter.model.clock.absolute
-                if current_state == State.BBQ.value and control_this_cycle and self.man.mag_controller.check(q, w) < 1e-5 and np.linalg.norm(self.man.rw_controller.satellite.reaction_wheels.axes.dot(W)) < 15 and self.man.filter.PosFilter.model.clock.absolute > t0 + 60: #np.linalg.norm(W) < 6 and self.man.filter.PosFilter.model.clock.absolute > t0 + 60: #self.man.filter.PosFilter.model.clock.absolute > 5560*2:
+                if current_state == State.BBQ.value and control_this_cycle and self.man.mag_controller.check(q, w) < 1e-4 and self.man.filter.PosFilter.model.clock.absolute > t0 + 60 and np.linalg.norm(mag_commands) < 1e-4 and np.linalg.norm(self.man.rw_controller.satellite.reaction_wheels.axes.dot(W)) < 30:# and self.man.filter.PosFilter.model.clock.absolute > t0 + 60: #self.man.filter.PosFilter.model.clock.absolute > 5560*2:
                     self._dbus_server._sm.change_state(State.POWERDOWN.value)
                     #self.sim.model.state[4] = np.zeros(4)
                     t1 = self.man.filter.PosFilter.model.clock.absolute
                     print('stopping actuators', self.man.filter.PosFilter.model.clock.absolute)
-                if (t1 != 0 and self.man.filter.PosFilter.model.clock.absolute > t1 + 5560) or self.man.filter.PosFilter.model.clock.absolute > 5560*6:
+
+                if (t1 != 0 and self.man.filter.PosFilter.model.clock.absolute > t1 + 5560) or self.man.filter.PosFilter.model.clock.absolute > 140:
                     print('stopping simulation', self.man.filter.PosFilter.model.clock.absolute)
+                    print('x:', x)
+                    print('v:', v)
+                    print('q:', q)
+                    print('w:', w)
+                    print('W:', W)
                     self.quit()
 
 
