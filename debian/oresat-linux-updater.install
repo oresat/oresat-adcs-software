@@ -1,0 +1,2 @@
+conf_files/oresat-adcs-managerd.service /lib/systemd/system/
+conf_files/org.oresat.adcs-manager.conf /usr/share/dbus-1/system.d/

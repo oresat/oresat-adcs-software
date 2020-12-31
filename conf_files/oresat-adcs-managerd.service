@@ -1,0 +1,10 @@
+[Unit]
+Description=Manage OreSat's ADCS subsystem.
+
+[Service]
+Type=forking
+PIDFile=/run/oresat-adcs-managerd.pid
+ExecStart=/usr/bin/python3 oresat-adcs-managerd -d
+
+[Install]
+WantedBy=multi-user.target

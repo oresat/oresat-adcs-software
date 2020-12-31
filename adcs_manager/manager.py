@@ -13,7 +13,7 @@ import numpy as np
 DESTINATION =       "org.OreSat.ADCSManager"
 INTERFACE_NAME =    "org.OreSat.ADCSManager"
 OBJECT_PATH =       "/org/OreSat/ADCSManager"
-PID_FILE =          "/run/oresat-linux-updater.pid"
+PID_FILE =          "/run/oresat-adcs-managerd.pid"
 
 
 class ADCSManager():

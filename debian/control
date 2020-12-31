@@ -1,0 +1,11 @@
+Source: oresat-adcs-manager
+Maintainer: Ryan Medick <rmedick@pdx.edu>
+Section: python
+Priority: optional
+Build-Depends: python3-setuptools, python3-all, debhelper (>= 10)
+Homepage: https://github.com/oresat/oresat-adcs-software
+
+Package: oresat-adcs-manager
+Architecture: all
+Depends: ${misc:Depends}, ${python3:Depends}, libsystemd-dev, python3-pydbus, python3-numpy, python3-psutils
+Description: A daemon to manage OreSat ADCS subsystem
