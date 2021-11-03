@@ -53,7 +53,7 @@ class ManagerDaemonInterface():
         elif mission_data[0] == State.BBQ.value:
             self.mag_cmd = self.mag_controller.desaturate(model_state, np.zeros(4))
             self.rw_cmd  = self.rw_controller.induce_bbq_roll_attitude(model_state, self.filter.PosFilter.model.satellite.magnetorquers.actuate(self.mag_cmd))
-        elif mission_data[0] == State.POWERDOWN.value:
+        elif mission_data[0] == State.SPINDOWN.value:
             self.mag_cmd = np.zeros(3)
             null = np.array([-0.5, 0.5, -0.5, 0.5])
             mult = self.mag_controller.k_bbq * 250

@@ -1,199 +1,6 @@
 import numpy as np
 from scipy import optimize
-from numpy.random import default_rng
 from adcs_lib import sensor, dynamic, quaternion, vector
-
-rng = default_rng()
-
-class DiscreteAttitudeMagGravKalman():
-    '''
-    Discrete-time Multiplicative Extended Kalman Filter for attitude estimation.
-    Estimates attitude error and gyroscope bias.
-    Takes measurements from magnetometer and accelerometer, given a position.
-    Refer to Markely & Crassidis for details.
-
-    Parameters
-    ----------
-    q_initial : numpy.ndarray
-        Initial attitude estimate.
-    '''
-    def __init__(self, q_initial, model):
-        self.GYRO_VAR     = (2.79e-4)**2 # angular random walk, rad/s/sqrt(Hz), https://jpieper.com/2020/03/09/bringing-up-the-imu-on-the-pi3-hat/
-        self.DRIFT_VAR    = (8.73e-5)**2 # rate random walk, same website
-        self.INITIAL_BIAS = 3.15e-5 # bias stability, same website
-        self.model       = model
-
-        #self.GYRO_SIGMA   = 0.00174533 # angular random walk, rad/s, from datasheet
-        #self.DRIFT_SIGMA  = 1.9391e-5 # rad/s^2, assuming 200 C/s temp change #1.713e-8 # rate random walk, rad / s^(3/2), guestimate
-        #self.INITIAL_BIAS = 0.0174533 # rad/s, from datasheet (1 deg/s)
-        self.SENSOR_SIGMA = 0.75e-7 # rad, star tracker measurement noise, guestimate
-        self.MSENSOR_SIGMA = 4e-8 # rad, magnetometer measurement noise
-        self.GSENSOR_SIGMA = 0.01 # m/s^2, magnetometer measurement noise
-
-        self.dq = np.zeros(3)
-        self.db = np.zeros(3)
-        self.P  = np.block([[np.eye(3) * self.SENSOR_SIGMA**2, np.zeros((3,3))],
-                            [np.zeros((3,3)), np.eye(3)*self.INITIAL_BIAS**2]])
-        self.q = q_initial
-        self.b = np.zeros(3)
-
-        # change in linear EKF with respect to noise
-        self.G = np.array([
-                [-1, 0, 0, 0, 0, 0],
-                [0, -1, 0, 0, 0, 0],
-                [0, 0, -1, 0, 0, 0],
-                [0, 0, 0, 1, 0, 0],
-                [0, 0, 0, 0, 1, 0],
-                [0, 0, 0, 0, 0, 1.]
-                ])
-
-        # measurement covariance
-        self.R = np.diag([*[self.MSENSOR_SIGMA**2 for i in range(3)], *[self.GSENSOR_SIGMA**2 for i in range(3)]])
-
-    def sensitivity(self, B_body, a_body):
-        H11 = vector.cross(B_body)
-        H21 = vector.cross(a_body)
-        H   = np.block([[H11, np.zeros((3,3))],
-                        [H21, np.zeros((3,3))]])
-        return H
-
-    def measurement(self, B_ref, a_ref, x_ref, v_ref):
-        '''
-        Measurement update for Kalman state.
-
-        Parameters
-        ----------
-        q_ref : numpy.ndarray
-            Attitude measurement.
-        '''
-        B_intl  = self.model.enviro.magnetic_field(x_ref, self.model.GCI_to_ECEF)
-        a_intl  = self.model.enviro.forces(x_ref, v_ref) / self.model.satellite.mass
-        B_body  = quaternion.sandwich(self.q, B_intl)
-        a_body  = quaternion.sandwich(self.q, a_intl)
-        y       = np.block([B_body, a_body])
-        y_ref   = np.block([B_ref, a_ref])
-        H       = self.sensitivity(B_body, a_body)
-        self.K  = self.P.dot(H.T).dot(np.linalg.inv(self.R + H.dot(self.P.dot(H.T))))
-        temp    = np.eye(6) - self.K.dot(H)
-        self.P  = temp.dot(self.P) # investigate the claim that the expression below is more numerically stable
-        #self.P  = temp.dot(self.P.dot(temp.T)) + self.K.dot(self.R.dot(self.K.T))
-        dx      = self.K.dot(y_ref - y)
-        self.dq = dx[:3]
-        self.db = dx[3:]
-        self.reset()
-
-    def reset(self):
-        '''
-        Reset step for Kalman state.
-        '''
-        self.q  = vector.normalize(self.q + quaternion.xi(self.q).dot(self.dq) * 0.5)
-        self.dq = np.zeros(3)
-        self.b += self.db
-        self.db = np.zeros(3)
-
-    def state_transition(self, w, dt):
-        '''
-        Calculates state transition matrices for discrete propagation of attitude and covariance.
-
-        Parameters
-        ----------
-        w : numpy.ndarray
-            Angular velocity estimate from gyroscopes.
-        dt : float
-            Time (s) to step forward by.
-
-        Returns
-        -------
-        numpy.ndarray
-            Process noise covariance.
-        numpy.ndarray
-            Covariance propagation matrix.
-        numpy.ndarray
-            Attitude state transition matrix.
-        '''
-        Q11 = self.GYRO_VAR * dt + 0.3333333 * self.DRIFT_VAR * dt**3
-        Q12 = - 0.5 * self.DRIFT_VAR * dt**2
-        Q22 = self.DRIFT_VAR * dt
-        # untuned process noise model, assuming variance is independent
-        Q   = np.array([
-                [Q11, 0, 0, Q12, 0, 0],
-                [0, Q11, 0, 0, Q12, 0],
-                [0, 0, Q11, 0, 0, Q12],
-                [Q12, 0, 0, Q22, 0, 0],
-                [0, Q12, 0, 0, Q22, 0],
-                [0, 0, Q12, 0, 0, Q22]
-                ])
-
-        w_X      = vector.cross(w)
-        w_X2     = w_X.dot(w_X)
-        norm_w   = np.linalg.norm(w)
-        w_square = norm_w**2
-        w_cube   = norm_w**3
-        s        = np.sin(norm_w * dt)
-        c        = np.cos(norm_w * dt)
-
-        if w_square != 0:
-            phi_11 = np.eye(3) - s / norm_w * w_X + (1 - c) / w_square * w_X2
-            if w_cube != 0:
-                phi_12 = -np.eye(3) * dt + (1 - c) / w_square * w_X - (norm_w * dt - s) / w_cube * w_X2
-            else:
-                phi_12 = -np.eye(3) * dt + (1 - c) / w_square * w_X
-        else:
-            if norm_w != 0:
-                phi_11 = np.eye(3) - s / norm_w * w_X
-            else:
-                phi_11 = np.eye(3)
-            phi_12 = -np.eye(3) * dt
-
-        phi      = np.block([
-                    [phi_11, phi_12],
-                    [np.zeros((3,3)), np.eye(3)]
-                    ])
-
-        s        = np.sin(norm_w * dt * 0.5)
-        c        = np.cos(norm_w * dt * 0.5)
-
-        if norm_w != 0:
-            psi = s / norm_w * w
-        else:
-            psi = np.zeros(3)
-
-        omegaleft  = np.array([[c, *psi]]).T
-        omegaright = np.block([[-psi],
-                                [np.eye(3) - vector.cross(psi)]])
-        omega      = np.block([omegaleft, omegaright])
-
-        return Q, phi, omega
-
-    def propagate(self, w_sensor, dt):
-        '''
-        A priori estimate of state.
-
-        Parameters
-        ----------
-        w_sensor : numpy.ndarray
-            Angular velocity measurements, straight from gyroscopes.
-        dt : float
-            Length of time to step forward by.
-        '''
-        w             = w_sensor - self.b
-        Q, phi, omega = self.state_transition(w, dt)
-        GQG_T         = self.G.dot(Q.dot(self.G.T))
-        self.P        = phi.dot(self.P.dot(phi.T)) + GQG_T
-        self.q        = omega.dot(self.q)
-
-    def output(self):
-        '''
-        Kalman state estimate.
-
-        Returns
-        -------
-        numpy.ndarray
-            Attitude estimate.
-        numpy.ndarray
-            Gyro bias estimate.
-        '''
-        return self.q, self.b
 
 class DiscreteAttitudeStartrackerKalman():
     '''
@@ -216,23 +23,17 @@ class DiscreteAttitudeStartrackerKalman():
         #self.DRIFT_SIGMA  = 1.9391e-5 # rad/s^2, assuming 200 C/s temp change #1.713e-8 # rate random walk, rad / s^(3/2), guestimate
         #self.INITIAL_BIAS = 0.0174533 # rad/s, from datasheet (1 deg/s)
         self.SENSOR_SIGMA = 0.75e-7 # rad, star tracker measurement noise, guestimate
+        #self.MSENSOR_SIGMA = 4e-8 # rad, magnetometer measurement noise
 
         self.dq = np.zeros(3)
         self.db = np.zeros(3)
-        self.P  = np.block([[np.eye(3) * self.SENSOR_SIGMA**2, np.zeros((3,3))],
-                            [np.zeros((3,3)), np.eye(3)*self.INITIAL_BIAS**2]])
+        self.P  = np.diag([self.SENSOR_SIGMA**2, self.SENSOR_SIGMA**2, self.SENSOR_SIGMA**2,
+                            self.INITIAL_BIAS**2, self.INITIAL_BIAS**2, self.INITIAL_BIAS**2])
         self.q = q_initial
         self.b = np.zeros(3)
 
         # change in linear EKF with respect to noise
-        self.G = np.array([
-                [-1, 0, 0, 0, 0, 0],
-                [0, -1, 0, 0, 0, 0],
-                [0, 0, -1, 0, 0, 0],
-                [0, 0, 0, 1, 0, 0],
-                [0, 0, 0, 0, 1, 0],
-                [0, 0, 0, 0, 0, 1.]
-                ])
+        self.G = np.diag([-1, -1, -1, 1, 1, 1])
 
         # measurement covariance
         self.R = np.diag([self.SENSOR_SIGMA**2 for i in range(3)])
@@ -288,14 +89,8 @@ class DiscreteAttitudeStartrackerKalman():
         Q12 = - 0.5 * self.DRIFT_VAR * dt**2
         Q22 = self.DRIFT_VAR * dt
         # untuned process noise model, assuming variance is independent
-        Q   = np.array([
-                [Q11, 0, 0, Q12, 0, 0],
-                [0, Q11, 0, 0, Q12, 0],
-                [0, 0, Q11, 0, 0, Q12],
-                [Q12, 0, 0, Q22, 0, 0],
-                [0, Q12, 0, 0, Q22, 0],
-                [0, 0, Q12, 0, 0, Q22]
-                ])
+        Q   = np.block([[Q11 * np.eye(3), Q12 * np.eye(3)],
+                        [Q12 * np.eye(3), Q22 * np.eye(3)]])
 
         w_X      = vector.cross(w)
         w_X2     = w_X.dot(w_X)
@@ -579,82 +374,6 @@ class KalmanFilters():
         '''
         self.PosFilter.update(*sensor_data[:2])
         self.AttFilter.measurement(sensor_data[2])
-
-    def propagate(self, duration):
-        '''
-        A priori estimate of state.
-
-        Parameters
-        ----------
-        duration : float
-            Length of time to propagate filters forward by.
-        '''
-        t = self.gyro_dt
-        w = self.last_w # when this is asynch, this will be an actual gyro reading
-        while t < duration or abs(t - duration) < 0.001:
-            self.AttFilter.propagate(w, self.gyro_dt)
-            t += self.gyro_dt
-        t = self.gps_dt
-        while t < duration or abs(t - duration) < 0.001:
-            self.PosFilter.propagate(self.gps_dt)
-            self.PosFilter.model.clock.tick(self.gps_dt)
-            self.PosFilter.model.update_transformation_matrices()
-            t += self.gps_dt
-
-class OtherKalmanFilters():
-    '''
-    Wraps the two Kalman filters into one object.
-    This probably isn't the best way to do this, but come back to that later.
-
-    Parameters
-    ----------
-    gyro_step_size : float
-        Time step for attitude propagation.
-    gps_step_size : float
-        Time step for position propagation.
-    truth_model : dynamic.DynamicalSystem
-        Source of measurements. Eventually this will be replaced by actual sensors.
-    '''
-    def __init__(self, gyro_step_size, gps_step_size, truth_model):
-        self.truth_model = truth_model
-        init_state = self.truth_model.measurement(noisy=True)
-        x_init, v_init, q_init = init_state[:3]
-        self.gyro_dt = gyro_step_size
-        self.gps_dt  = gps_step_size
-        self.PosFilter = DiscretePositionKalman(x_init, v_init, truth_model.init_date)
-        self.AttFilter = DiscreteAttitudeMagGravKalman(q_init, self.PosFilter.model)
-
-    def output(self):
-        '''
-        Kalman state estimate.
-
-        Returns
-        -------
-        numpy.ndarray
-            Array of arrays for estimated state, in usual order.
-        '''
-        state = self.truth_model.measurement(noisy=True)
-        x, v  = self.PosFilter.output()
-        q, b  = self.AttFilter.output()
-        state[0] = x
-        state[1] = v
-        state[2] = q
-        state[3] -= b
-        self.last_w = state[3]
-        #state = self.truth_model.measurement(noisy=False) # for when I want to test with perfect info
-        return state
-
-    def update(self, sensor_data):
-        '''
-        Measurement update for filters. Perhaps these should be detangled.
-
-        Parameters
-        ----------
-        sensor_data : numpy.ndarray
-            Array of arrays for measured state, in usual order.
-        '''
-        self.PosFilter.update(*sensor_data[:2])
-        self.AttFilter.measurement(sensor_data[5], sensor_data[7], self.PosFilter.x[:3], self.PosFilter.x[3:])
 
     def propagate(self, duration):
         '''

@@ -8,31 +8,13 @@ class SimulatorDaemonInterface():
     '''
     def __init__(self):
         # dynamic model initial conditions
-        #x_0   = np.array([5.581498e6, -3.881737e6, 1.421855e4])
-        #v_0   = np.array([2.708896e3, 3.914674e3, 5.994012e3])
-
-        # use me
-        #x_0   = np.array([-9.468352e+05,  5.007523e+06 , 4.487994e+06])
-        #v_0   = np.array([-6765.933175 , 1600.723099, -3222.908767])
-
-        #for sims
-        x_0   = np.array([4188575.23914983, 1898544.19869247, 5005756.47235861])
-        v_0   = np.array([-4930.37067826,  5492.16527442,  2029.68470064])
-        q_0 = np.array([-0.96652624, -0.02757916, -0.11710916, -0.22660949])
-        w_0 = np.array([-0.00745643, -0.0010338, 0.02880649])
-
-        #q_0   = vector.normalize(np.array([np.sqrt(2)/2, np.sqrt(2)/2, 0, 0]))
-        #q_0   = vector.normalize([.25, 0.7, 0.2, 0.2])
-        #q_0 = quaternion.product(np.array([np.cos(np.pi/2.5), 0, np.sin(np.pi/2.5), 0]), np.array([np.cos(np.pi/8.5), np.sin(np.pi/8.5), 0, 0]))
-        #q_0   = np.array([1, 0,0 ,0])
-        print('init q:', q_0)
-        #w_0   = np.array([0.08726646, 0.08726646, 0.08726646]) # 5 degrees/s / axis. worst case
-        #w_0 = np.array([0.0005, 0.0005, 0.0075]) * 2
-        #w_0 = np.zeros(3)
+        x_0   = np.array([5.581498e6, -3.881737e6, 1.421855e4])
+        v_0   = np.array([2.708896e3, 3.914674e3, 5.994012e3])
+        q_0   = np.array([1, 0,0 ,0])
+        w_0   = np.array([0.08726646, 0.08726646, 0.08726646]) # 5 degrees/s / axis. worst case
         whl_0 = np.array([300, -300, -300, 300]) * 0
         t_0   = (2020, 9, 1, 0, 0, 0)
         dt    = 0.05 # perhaps we want to choose this upstream?
-        noisy = False
 
         self.model        = dynamic.DynamicalSystem(x_0, v_0, q_0, w_0, whl_0, t_0)
         self.integrator   = dynamic.Integrator(self.model, dt)

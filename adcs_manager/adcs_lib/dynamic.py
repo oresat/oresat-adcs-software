@@ -36,8 +36,7 @@ class DynamicalSystem():
                             sensor.Gyro(arw_mean=0, arw_std_dev=2.79e-4, rrw_mean=0, rrw_std_dev=8.73e-7, init_bias=3.15e-5, model=self),
                             sensor.Wheel_vel(mean=0, std_dev=0.0001, model=self),
                             sensor.Magnetometer(mean=0, std_dev=4e-8, model=self), # from datasheet
-                            sensor.SunSensor(mean=0, std_dev=1e-6, model=self),
-                            sensor.Accelerometer(mean=0, std_dev=0.01, model=self)
+                            sensor.SunSensor(mean=0, std_dev=1e-6, model=self)
                             ]
 
     def update_transformation_matrices(self):
@@ -75,7 +74,7 @@ class DynamicalSystem():
         numpy.ndarray
             Array of arrays for derivatives of state variables.
         '''
-        #attitude     = vector.normalize(attitude) # we do this for the intermediate RK4 steps
+        #attitude     = vector.normalize(attitude) # we could do this for the intermediate RK4 steps, probably not necessary
         mag_moment   = self.satellite.magnetorquers.actuate(cur_cmd)
         F_env, T_env = self.enviro.env_F_and_T(position, lin_vel, attitude, self.clock, self.GCI_to_ECEF, mag_moment)
         T_whl        = self.satellite.reaction_wheels.torque(whl_accl)

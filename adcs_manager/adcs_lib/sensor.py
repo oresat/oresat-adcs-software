@@ -78,38 +78,6 @@ class Magnetometer(Sensor):
         B_body = quaternion.sandwich(self.model.state[2], B)
         return B_body
 
-class Accelerometer(Sensor):
-    '''
-    Model of accelerometer.
-
-    Parameters
-    ----------
-    mean : float
-        Mean value of noise (generally 0).
-    std_dev : float
-        Standard deviation of noise.
-    model : dynamic.DynamicalSystem
-        Truth model of satellite.
-    '''
-    def true_value(self):
-        '''
-        Actual value of magnetic field in body-coordinates.
-
-        Returns
-        -------
-        numpy.ndarray
-            Actual value of magnetic field in body-coordinates.
-        '''
-        a_intl = self.model.enviro.env_F_and_T(self.model.state[0],
-                                                self.model.state[1],
-                                                self.model.state[2],
-                                                self.model.clock,
-                                                self.model.GCI_to_ECEF,
-                                                np.zeros(3))[0] / self.model.satellite.mass
-        a_intl -= self.model.enviro.gravity(self.model.state[0], np.linalg.norm(self.model.state[0]), self.model.state[2])[0]
-        a_body = quaternion.sandwich(self.model.state[2], a_intl)
-        return a_body
-
 class SunSensor(Sensor):
     '''
     Model of sun sensors. More for convenience, the satellite won't have sun sensors.

@@ -1,5 +1,6 @@
 import numpy as np
 from adcs_lib import vector
+import math
 
 '''These functions are for transformations between coordinate systems'''
 
@@ -74,108 +75,6 @@ def geodetic_to_ECEF(lat, long, h):
     y = temp * np.sin(long)
     z = (N*(1 - e**2) + h) * np.sin(lat)
     return np.array([x, y, z])
-
-def ECEF_to_geodetic(r):
-    '''Transformation from ECEF geocentric coordinates to WGS-84 geodetic coordinates.
-    Paper referenced on page 35 of Markely & Crassidis claimed this was non-singular and numerically stable.
-    However, it divides by zero and I'm not sure why.
-
-    Parameters
-    ----------
-    r : numpy.ndarray
-        Position of satellite in ECEF frame.
-
-    Returns
-    -------
-    numpy.ndarray
-        Latitude, longitude, and vertical distance above geode along surface normal.
-    '''
-
-    a = 6378137.0 # m, semimajor axis
-    b = 6356752.3142 # m, semiminor axis
-    x = r[0]
-    y = r[1]
-    z = r[2]
-
-    def geo_rho(x, y):
-     return np.linalg.norm(np.array([x, y]))
-
-    def geo_e_squared(a, b):
-     return 1 - (b**2/a**2)
-
-    def geo_eps_squared(a, b):
-     return (a**2/b**2) - 1
-
-    def geo_p(z, eps2):
-     return abs(z) / eps2
-
-    def geo_s(rho, e2, eps2):
-     return rho**2 / (e2*eps2)
-
-    def geo_q(p, b, s):
-     return p**2 - b**2 + s
-
-    def geo_u(p, q):
-     return p / np.sqrt(q)
-
-    def geo_v(b, u, q):
-     return (b**2 * u**2) / q
-
-    def geo_P(v, s, q):
-     return 27*v*s/q
-
-    def geo_Q(P):
-     return (np.sqrt(P+1) + np.sqrt(P))**(2/3)
-
-    def geo_t(Q):
-     return (1 + Q + 1/Q)/6
-
-    def geo_c(u, t):
-     return np.sqrt(u**2 - 1 + 2*t)
-
-    def geo_w(c, u):
-     return (c - u)/2
-
-    def geo_d(z, q, u, v, w, t):
-     return np.sign(z)*np.sqrt(q)*(w + np.sqrt(np.sqrt(t**2 + v) - u * w - t*0.5 - 0.25))
-
-    def geo_N(a, eps2, d, b):
-     return a * np.sqrt(1+ eps2*(d**2/b**2))
-
-    # latitude
-    def geo_lam(eps2, d, N):
-     return np.arcsin((eps2 + 1)*d/N)
-
-    # height
-    def geo_h(rho, z, a, N, lam): # height above geode
-     return rho*np.cos(lam) + z*np.sin(lam) - a**2 / N
-
-    # longitude
-    def geo_phi(x, y):
-     return np.arctan2(y, x)
-
-    e2 = geo_e_squared(a, b)
-    eps2 = geo_eps_squared(a, b)
-    rho = geo_rho(x, y)
-    p = geo_p(z, eps2)
-    s = geo_s(rho, e2, eps2)
-    q = geo_q(p, b, s)
-    u = geo_u(p, q)
-    v = geo_v(b, u, q)
-    P = geo_P(v, s, q)
-    Q = geo_Q(P)
-    t = geo_t(Q)
-    c = geo_c(u, t)
-    w = geo_w(c, u)
-    d = geo_d(z, q, u, v, w, t)
-    N = geo_N(a, eps2, d, b)
-
-    lam = geo_lam(eps2, d, N)
-    h = geo_h(rho, z, a, N, lam)
-    phi = geo_phi(x, y)
-    return np.array([lam, phi, h]) # lat, long, height
-
-import math
 
 # WGS-84 ellipsoid parameters
 a = 6378137

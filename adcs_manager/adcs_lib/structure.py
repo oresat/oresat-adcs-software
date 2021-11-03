@@ -53,35 +53,6 @@ class SensitiveInstrument():
     def cares_about(self, i, psi):
         return i in self.obj_ids and psi < self.sigma[i]
 
-    def quadratic_form(self, object):
-        '''
-        Provides a non-degenerate symmetric bilinear form for weighing attitudes by how close they are to violating sensor constraints.
-        Refer to Lee & Mesbahi 2014 or Hu, Chi, & Akella 2018 for mathematical details.
-        The sun's inertial position changes slowly, so we probably can get away with calling this infrequently.
-        Perhaps it'd be appropriate to store the quadratic form as a field in this class.
-
-        Parameters
-        ----------
-        object : numpy.ndarray
-            3d array indicating direction of external object from Earth-centered inertial frame.
-
-        Returns
-        -------
-        numpy.ndarray
-            4x4 symmetric matrix which takes two (of the same) quaternions and produces a number between -2 and 2.
-        '''
-        y       = self.boresight
-        dotprod = np.dot(object, y)
-        a       = dotprod - self.cos_psi[0]
-        b       = np.cross(y, object)
-        #C       = np.outer(y, object) - self.term * np.eye(3)
-        #C       = np.outer(object, y) + np.outer(y, object) - np.eye(3) * (dotprod + self.term)
-        C       = 2 * np.outer(y, object) - np.eye(3) * (dotprod + self.cos_psi[0])
-        top     = np.block([a, *b])
-        bot     = np.block([np.array([[b[0]], [b[1]], [b[2]]]), C])
-
-        return np.block([[top], [bot]])
-
 class Magnetorquer():
     '''
     Represents one magnetorquer of either type. Uses latest data given by the Torqueducks.
@@ -210,7 +181,6 @@ class MagnetorquerSystem():
         '''
         if abs(m[2]) > self.torquers[2].max_m:
             m = m * self.torquers[2].max_m / abs(m[2])
-            #print('saturated')
 
         m     = vector.saturation(m, self.torquers[0].max_m)
 

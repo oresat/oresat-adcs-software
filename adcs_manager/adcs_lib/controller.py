@@ -305,10 +305,8 @@ class ReactionWheelsController:
         '''
 
         direction    = vector.pointing_vector(position, target) # pointing vector in inertial frame
-        #boresight_I  = quaternion.sandwich_opp(attitude, boresight) # expression of camera direction in inertial frame
         direction_B = quaternion.sandwich(attitude, direction)
         r, theta     = vector.R_axis_angle(boresight, direction_B) # transform from inertial frame to desired orientation
-        #print(theta)
         return quaternion.axisangle_to_quat(r, theta) # active rotation that takes cam to direction in fixed inertial frame
 
     def point_and_stare(self, state, mission_data):
@@ -332,13 +330,13 @@ class ReactionWheelsController:
         attitude           = state[2]
         boresight          = mission_data[1]
         target_point       = mission_data[2]
-        #w_ref              = mission_data[3]
-        #w_ref = np.array([2*np.pi/5560, 0, 0])
+
         h = position - target_point
-        w_ref_intl = np.cross(h, state[1]) / np.dot(h, h)
+        w_ref_intl = np.cross(h, state[1]) / np.dot(h, h) # match angular velocity to track passively, probably not worth taking derivative
         w_ref = quaternion.sandwich(attitude, w_ref_intl)
         #w_ref = np.array([np.linalg.norm(w_ref_intl), 0, 0])
-        #w_ref = np.zeros(3)
+        #w_ref = np.array([2*np.pi/5560, 0, 0]) # approx. match angular velocity to track passively
+        #w_ref = np.zeros(3) # this is a safe alternative
 
         commanded_rotation = self.acquire_target(position, attitude, boresight, target_point)
         q_cmd              = quaternion.product(attitude, commanded_rotation)
@@ -347,7 +345,7 @@ class ReactionWheelsController:
 
         return accl_cmds
 
-    def tracking(self, state, mission_data):
+    def tracking(self, state, desired_state):
         '''
         Generalized tracking control. Reduces to a regulator when rate_cmd = 0.
         For the mathematical details of a hybrid control system, refer to Mayhew, Sanfelice, Teel 2011 "Quaternion-Based Hybrid Control for Robust Global Attitude Tracking".
@@ -356,8 +354,8 @@ class ReactionWheelsController:
         ----------
         state : numpy.ndarray
             Array full of arrays for state variables and measurements in their usual ordering.
-        cmd_data : numpy.ndarray
-            First slot for rate commands, second for attitude commands.
+        desired_state : numpy.ndarray
+            First slot for rate commands, second for derivative of rate commands, third for attitude commands.
 
         Returns
         -------
@@ -366,9 +364,9 @@ class ReactionWheelsController:
         '''
         position, velocity, attitude, angular_vel, wheel_vel = state[:5]
         objects            = [obj(state) for obj in self.objects]
-        rate_cmd           = mission_data[0]
-        rate_cmd_dot       = mission_data[1]
-        q_cmd              = mission_data[2]
+        rate_cmd           = desired_state[0]
+        rate_cmd_dot       = desired_state[1]
+        q_cmd              = desired_state[2]
 
         h_w                = self.satellite.reaction_wheels.momentum(wheel_vel)
         attitude_error     = quaternion.error_quat(attitude, q_cmd)
@@ -377,23 +375,22 @@ class ReactionWheelsController:
         del_H              = self.MoI.dot(rate_error)
 
         gyro_term          = np.cross(angular_vel, self.MoI.dot(angular_vel) + h_w) # this should be correct gyroscopic term
-        #gyro_term          = np.cross(angular_vel, self.MoI.dot(rate_error)) # this should be correct gyroscopic term
-        #gyro_term          = np.cross(angular_vel, self.MoI.dot(angular_vel) + h_w) # this should be an acceptable gyroscopic term
         #gyro_term          = np.cross(angular_vel, self.MoI.dot(angular_vel)) # this should be an acceptable gyroscopic term
-        #gyro_term          = np.zeros(3)
-        feedforward_term   = - self.MoI.dot(np.cross(angular_vel, rate_cmd_B) + quaternion.sandwich(attitude_error, rate_cmd_dot))
+        #gyro_term          = np.zeros(3) # we don't really need the gyroscopic term
+
+        feedforward_terms  = - self.MoI.dot(np.cross(angular_vel, rate_cmd_B) + quaternion.sandwich(attitude_error, rate_cmd_dot))
+
         if self.obj_avoidance:
             quat_term          = self.J.dot(self.allowable_zone(q_cmd, attitude, attitude_error, rate_error, objects))
         else:
             quat_term          = -self.error_trigger.sign(attitude_error[0]) * self.alpha * self.J.dot(attitude_error[1:])
-        #quat_term          = self.J.dot(self.allowable_zone_broken(q_cmd, attitude, objects))
-        mult               = 1
-        mult               = 1 # np.dot(attitude_error[1:], attitude_error[1:])
+
+        mult               = 1 # we don't need even more non-linear controls
+        #mult               = np.dot(attitude_error[1:], attitude_error[1:]) # this was for experimenting with non-linear controls
         #mult               = 2 + attitude_error[0]**2 # this was for experimenting with non-linear controls
         rate_term          = - mult * self.gamma * del_H
-        #print(quat_term , quat_term2, rate_term )
-        #print(1 - abs(attitude_error[0]))
-        control_law        = gyro_term + quat_term + rate_term + feedforward_term #+ self.g_torque(position, attitude)
+
+        control_law        = gyro_term + quat_term + rate_term + feedforward_terms
 
         return control_law
 
@@ -414,45 +411,6 @@ class ReactionWheelsController:
         '''
         acceleration_cmds = self.reaction_wheels.accelerations(- control_law)
         return acceleration_cmds
-
-    def allowable_zone_broken(self, q_cmd, q_act, objects):
-        '''
-        Experimental control law for avoiding pointing at the sun. Seems to work ok but needs proof.
-        Following approach of Lee & Mesbahi 2014 "Feedback Control for Spacecraft Reorientation Under Attitude Constraints Via Convex Potentials".
-        It's straightforward to generalize this to multiple objects, but afaik, we only have to wory about the sun.
-        We could calculate quadratic form(s) pretty infrequently if we wanted to.
-
-        Parameters
-        ----------
-        q_cmd : numpy.ndarray
-            Commanded attitude.
-        q_act : numpy.ndarray
-            Measured attitude.
-        obj : numpy.ndarray
-            Object to avoid pointing sensitive instruments at or require pointing near.
-
-        Returns
-        -------
-        numpy.ndarray
-            Attitude term of feedback control law, still requires an angular rate term.
-        '''
-        p           = np.dot(q_cmd, q_act)
-        q_star      = quaternion.conjugate(q_act)
-        scalar_term = 0
-        vector_term = np.zeros(4)
-        for instr in self.satellite.instruments:
-            for j, obj in enumerate(objects):
-                if instr.cares_about(j,0):
-                    M            = instr.quadratic_form(obj)
-                    Mq           = M.dot(q_act)
-                    qMq          = q_act.T.dot(Mq)
-                    #print(i, np.degrees(np.arccos(np.clip(np.dot(obj, quaternion.sandwich_opp(q_act, instr.boresight)), -1, 1))), qMq)
-                    scalar_term += np.log(instr.sign[j] * 0.5 * qMq)
-                    vector_term += quaternion.product(q_star, Mq) / qMq
-
-        first_term  = -0.5 * self.error_trigger.sign(p) * scalar_term * quaternion.product(q_star, q_cmd)[1:]
-        second_term = (1 - np.abs(p)) * vector_term[1:]
-        return -self.alpha*(first_term + self.epsilon *second_term)
 
     def allowable_zone(self, q_cmd, q_act, del_q, del_omega, objects):
         '''

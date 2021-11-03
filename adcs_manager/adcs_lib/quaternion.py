@@ -181,26 +181,6 @@ def eulerangle_to_quat(RA, dec, roll):
                      c_phi * s_theta * c_psi  +  s_phi * c_theta * s_psi,
                      s_phi * c_theta * c_psi  -  c_phi * s_theta * s_psi])
 
-def quat_to_startracker(q):
-    '''Convert quaternion attitude to RA, DEC, ROLL. I haven't rigorously proved this works yet.
-    Reference http://general-tools.cosmos.esa.int/iso/manuals/HANDBOOK/gen_hb/node87.php and check later!
-
-    Parameters
-    ----------
-    q : numpy.ndarray
-        A quaternion.
-
-    Returns
-    -------
-    list
-        Floats for right ascenscion, declination, and roll.
-    '''
-    dec = np.arcsin(2 * (q[1]*q[3] - q[2]*q[0]))
-    cos_dec = np.cos(dec)
-    ra = np.arcsin(2 * (q[1]*q[2] + q[3]*q[0]) / cos_dec)
-    roll = np.arcsin(2 * (q[1]*q[0] + q[3]*q[2]) / cos_dec)
-    return [ra, dec, roll]
-
 def _quat2equatorial(q):
     """
     https://cxc.cfa.harvard.edu/mta/ASPECT/tool_doc/Quaternion/_modules/Quaternion/Quaternion.html

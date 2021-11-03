@@ -25,6 +25,66 @@ class Clock():
         self.leap_year = self.is_leap_year()
         self.leap_second = False
 
+    def is_after(self, date_time):
+        '''
+        Checks to see if it is after the input time.
+
+        Parameters
+        ----------
+        date_time : list
+            List of integers, in following order:
+            Year, Month, Day, Hour, Minute, Second
+
+        Returns
+        -------
+        bool
+            True if it is after the input time.
+        '''
+        if self.year < date_time[0]: return False
+        if self.month < date_time[1]: return False
+        if self.day < date_time[2]: return False
+        if self.hour < date_time[3]: return False
+        if self.minute < date_time[4]: return False
+        if self.second < date_time[5]: return False
+        return True
+
+    def is_minutes_away(self, date_time, minutes):
+        '''This checks to see if the provided time is in the next whenever minutes.
+
+        Parameters
+        ----------
+        date_time : list
+            List of integers, in following order:
+            Year, Month, Day, Hour, Minute, Second
+        minutes : int
+            Length of window. Must be less than 60 for defined behavior.
+
+        Returns
+        -------
+        int
+            True if the time is within the next whenever minutes.
+        '''
+        if self.is_after(date_time): return False
+        setup_time = date_time.copy()
+        if date_time[4] < minutes:
+            if date_time[3] == 0:
+                if date_time[2] == 1:
+                    if date_time[1] == 1:
+                        setup_time[0] -= 1
+                        setup_time[1] = 12
+                    else:
+                        setup_time[1] -= 1
+                    setup_time[2] = self.days_in_month(setup_time[1], self.leap_year)
+                else:
+                    setup_time[2] -= 1
+                setup_time[3] = 23
+            else:
+                setup_time[3] -= 1
+            setup_time[4] += 60 - minutes
+        else:
+            setup_time[4] -= minutes
+        return self.is_after(setup_time)
+
     def schedule_leap_second(self, year, month, day, hour, minute, second):
         '''Not implemented. Might eventually need method to set leap seconds.
 
@@ -62,6 +122,26 @@ class Clock():
         else:
             return True
 
+    def days_in_month(self, month, leap_year):
+        '''This returns the number of days in the given month.
+
+        Parameters
+        ----------
+        month : int
+            Number of month.
+        leap_year : bool
+            True if it's a leap year.
+
+        Returns
+        -------
+        int
+            Number of days in month.
+        '''
+        if month in [1, 3, 5, 7, 8, 10, 12]: return 31
+        if month in [4, 6, 9, 11]: return 30
+        if leap_year: return 29
+        return 28
+
     def tick(self, dt):
         '''This method is for advancing the clock by one time step, it is a somewhat naive implementation.
 
@@ -84,10 +164,7 @@ class Clock():
             self.hour = 0
             self.day += 1
 
-        if ((self.month in [1, 3, 5, 7, 8, 10, 12] and self.day == 32) or
-            (self.month in [4, 6, 9, 11] and self.day == 31) or
-            (self.month == 2 and ((not self.leap_year and self.day == 29) or
-                                    (self.leap_year and self.day == 30)))):
+        if self.day > self.days_in_month(self.month, self.leap_year):
             self.day = 1
             self.month += 1
 
