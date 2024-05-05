@@ -21,8 +21,8 @@ if __name__ == "__main__":
         python_requires='>=3.7',
         entry_points={
             "console_scripts": [
-                "manager = adcs_manager.main",
-                "42 = adcs_42_interface.main"
+                "manager = adcs_manager:main",
+                "42 = adcs_42_interface:main"
             ]
         }
     )
