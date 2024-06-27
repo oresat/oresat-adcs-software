@@ -4,8 +4,6 @@ import math
 
 '''These functions are for transformations between coordinate systems'''
 
-# Note that a jday.py clock object is expected for the inertial_to_ecef function
-
 def inertial_to_ecef(clock):
     '''
     Transformation from inertial frame to ECEF. Cartesian x, y, z for both.
