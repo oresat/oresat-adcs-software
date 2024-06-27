@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
-from .adcs_lib import quaternion
+from oresat_adcs.functions import quaternion
 from mpl_toolkits.mplot3d import Axes3D
 
 # this class is just for my benefit of graphing data after simulations.

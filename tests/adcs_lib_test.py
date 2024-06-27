@@ -1,5 +1,5 @@
 import numpy as np
-from adcs_manager.adcs_lib import simulator, manager
+from oresat_adcs.system import simulator, manager
 # throwaway test file
 
 if __name__ == "__main__":
