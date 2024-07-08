@@ -1,4 +1,5 @@
 import numpy as np
+from datetime import datetime, timedelta
 
 class Clock():
     '''Calculations from Fundamentals of Spacecraft Attitude Determination and Control
@@ -25,7 +26,7 @@ class Clock():
         self.leap_year = self.is_leap_year()
         self.leap_second = False
 
-    def is_after(self, date_time):
+    def is_after(self, date_time, other_datetime=None):
         '''
         Checks to see if it is after the input time.
 
@@ -34,12 +35,14 @@ class Clock():
         date_time : list
             List of integers, in following order:
             Year, Month, Day, Hour, Minute, Second
+        other_datetime : datetime object
 
         Returns
         -------
         bool
             True if it is after the input time.
         '''
+        
         if self.year < date_time[0]: return False
         if self.month < date_time[1]: return False
         if self.day < date_time[2]: return False
@@ -50,6 +53,8 @@ class Clock():
 
     def is_minutes_away(self, date_time, minutes):
         '''This checks to see if the provided time is in the next whenever minutes.
+        For example, if the time is between 14 and 15 minutes away, this function
+        will only return True if 14 or 15 is passed 
 
         Parameters
         ----------
@@ -226,3 +231,65 @@ class Clock():
         '''
         gmst = self.gmst_seconds() % 86400
         return np.radians(gmst / 240)
+
+
+
+class JClock:
+    '''Calculations from Fundamentals of Spacecraft Attitude Determination and Control
+    by Markely and Crassidis. Please pardon the magic numbers.
+    Parameters are for the Gregorian calendar date and time.
+    Parameters
+    ----------
+    year : int
+    month : int
+    day : int
+    hour : int
+    minute : int
+    second : int
+
+    Remember that datetime is immutable!
+    '''
+    def __init__(self, year, month, day, hour, minute, second):
+        self.set_datetime(year, month, day, hour, minute, second)
+        self.absolute = 0
+        # is_leap_year is probably only used for ticking the clock forward
+        # self.leap_year = self.is_leap_year()
+    
+    def __eq__(self, other):
+        return self.datetime == other.datetime
+
+    def set_datetime(self, year, month, day, hour, minute, second):
+        '''Sets the date time, good for synchronization'''
+        self.datetime = datetime(year, month, day, hour, minute, second)
+
+    def is_after(self, other_datetime):
+        '''Checks if this datetime is after the given datetime'''
+        return self.datetime > other_datetime
+
+    def minutes_away(self, other_datetime):
+        '''Returns the number of minutes away as a float'''
+        return float((other_datetime - self.datetime).total_seconds() / 60)
+
+    def is_minutes_away(self, other_datetime, minutes):
+        '''Checks if another datetime is within 1 minute of a specified number of minues away'''
+        return abs(float((other_datetime - self.datetime).total_seconds() / 60) - minutes) < 1.0
+
+    def tick(self, days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0):
+        '''Increase the datetime by some ammount'''
+        # simply add a timedelta object to the datetime object
+        self.datetime = self.datetime + timedelta(days=days, 
+                                                  seconds=seconds, 
+                                                  microseconds=microseconds, 
+                                                  milliseconds=milliseconds, 
+                                                  minutes=minutes, 
+                                                  hours=hours, 
+                                                  weeks=weeks)
+
+    def julain_date(self, hour, minute, second):
+        '''Convert the datetime object to a julian date float'''
+        # why are the arguments for the julian date so weird?
+
+        term1 = int(7/4 * (self.datetime.year + int((self.datetime.month + 9) / 12)))
+        term2 = int(275*self.datetime.month / 9)
+        term3 = (60*hour + minute + second/(60+self.leap_second)) / 1440
+        return 1721013.5 + 367*self.year + self.day - term1 + term2 + term3
