@@ -252,44 +252,60 @@ class JClock:
     def __init__(self, year, month, day, hour, minute, second):
         self.set_datetime(year, month, day, hour, minute, second)
         self.absolute = 0
+        self.ref_datetime = datetime(2000, 1, 1, 12, 0, 0)
+
         # is_leap_year is probably only used for ticking the clock forward
         # self.leap_year = self.is_leap_year()
     
+    
     def __eq__(self, other):
         return self.datetime == other.datetime
+    
+    def tick(self) -> None:
+        '''Increase the datetime by some one second'''
+        # simply add a timedelta object to the datetime object
+        self.datetime = self.datetime + timedelta(seconds=1)
 
-    def set_datetime(self, year, month, day, hour, minute, second):
+    def sync(self) -> float:
+        '''Sets the datetime to datetime.now() and returns the difference in seconds'''
+        old_datetime = self.datetime
+        self.datetime = datetime.now()
+        return (self.datetime - old_datetime).total_seconds()
+
+    def set_datetime(self, year, month, day, hour, minute, second) -> None:
         '''Sets the date time, good for synchronization'''
         self.datetime = datetime(year, month, day, hour, minute, second)
 
-    def is_after(self, other_datetime):
+    def is_after(self, other_datetime) -> bool:
         '''Checks if this datetime is after the given datetime'''
         return self.datetime > other_datetime
 
-    def minutes_away(self, other_datetime):
+    def minutes_away(self, other_datetime) -> float:
         '''Returns the number of minutes away as a float'''
         return float((other_datetime - self.datetime).total_seconds() / 60)
 
-    def is_minutes_away(self, other_datetime, minutes):
+    def is_minutes_away(self, other_datetime, minutes) -> bool:
         '''Checks if another datetime is within 1 minute of a specified number of minues away'''
         return abs(float((other_datetime - self.datetime).total_seconds() / 60) - minutes) < 1.0
 
-    def tick(self, days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0):
-        '''Increase the datetime by some ammount'''
-        # simply add a timedelta object to the datetime object
-        self.datetime = self.datetime + timedelta(days=days, 
-                                                  seconds=seconds, 
-                                                  microseconds=microseconds, 
-                                                  milliseconds=milliseconds, 
-                                                  minutes=minutes, 
-                                                  hours=hours, 
-                                                  weeks=weeks)
 
-    def julain_date(self, hour, minute, second):
-        '''Convert the datetime object to a julian date float'''
-        # why are the arguments for the julian date so weird?
+    def julian_date(self) -> float:
+        '''This method calculates the Julian date'''
+        # use the number of seconds to get the float
+        return ((self.datetime - self.ref_datetime).total_seconds())/86400 + 2451545.0
 
-        term1 = int(7/4 * (self.datetime.year + int((self.datetime.month + 9) / 12)))
-        term2 = int(275*self.datetime.month / 9)
-        term3 = (60*hour + minute + second/(60+self.leap_second)) / 1440
-        return 1721013.5 + 367*self.year + self.day - term1 + term2 + term3
+    def centuries_elapsed(self) -> float:
+        '''Determines julian centuries passed (calculated based on midnight of the day'''
+        julian_seconds = (self.datetime - self.ref_datetime).total_seconds() 
+        return (julian_seconds - 3600*self.datetime.hour - 60*self.datetime.minute - self.datetime.second)/(86400*36525)
+    
+    def gmst_seconds(self) -> float:
+        '''Greenwich Mean Sidereal time in seconds'''
+        centuries = self.centuries_elapsed()
+        gmst_zero = 24110.54841 + 8640184.812866 * centuries + 0.093104 * centuries**2 - 6.2*10**(-6) * centuries**3
+        earth_rotation = 1.002737909350795 * (3600 * (self.datetime.hour) + 60 * self.datetime.minute + self.datetime.second)
+        return gmst_zero + earth_rotation
+
+    def theta_gmst(self) -> float:
+        '''This angle is the angle between vernal equinox and Greenwich mean line (in radians)'''
+        return np.radians((self.gmst_seconds()%86400) / 240)
