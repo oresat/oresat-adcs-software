@@ -6,7 +6,7 @@
 	},
 	"ORESAT_MASS": {
 		"value": 0,
-		"unit": 1,
+		"unit": "kilograms",
 		"desc": "Mass of the sat"
 	},
 	"INCLINATION": {
@@ -29,20 +29,10 @@
 		"unit": "unknown",
 		"desc": "transferse moment of reaction wheels"
 	},
-	"LENGTH": {
-		"value": 0.1,
+	"DIMENSIONS": {
+		"value": [0.1, 0.1, 0.2],
 		"unit": "meters",
-		"desc": "Length of the satellite, wall to wall (please define axis)"
-	},
-	"WIDTH": {
-		"value": 0.1,
-		"unit": "meters",
-		"desc": "Width of the satellite, wall to wall (please define axis)"
-	},
-	"HEIGHT": {
-		"value": 0.2,
-		"unit": "meters",
-		"desc": "Height of the satellite, wall to wall (please define axis)"
+		"desc": "Dimensions of the satellite, [length, width, height]"
 	},
 	"PRINCIPAL": {
 		"value": [1.378574142e-2, 1.378854578e-2, 5.49370596e-3],

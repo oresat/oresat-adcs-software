@@ -524,8 +524,11 @@ class Satellite():
         True if reaction wheels are limited by the amount of torque they can produce.
     products_of_inertia : bool
         Unknown, based on if the instance is used for a simulation
+    rw_system : oresat_adcs.configuration.structure.ReactionWheelSystem
+        Optionally pass a custom ReactionWheelSystem instance
     '''
-    def __init__(self, dimensions, max_T, torque_limited, products_of_inertia):
+    def __init__(self, dimensions, max_T, torque_limited, products_of_inertia, reaction_wheel_system=None):
+        # The satellite should define its own dimensions and walls
         self.length         = dimensions[0]
         self.width          = dimensions[1]
         self.height         = dimensions[2]
@@ -536,16 +539,23 @@ class Satellite():
                                Wall(self.height/2, np.array([0, 0, 1]), self.width, self.length, ABSORPTION),
                                Wall(self.height/2, np.array([0, 0, -1]), self.width, self.length, ABSORPTION))
 
-        self.reaction_wheels = ReactionWheelSystem(INCLINATION, AZIMUTH, PARALLEL, ORTHOGONAL, max_T, torque_limited)
-        self.magnetorquers   = MagnetorquerSystem(linearized=True, max_A_sys=0.675)
-        self.instruments     = [SensitiveInstrument(np.array([0, 0, -1]), bounds=[15, 100], forbidden=[True, False], obj_ids=[0]),
-                                SensitiveInstrument(np.array([0, -1, 0]), bounds=[180, 180], forbidden=[False, False], obj_ids=[])
-                                ]
-
+        
         #: Estimated drag coefficient.
         self.drag_coeff      = 2 # could be anywhere from 1 - 2.5
         #: Mass of OreSat in kg
         self.mass            = ORESAT_MASS
+
+        # Reaction wheels, magnetorquers, and instruments could be passed as an argument
+        if type(reaction_wheel_system) == ReactionWheelSystem:
+            self.reaction_wheels = reaction_wheel_system
+        else:
+            self.reaction_wheels = ReactionWheelSystem(INCLINATION, AZIMUTH, PARALLEL, ORTHOGONAL, max_T, torque_limited)
+        
+
+        self.magnetorquers   = MagnetorquerSystem(linearized=True, max_A_sys=0.675)
+        self.instruments     = [SensitiveInstrument(np.array([0, 0, -1]), bounds=[15, 100], forbidden=[True, False], obj_ids=[0]),
+                                SensitiveInstrument(np.array([0, -1, 0]), bounds=[180, 180], forbidden=[False, False], obj_ids=[])
+                                ]
 
         #: Moment of inertia for the satellite except the moments of wheels about spin axes.
         self.reduced_moment  = np.diag(PRINCIPAL) + self.reaction_wheels.orthogonal_moment
@@ -553,6 +563,7 @@ class Satellite():
             self.reduced_moment += np.array([[0 if i == j else PRODUCTS[i + j - 1]
                                                 for i in range(3)]
                                             for j in range(3)])
+        
         #: Moment of inertia for reaction wheels about spin axes with respect to principal axes.
         self.wheel_moment    = self.reaction_wheels.parallel_moment
         #: Total moment of inertia of the satellite.
