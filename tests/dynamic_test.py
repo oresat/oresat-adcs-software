@@ -17,10 +17,11 @@ if __name__ == "__main__":
 
 
     # Create a satellite object
+    dimensions = np.array([0.1, 0.1, 0.2])
     max_T = 0.0005 # maximum amout of torque
     torque_limited = True # apply max_T
     products_of_inertia = True # If it is simulated, say true
-    my_satellite = structure.Satellite(max_T, torque_limited, products_of_inertia)
+    my_satellite = structure.Satellite(dimensions, max_T, torque_limited, products_of_inertia)
 
 
     # Reduced Model

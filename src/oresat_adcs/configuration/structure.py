@@ -511,12 +511,8 @@ class Satellite():
 
     Parameters
     ----------
-    length : float
-        Length (m) of walls.
-    width : float
-        Width (m) of walls.
-    height : float
-        Height (m) of walls.
+    dimensions : np.array
+        Dimension of satellite walls in meters: [length, width, height]
     principal_moments : numpy.ndarray
         Principal moments of inertia for satellite, minus reaction wheels.
     inclination : float
@@ -531,11 +527,13 @@ class Satellite():
         Maximum torque any given wheel can produce.
     torque_limited : bool
         True if reaction wheels are limited by the amount of torque they can produce.
+    products_of_inertia : bool
+        Unknown, based on if the instance is used for a simulation
     '''
-    def __init__(self, max_T, torque_limited, products_of_inertia):
-        self.length         = LENGTH
-        self.width          = WIDTH
-        self.height         = HEIGHT
+    def __init__(self, dimensions, max_T, torque_limited, products_of_inertia):
+        self.length         = dimensions[0]
+        self.width          = dimensions[1]
+        self.height         = dimensions[2]
         self.walls          = (Wall(self.length/2, np.array([1, 0, 0]), self.width, self.height, ABSORPTION),
                                Wall(self.length/2, np.array([-1, 0, 0]), self.width, self.height, ABSORPTION),
                                Wall(self.width/2, np.array([0, 1, 0]), self.length, self.height, ABSORPTION),

@@ -34,7 +34,10 @@ class DynamicalSystem():
         if type(satellite) == structure.Satellite:
             self.satellite = satellite
         else:
-            self.satellite   = structure.Satellite(max_T=0.0005, torque_limited=False, products_of_inertia=self.simulator)
+            self.satellite   = structure.Satellite(np.array([0.1, 0.1, 0.2]), 
+                                                   max_T=0.0005, 
+                                                   torque_limited=False, 
+                                                   products_of_inertia=self.simulator)
 
         self.enviro      = environment.Environment(self.satellite, hi_fi=True)
         #making up std dev as placeholders
@@ -132,7 +135,10 @@ class ReducedDynamicalSystem(DynamicalSystem):
         if type(satellite) == structure.Satellite:
             self.satellite = satellite
         else:
-            self.satellite   = structure.Satellite(max_T=0.0005, torque_limited=False, products_of_inertia=self.simulator)
+            self.satellite   = structure.Satellite(np.array([0.1, 0.1, 0.2]),
+                                                   max_T=0.0005, 
+                                                   torque_limited=False, 
+                                                   products_of_inertia=self.simulator)
 
 
         year, month, day, hour, minute, second = date_and_time
