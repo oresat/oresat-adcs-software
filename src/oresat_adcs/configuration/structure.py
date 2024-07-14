@@ -12,11 +12,6 @@ AZIMUTH     = np.pi / 4 # of reaction wheel axes from X-Y axes
 PARALLEL    = 1.64023e-6 # axial moment of reaction wheels
 ORTHOGONAL  = 1.02562e-6 # transverse moment of reaction wheels
 
-# dimensions of satellite
-LENGTH      = 0.1
-WIDTH       = 0.1
-HEIGHT      = 0.2
-
 # principal moments of inertia for satellite minus reaction wheels
 PRINCIPAL   = np.array([1.378574142e-2,
                         1.378854578e-2,
