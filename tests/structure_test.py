@@ -25,7 +25,7 @@ if __name__ == "__main__":
     my_mt_x = structure.Magnetorquer("LinearRod", np.array([1.0, 0.0, 0.0]), max_A=0.0625)
     my_mt_y = structure.Magnetorquer("Rod", np.array([0.0, 1.0, 0.0]), max_A = 0.0625)
     my_mt_z = structure.Magnetorquer("Square", np.array([0.0, 0.0, 1.0]), max_A = 0.2887)
-
+    
     print("\n\nTesting MT Functions")
     print("\nactuate functions")
     print(my_mt_x.actuate(1))
@@ -59,6 +59,22 @@ if __name__ == "__main__":
     print(my_mt_sys.actuate(np.array([1, 1, 1])))
     print("\nPower consumption")
     print(my_mt_sys.power(np.array([1, 1, 1])))
+
+
+    print("\nModifying Magnetorqer system")
+    # Throw in an extra MT just to mess with them, also try just one or two MTs
+    my_mt_sys.set_torquers([my_mt_x, my_mt_y, my_mt_z])
+    
+    #my_mt_other = structure.Magnetorquer("LinearRod", np.array([1.0, 1.0, 1.0]), max_A = 0.2887)
+    #my_mt_sys.set_torquers([my_mt_x, my_mt_y, my_mt_z, my_mt_other])
+
+    print("\nDistributing current")
+    print(my_mt_sys.distribute(np.array([1, 1, 1])))
+    print("\nActuate the magnetorquers")
+    print(my_mt_sys.actuate(np.array([1, 1, 1])))
+    print("\nPower consumption")
+    print(my_mt_sys.power(np.array([1, 1, 1])))
+
 
 
 

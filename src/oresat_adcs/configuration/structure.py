@@ -160,6 +160,17 @@ class MagnetorquerSystem():
                          Magnetorquer(type, np.array([0, 1, 0]), max_A),
                          Magnetorquer("Square", np.array([0, 0, 1]), max_A)]
 
+    def set_torquers(self, torquers):
+        ''' Explicitly set the list of all magnetorquers
+        
+        Parameters
+        ----------
+        torquers : list[oresat_adcs.configuration.structure.Magnetorquer]
+            List of magnetorquer objects
+        '''
+        self.torquers = torquers
+        pass
+
     def distribute(self, m):
         '''
         Distributes a commanded magnetic moment to commanded currents.
