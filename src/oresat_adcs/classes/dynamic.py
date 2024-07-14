@@ -22,14 +22,20 @@ class DynamicalSystem():
     date_and_time : list
         Initial date and time. (Y, M, D, h, m, s) format.
     '''
-    def __init__(self, position, lin_vel, attitude, body_ang_vel, wheel_vel, date_and_time):
+    def __init__(self, position, lin_vel, attitude, body_ang_vel, wheel_vel, date_and_time, satellite=None):
         self.simulator   = True
         self.state       = np.array([position, lin_vel, attitude, body_ang_vel, wheel_vel], dtype=object)
         self.init_date   = date_and_time
         year, month, day, hour, minute, second = date_and_time
         self.clock       = jday.Clock(year, month, day, hour, minute, second)
         self.update_transformation_matrices()
-        self.satellite   = structure.Satellite(max_T=0.0005, torque_limited=False, products_of_inertia=self.simulator)
+        
+        # Define the satellite, it should check for the correct object type
+        if type(satellite) == structure.Satellite:
+            self.satellite = satellite
+        else:
+            self.satellite   = structure.Satellite(max_T=0.0005, torque_limited=False, products_of_inertia=self.simulator)
+
         self.enviro      = environment.Environment(self.satellite, hi_fi=True)
         #making up std dev as placeholders
         self.sensors     = [sensor.GPS_pos(mean=0, std_dev=30, model=self),
@@ -118,10 +124,17 @@ class ReducedDynamicalSystem(DynamicalSystem):
     date_and_time : list
         Initial date and time. (Y, M, D, h, m, s) format.
     '''
-    def __init__(self, position, lin_vel, date_and_time):
+    def __init__(self, position, lin_vel, date_and_time, satellite=None):
         self.simulator   = False
         self.state       = np.array([position, lin_vel])
-        self.satellite   = structure.Satellite(max_T=0.0005, torque_limited=False, products_of_inertia=self.simulator)
+        
+
+        if type(satellite) == structure.Satellite:
+            self.satellite = satellite
+        else:
+            self.satellite   = structure.Satellite(max_T=0.0005, torque_limited=False, products_of_inertia=self.simulator)
+
+
         year, month, day, hour, minute, second = date_and_time
         self.clock       = jday.Clock(year, month, day, hour, minute, second)
         self.update_transformation_matrices()
