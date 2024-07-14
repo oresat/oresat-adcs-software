@@ -3,6 +3,34 @@ from ..functions import frame, quaternion, vector
 from ..configuration import structure, environment
 from . import jday, sensor
 
+class DynamicState():
+    '''This class represents the state vector values, rather than having a list of numpy values'''
+
+    def __init__(self, position, lin_vel, attitude, body_ang_vel, wheel_vel, clock):
+        '''
+        Parameters
+        ----------
+        position : numpy.ndarray
+            Initial position in ECI coordinates
+        lin_vel : numpy.ndarray
+            Initial velocity in ECI coordinates
+        attitude : numpy.ndarray
+            Initial attitude quaternion with respect to inertial frame.
+        body_ang_vel : numpy.ndarray
+            Initial angular velocity in body frame coordinates with respect to inertial frame.
+        wheel_vel : numpy.ndarray
+            Initial velocities of reaction wheels
+        clock : jday.JClock
+            Clock of the initial date and time
+        '''
+        self.position = position
+        self.lin_vel = lin_vel
+        self.attitude = attitude
+        self.body_ang_vel = body_ang_vel
+        self.wheel_vel = wheel_vel
+        self.clock = clock
+
+
 class DynamicalSystem():
     '''This class stores the state vector, Julian date, reference frame transformations,
     satellite structural model, sensor models, and environmental models. It also calculates the vector field for the states.
