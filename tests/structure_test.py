@@ -130,32 +130,37 @@ if __name__ == "__main__":
 
     # old arguments
     print("\n\nTesting satellite")
-    max_T = 0.0005 # maximum amout of torque
-    torque_limited = True # apply max_T
+    # MKS units
+    # kilograms
+    mass = (21.66*4 + 2419.56) / 1000
+    # some unit
+    absorption = 0.84
+    # dimensionless drag coefficient
+    drag = 2
+    # principal moments without reaction wheels
+    principal_moments = np.array([1.378574142e-2,
+                                  1.378854578e-2,
+                                  5.49370596e-3])
+    # products of inertia: xy, xz, yz
+    principal_products = principal_moments*0.1
+
+
     products_of_inertia = True # If it is simulated, say true
-    
+
     # new arguments
     dimensions = np.array([0.1, 0.1, 0.2])
 
     # Create the object
-    my_satellite = structure.Satellite(dimensions=dimensions,
-                                       max_T=max_T, 
-                                       torque_limited=torque_limited, 
-                                       products_of_inertia=products_of_inertia)
-
-    my_satellite = structure.Satellite(dimensions=dimensions,
-                                       max_T=max_T, 
-                                       torque_limited=torque_limited, 
-                                       products_of_inertia=products_of_inertia,
-                                       reaction_wheel_system=my_rw_system, 
-                                       magnetorquer_system=my_mt_system)
     
-    my_satellite = structure.Satellite(dimensions=dimensions,
-                                       max_T=max_T, 
-                                       torque_limited=torque_limited, 
+    my_satellite = structure.Satellite(mass=mass,
+                                       dimensions=dimensions,
+                                       absorption=absorption,
+                                       drag_coeff = drag,
+                                       principal_moments=principal_moments,
+                                       product_moments = principal_products,
                                        products_of_inertia=products_of_inertia,
-                                       reaction_wheel_system=my_rw_system, 
-                                       magnetorquer_system=my_mt_system,
+                                       rw_sys=my_rw_system, 
+                                       mt_sys=my_mt_system,
                                        sensitive_instruments=my_instruments)
 
     
