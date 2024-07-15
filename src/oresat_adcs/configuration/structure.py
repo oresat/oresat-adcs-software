@@ -92,7 +92,10 @@ class Magnetorquer():
         numpy.ndarray
             Magnetic moment induced by current (A m^2)
         '''
-        if   self.type == "Square":
+
+        # IMO, set a lambda function and then have this function call that lambda function
+
+        if self.type == "Square":
             m = self.axis * I * 1.584 # 200 * (89e-3)**2 m^2, turns times area
         elif self.type == "Rod":
             m = self.axis * (2.36 * abs(I) - 1.1 * I**2) * np.sign(I)
@@ -153,23 +156,8 @@ class MagnetorquerSystem():
     max_A_sys : float
         Maximum current (A) available for the entire system to use.
     '''
-    def __init__(self, linearized, max_A_sys):
-        type          = "LinearRod" if linearized else "Rod"
-        max_A         = max_A_sys * 0.333333
-        self.torquers = [Magnetorquer(type, np.array([1, 0, 0]), max_A),
-                         Magnetorquer(type, np.array([0, 1, 0]), max_A),
-                         Magnetorquer("Square", np.array([0, 0, 1]), max_A)]
-
-    def set_torquers(self, torquers):
-        ''' Explicitly set the list of all magnetorquers
-        
-        Parameters
-        ----------
-        torquers : list[oresat_adcs.configuration.structure.Magnetorquer]
-            List of magnetorquer objects
-        '''
+    def __init__(self, torquers):
         self.torquers = torquers
-        pass
 
     def distribute(self, m):
         '''
@@ -186,10 +174,16 @@ class MagnetorquerSystem():
         numpy.ndarray
             3d array for x, y, and z currents (A) needed to induce the magnetic moment.
         '''
-        if abs(m[2]) > self.torquers[2].max_m:
-            m = m * self.torquers[2].max_m / abs(m[2])
 
-        m     = vector.saturation(m, self.torquers[0].max_m)
+        # For some reason this did not saturate to the a maximum
+        #if abs(m[2]) > self.torquers[2].max_m:
+        #    m = m * self.torquers[2].max_m / abs(m[2])
+        #m     = vector.saturation(m, self.torquers[0].max_m)
+        
+        # scale down the vector so that no magnetorquer is saturated.
+        factor = min([torquer.max_m / m[index] for index,torquer in enumerate(self.torquers)])
+        if factor < 1:
+            m = m*factor
 
         return np.array([torquer.getCurrent(m[i]) for i, torquer in enumerate(self.torquers)])
 
@@ -242,21 +236,15 @@ class Wheel():
     index : int
         Order of reaction wheel proceeding clockwise from x-axis.
     '''
-    def __init__(self, inclination, azimuth, parallel_moment, orthogonal_moment, index):
-        self.inclination       = inclination
-        self.azimuth           = azimuth
-        self.index             = index
+    def __init__(self, axis, parallel_moment, orthogonal_moment):
+        self.axis = axis
         self.par_mom_scalar    = parallel_moment
         self.orth_mom_scalar   = orthogonal_moment
-        s_inc                  = np.sin(inclination)
-        angle                  = azimuth + index * np.pi/2
-        self.axis              = np.array([s_inc * np.cos(angle),
-                                           s_inc * np.sin(angle),
-                                           np.cos(inclination)])
 
         outer                  = np.outer(self.axis, self.axis)
         self.parallel_moment   = parallel_moment   * outer
         self.orthogonal_moment = orthogonal_moment * (np.identity(3) - outer)
+
 
     def acceleration(self, commanded_torque):
         '''
@@ -332,20 +320,25 @@ class ReactionWheelSystem():
     torque_limited : bool
         True if reaction wheels are limited by the amount of torque they can produce.
     '''
-    def __init__(self, inclination, azimuth, parallel_moment, orthogonal_moment, max_T, torque_limited):
+    def __init__(self, wheels, max_T, torque_limited):
         self.torque_limited    = torque_limited
         self.max_T             = max_T
-        self.wheels            = [Wheel(inclination, azimuth, parallel_moment, orthogonal_moment, i) for i in range(4)]
-        #: Spin axes of reaction wheels.
+
+        self.wheels = wheels
+
+        # recalculate parameters
         self.axes              = np.array([wheel.axis for wheel in self.wheels]).T
         # the pseudoinverse method minimizes L2 norm of torque/momentum vector (which is sum of individual wheels)
         # there is another method for minimizing max effort of any wheel (minimax)
         # right now we don't care, but we may later
         #: Distributes torque of whole wheel system into torque of individual wheels.
+        # the distribution should be the pseudo inverse of the axes
         self.distribution      = np.linalg.pinv(self.axes)
         self.parallel_moment   = sum([wheel.parallel_moment for wheel in self.wheels])
         self.orthogonal_moment = sum([wheel.orthogonal_moment for wheel in self.wheels])
         self.inv_par_moment    = np.linalg.inv(self.parallel_moment)
+
+
 
     def accelerations(self, commanded_torque):
         '''
@@ -538,7 +531,7 @@ class Satellite():
     rw_system : oresat_adcs.configuration.structure.ReactionWheelSystem
         Optionally pass a custom ReactionWheelSystem instance
     '''
-    def __init__(self, dimensions, max_T, torque_limited, products_of_inertia, reaction_wheel_system=None):
+    def __init__(self, dimensions, max_T, torque_limited, products_of_inertia, reaction_wheel_system=None, magnetorquer_system=None, sensitive_instruments=None):
         # The satellite should define its own dimensions and walls
         self.length         = dimensions[0]
         self.width          = dimensions[1]
@@ -556,17 +549,34 @@ class Satellite():
         #: Mass of OreSat in kg
         self.mass            = ORESAT_MASS
 
-        # Reaction wheels, magnetorquers, and instruments could be passed as an argument
+        # Define the reaction wheels
         if type(reaction_wheel_system) == ReactionWheelSystem:
             self.reaction_wheels = reaction_wheel_system
         else:
-            self.reaction_wheels = ReactionWheelSystem(INCLINATION, AZIMUTH, PARALLEL, ORTHOGONAL, max_T, torque_limited)
-        
+            rw_axes = [np.array([np.sin(INCLINATION)*np.cos(AZIMUTH+rw_index*np.pi/2),
+                                 np.sin(INCLINATION)*np.sin(AZIMUTH+rw_index*np.pi/2),
+                                 np.cos(INCLINATION)]) for rw_index in range(4)]
+            wheels  = [Wheel(rw_axes[i], PARALLEL, ORTHOGONAL) for i in range(4)]
+            self.reaction_wheels = ReactionWheelSystem(wheels, max_T, torque_limited)
 
-        self.magnetorquers   = MagnetorquerSystem(linearized=True, max_A_sys=0.675)
-        self.instruments     = [SensitiveInstrument(np.array([0, 0, -1]), bounds=[15, 100], forbidden=[True, False], obj_ids=[0]),
-                                SensitiveInstrument(np.array([0, -1, 0]), bounds=[180, 180], forbidden=[False, False], obj_ids=[])
-                                ]
+        # define the magnetorquers
+        if type(magnetorquer_system) == MagnetorquerSystem:
+            self.magnetorquers = magnetorquer_system
+        else:
+            linearized = True
+            mt_type = "LinearRod" if linearized else "Rod"
+            torquers = [Magnetorquer(mt_type, np.array([1, 0, 0]), 0.0625),
+                        Magnetorquer(mt_type, np.array([0, 1, 0]), 0.0625),
+                        Magnetorquer("Square", np.array([0, 0, 1]), 0.2887)]
+            self.magnetorquers   = MagnetorquerSystem(torquers)
+        
+        # define the sensitive instruments
+        if type(sensitive_instruments) is list and len(sensitive_instruments) > 0 and type(sensitive_instruments[0]) == SensitiveInstrument:
+            print("YAY")
+            self.instruments = sensitive_instruments
+        else:
+            self.instruments = [SensitiveInstrument(np.array([0, 0, -1]), bounds=[15, 100], forbidden=[True, False], obj_ids=[0]),
+                                SensitiveInstrument(np.array([0, -1, 0]), bounds=[180, 180], forbidden=[False, False], obj_ids=[])]
 
         #: Moment of inertia for the satellite except the moments of wheels about spin axes.
         self.reduced_moment  = np.diag(PRINCIPAL) + self.reaction_wheels.orthogonal_moment
