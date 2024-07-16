@@ -142,10 +142,8 @@ if __name__ == "__main__":
                                   1.378854578e-2,
                                   5.49370596e-3])
     # products of inertia: xy, xz, yz
-    principal_products = principal_moments*0.1
+    products_of_inertia = principal_moments*0.1
 
-
-    products_of_inertia = True # If it is simulated, say true
 
     # new arguments
     dimensions = np.array([0.1, 0.1, 0.2])
@@ -157,13 +155,12 @@ if __name__ == "__main__":
                                        absorption=absorption,
                                        drag_coeff = drag,
                                        principal_moments=principal_moments,
-                                       product_moments = principal_products,
-                                       products_of_inertia=products_of_inertia,
+                                       product_moments=products_of_inertia,
+                                       reduced=False,
                                        rw_sys=my_rw_system, 
                                        mt_sys=my_mt_system,
                                        sensitive_instruments=my_instruments)
 
-    
 
     
 
