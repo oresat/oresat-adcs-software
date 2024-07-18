@@ -49,8 +49,10 @@ class DynamicalSystem():
         Initial velocities of reaction wheels.
     date_and_time : list
         Initial date and time. (Y, M, D, h, m, s) format.
+    satellite : oresat_adcs.configruation.strucutre.Satellite
+        Satellite instance where the products of moment of inertia are NOT implemented (reduced=False) (Does this really even matter?)
     '''
-    def __init__(self, position, lin_vel, attitude, body_ang_vel, wheel_vel, date_and_time, satellite=None):
+    def __init__(self, position, lin_vel, attitude, body_ang_vel, wheel_vel, date_and_time, satellite):
         self.simulator   = True
         self.state       = np.array([position, lin_vel, attitude, body_ang_vel, wheel_vel], dtype=object)
         self.init_date   = date_and_time
@@ -59,13 +61,7 @@ class DynamicalSystem():
         self.update_transformation_matrices()
         
         # Define the satellite, it should check for the correct object type
-        if type(satellite) == structure.Satellite:
-            self.satellite = satellite
-        else:
-            self.satellite   = structure.Satellite(np.array([0.1, 0.1, 0.2]), 
-                                                   max_T=0.0005, 
-                                                   torque_limited=False, 
-                                                   products_of_inertia=self.simulator)
+        self.satellite = satellite
 
         self.enviro      = environment.Environment(self.satellite, hi_fi=True)
         #making up std dev as placeholders
@@ -154,20 +150,14 @@ class ReducedDynamicalSystem(DynamicalSystem):
         Initial velocity in ECI coordinates
     date_and_time : list
         Initial date and time. (Y, M, D, h, m, s) format.
+    satellite : oresat_adcs.configruation.strucutre.Satellite
+        Satellite instance where the products of moment of inertia are NOT implemented (reduced=False) (Does this really even matter?)
     '''
-    def __init__(self, position, lin_vel, date_and_time, satellite=None):
+    def __init__(self, position, lin_vel, date_and_time, satellite):
         self.simulator   = False
         self.state       = np.array([position, lin_vel])
-        
 
-        if type(satellite) == structure.Satellite:
-            self.satellite = satellite
-        else:
-            self.satellite   = structure.Satellite(np.array([0.1, 0.1, 0.2]),
-                                                   max_T=0.0005, 
-                                                   torque_limited=False, 
-                                                   products_of_inertia=self.simulator)
-
+        self.satellite = satellite
 
         year, month, day, hour, minute, second = date_and_time
         self.clock       = jday.Clock(year, month, day, hour, minute, second)

@@ -2,22 +2,9 @@ import numpy as np
 
 from ..functions import vector
 
-'''This module contains the physical constants and useful methods for OreSat's structure.'''
+'''This module contains classes to represent and control the physical hardware of a satellite.'''
 
-# MKS units
-ABSORPTION  = 0.84 # black anno
-ORESAT_MASS = (21.66*4 + 2419.56) / 1000
-INCLINATION = np.pi / 3 # of reaction wheel axes above XY plane
-AZIMUTH     = np.pi / 4 # of reaction wheel axes from X-Y axes
-PARALLEL    = 1.64023e-6 # axial moment of reaction wheels
-ORTHOGONAL  = 1.02562e-6 # transverse moment of reaction wheels
 
-# principal moments of inertia for satellite minus reaction wheels
-PRINCIPAL   = np.array([1.378574142e-2,
-                        1.378854578e-2,
-                        5.49370596e-3])
-# products of inertia, xy, xz, yz
-PRODUCTS    = PRINCIPAL * 0.1
 
 class SensitiveInstrument():
     '''
@@ -508,90 +495,64 @@ class Satellite():
     '''A rectangular prism satellite and its relevant material properties.
     At some point, add support for products of inertia, and parametrize magnetorquers.
 
+    Note that if you want a reduced dynamical system or reduced environment, products of inertia should be set to False
+
     Parameters
     ----------
     dimensions : np.array
         Dimension of satellite walls in meters: [length, width, height]
     principal_moments : numpy.ndarray
         Principal moments of inertia for satellite, minus reaction wheels.
-    inclination : float
-        Angle of reaction wheel axis above XY plane.
-    azimuth : float
-        Angle of reaction wheel axis from X-Y axes.
-    parallel_moment : float
-        Axial moment of reaction wheels.
-    orthogonal_moment : float
-        Transverse moment of reaction wheels.
-    max_T : float
-        Maximum torque any given wheel can produce.
-    torque_limited : bool
-        True if reaction wheels are limited by the amount of torque they can produce.
     products_of_inertia : bool
-        Unknown, based on if the instance is used for a simulation
-    rw_system : oresat_adcs.configuration.structure.ReactionWheelSystem
-        Optionally pass a custom ReactionWheelSystem instance
+        Changes the moment of inertia, set to False if you use a reduced dynamical system or reduced environement
+    reaction_wheel_system : oresat_adcs.configuration.structure.ReactionWheelSystem
+        A custom ReactionWheelSystem instance to use
+    magnetorquer_system : oresat_adcs.configuration.structure.MagnetorquerSystem
+        A custom ReactionWheelSystem instance to use
+    sensitive_instruments : list(oresat_adcs.configuraiton.structure.SensitiveInstrument)
+        A list of sensitive instrument instances
     '''
-    def __init__(self, dimensions, max_T, torque_limited, products_of_inertia, reaction_wheel_system=None, magnetorquer_system=None, sensitive_instruments=None):
+    def __init__(self, mass, dimensions, absorption, drag_coeff, principal_moments, product_moments, reduced, rw_sys, mt_sys, sensitive_instruments=[]):
+        
         # The satellite should define its own dimensions and walls
         self.length         = dimensions[0]
         self.width          = dimensions[1]
         self.height         = dimensions[2]
-        self.walls          = (Wall(self.length/2, np.array([1, 0, 0]), self.width, self.height, ABSORPTION),
-                               Wall(self.length/2, np.array([-1, 0, 0]), self.width, self.height, ABSORPTION),
-                               Wall(self.width/2, np.array([0, 1, 0]), self.length, self.height, ABSORPTION),
-                               Wall(self.width/2, np.array([0, -1, 0]), self.length, self.height, ABSORPTION),
-                               Wall(self.height/2, np.array([0, 0, 1]), self.width, self.length, ABSORPTION),
-                               Wall(self.height/2, np.array([0, 0, -1]), self.width, self.length, ABSORPTION))
+        self.walls          = (Wall(self.length/2, np.array([1, 0, 0]), self.width, self.height, absorption),
+                               Wall(self.length/2, np.array([-1, 0, 0]), self.width, self.height, absorption),
+                               Wall(self.width/2, np.array([0, 1, 0]), self.length, self.height, absorption),
+                               Wall(self.width/2, np.array([0, -1, 0]), self.length, self.height, absorption),
+                               Wall(self.height/2, np.array([0, 0, 1]), self.width, self.length, absorption),
+                               Wall(self.height/2, np.array([0, 0, -1]), self.width, self.length, absorption))
 
         
         #: Estimated drag coefficient.
-        self.drag_coeff      = 2 # could be anywhere from 1 - 2.5
-        #: Mass of OreSat in kg
-        self.mass            = ORESAT_MASS
+        self.drag_coeff      = drag_coeff
+        self.mass            = mass
+
 
         # Define the reaction wheels
-        if type(reaction_wheel_system) == ReactionWheelSystem:
-            self.reaction_wheels = reaction_wheel_system
-        else:
-            rw_axes = [np.array([np.sin(INCLINATION)*np.cos(AZIMUTH+rw_index*np.pi/2),
-                                 np.sin(INCLINATION)*np.sin(AZIMUTH+rw_index*np.pi/2),
-                                 np.cos(INCLINATION)]) for rw_index in range(4)]
-            wheels  = [Wheel(rw_axes[i], PARALLEL, ORTHOGONAL) for i in range(4)]
-            self.reaction_wheels = ReactionWheelSystem(wheels, max_T, torque_limited)
-
+        self.reaction_wheels = rw_sys
         # define the magnetorquers
-        if type(magnetorquer_system) == MagnetorquerSystem:
-            self.magnetorquers = magnetorquer_system
-        else:
-            linearized = True
-            mt_type = "LinearRod" if linearized else "Rod"
-            torquers = [Magnetorquer(mt_type, np.array([1, 0, 0]), 0.0625),
-                        Magnetorquer(mt_type, np.array([0, 1, 0]), 0.0625),
-                        Magnetorquer("Square", np.array([0, 0, 1]), 0.2887)]
-            self.magnetorquers   = MagnetorquerSystem(torquers)
-        
+        self.magnetorquers = mt_sys
         # define the sensitive instruments
-        if type(sensitive_instruments) is list and len(sensitive_instruments) > 0 and type(sensitive_instruments[0]) == SensitiveInstrument:
-            print("YAY")
-            self.instruments = sensitive_instruments
-        else:
-            self.instruments = [SensitiveInstrument(np.array([0, 0, -1]), bounds=[15, 100], forbidden=[True, False], obj_ids=[0]),
-                                SensitiveInstrument(np.array([0, -1, 0]), bounds=[180, 180], forbidden=[False, False], obj_ids=[])]
-
-        #: Moment of inertia for the satellite except the moments of wheels about spin axes.
-        self.reduced_moment  = np.diag(PRINCIPAL) + self.reaction_wheels.orthogonal_moment
-        if products_of_inertia:
-            self.reduced_moment += np.array([[0 if i == j else PRODUCTS[i + j - 1]
-                                                for i in range(3)]
-                                            for j in range(3)])
+        self.instruments = sensitive_instruments
         
         #: Moment of inertia for reaction wheels about spin axes with respect to principal axes.
         self.wheel_moment    = self.reaction_wheels.parallel_moment
+
+        #: Moment of inertia for the satellite except the moments of wheels about spin axes.
+        self.reduced_moment  = np.diag(principal_moments) + self.reaction_wheels.orthogonal_moment
+        # If the model is reduced, the following can be skipped
+        if reduced:
+            self.reduced_moment += np.array([[0 if i == j else product_moments[i + j - 1] for i in range(3)] for j in range(3)])
+
         #: Total moment of inertia of the satellite.
         self.total_moment    = self.reduced_moment + self.wheel_moment
         #: Inverse of the moment of inertia for the satellite except the moments of wheels about spin axes.
         self.inv_red_moment  = np.linalg.inv(self.reduced_moment)
         self.inv_tot_moment  = np.linalg.inv(self.total_moment)
+
 
     def area_and_cop(self, v_ref):
         '''Projected surface area and center of pressure for whole satellite.
