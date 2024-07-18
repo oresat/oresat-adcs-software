@@ -7,7 +7,7 @@ class SimulatorDaemonInterface():
     The end user has the option to input control commands and propagate internal state for a duration,
     and also the option to get noisy sensor readings from the simulated environment.
     '''
-    def __init__(self):
+    def __init__(self, satellite):
         # dynamic model initial conditions
         x_0   = np.array([5.581498e6, -3.881737e6, 1.421855e4])
         v_0   = np.array([2.708896e3, 3.914674e3, 5.994012e3])
@@ -17,7 +17,7 @@ class SimulatorDaemonInterface():
         t_0   = (2020, 9, 1, 0, 0, 0)
         dt    = 0.05 # perhaps we want to choose this upstream?
 
-        self.model        = dynamic.DynamicalSystem(x_0, v_0, q_0, w_0, whl_0, t_0)
+        self.model        = dynamic.DynamicalSystem(x_0, v_0, q_0, w_0, whl_0, t_0, satellite)
         self.integrator   = dynamic.Integrator(self.model, dt)
 
     def input(self, duration, zero_order_hold):

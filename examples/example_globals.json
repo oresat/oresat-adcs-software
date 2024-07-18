@@ -1,0 +1,42 @@
+{
+	"ABSORPTION": {
+		"value": 0.84,
+		"unit": "unknown",
+		"desc": "Black anno"
+	},
+	"ORESAT_MASS": {
+		"value": 0,
+		"unit": "kilograms",
+		"desc": "Mass of the sat"
+	},
+	"INCLINATION": {
+		"value": 1.0471975511965976,
+		"unit": "radians",
+		"desc": "Reaction Wheel axis above the XY Plane, this should be in a RW config, equal to np.pi / 3"
+	},
+	"AZIMUTH": {
+		"value": 0.7853981633974483,
+		"unit": "radians",
+		"desc": "reaction wheel axis from the x-y axes"
+	},
+	"PARALLEL": {
+		"value": 1.64023e-6,
+		"unit": "unknown",
+		"desc": "axial moment of reaction wheels"
+	},
+	"ORTHOGONAL": {
+		"value": 1.02562e-6,
+		"unit": "unknown",
+		"desc": "transferse moment of reaction wheels"
+	},
+	"DIMENSIONS": {
+		"value": [0.1, 0.1, 0.2],
+		"unit": "meters",
+		"desc": "Dimensions of the satellite, [length, width, height]"
+	},
+	"PRINCIPAL": {
+		"value": [1.378574142e-2, 1.378854578e-2, 5.49370596e-3],
+		"unit": "unknown",
+		"desc": "Principal moment of inertia for without reaction wheels"
+	}
+}

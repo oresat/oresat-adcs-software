@@ -43,23 +43,23 @@ class Magnetorquer():
 
     Parameters
     ----------
-    type : string
+    mt_type : string
         "Square", "Rod", or "LinearRod", depending on which type we are modeling.
     axis : numpy.ndarray
         3d array of dipole direction (for positive current) in body-coordinates.
     max_A : float
         Maximum current (A) that this magnetorquer is allowed to use.
     '''
-    def __init__(self, type, axis, max_A):
-        self.type  = type
+    def __init__(self, mt_type, axis, max_A):
+        self.mt_type  = mt_type
         self.max_A = max_A
         self.axis  = axis
          # R is resistance in Ohms.
-        if   type == "Square":
+        if mt_type == "Square":
             self.R = 14.9
-        elif type == "Rod":
+        elif mt_type == "Rod":
             self.R = 6.28
-        elif type == "LinearRod":
+        elif mt_type == "LinearRod":
             self.R = 6.28
 
         # maximum magnetic moment that can be induced
@@ -82,11 +82,11 @@ class Magnetorquer():
 
         # IMO, set a lambda function and then have this function call that lambda function
 
-        if self.type == "Square":
+        if self.mt_type == "Square":
             m = self.axis * I * 1.584 # 200 * (89e-3)**2 m^2, turns times area
-        elif self.type == "Rod":
+        elif self.mt_type == "Rod":
             m = self.axis * (2.36 * abs(I) - 1.1 * I**2) * np.sign(I)
-        elif self.type == "LinearRod":
+        elif self.mt_type == "LinearRod":
             m = self.axis * (1.87 * I)
 
         return m
@@ -105,11 +105,11 @@ class Magnetorquer():
         float
             Current (A) required to induce commanded magnetic moment.
         '''
-        if   self.type == "Square":
+        if   self.mt_type == "Square":
             I = m * 0.631313
-        elif self.type == "Rod":
+        elif self.mt_type == "Rod":
             I = np.sign(m) * 0.0181818 * (59 - np.sqrt(3481 - 2750 * abs(m))) # thanks wolfram alpha
-        elif self.type == "LinearRod":
+        elif self.mt_type == "LinearRod":
             I = m * 0.5347593
 
         return I
