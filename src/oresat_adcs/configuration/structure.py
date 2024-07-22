@@ -1,5 +1,5 @@
 import numpy as np
-
+import json
 from ..functions import vector
 
 '''This module contains classes to represent and control the physical hardware of a satellite.'''
@@ -610,3 +610,66 @@ class Satellite():
         '''
         F_and_T = sum([wall.drag_force(drag_pressure, v) for wall in self.walls])
         return F_and_T
+
+    def load(config_file_path, max_T, torque_limited=True):
+        '''Class function to create a satellite object
+
+        Parameters
+        ----------
+        config_file_path : str
+            Path to json configuration file, see examples
+        max_T : float
+            Config parameter to limite the maximum torque of the reaction wheel system
+        torque_limited : bool
+            Config parameter to limit the reaction wheels
+
+        Returns
+        -------
+        oresat_adcs.configuration.structure.Satellite object
+            Satellite object built from config file
+        '''
+        
+        def apply_nparray(keys, dictionary):
+            """Helper function to make certain lists into numpy arrays
+
+            Parameters
+            ----------
+            keys : list
+                List of keys whos values should be changed to numpy arrays
+            dictionary : dict
+                Configuration dictionary to match the keyword cards of classes
+
+            Returns
+            -------
+            dictionary : dict
+                Dictionary that values properly matching keyword arguments
+            """
+            for key in keys:
+                dictionary[key] = np.array(dictionary[key])
+            return dictionary
+
+
+        def make_objects_list(target_class, config_dict):
+            """Helper function to return a list of objects based on a confituration dictionary"""
+            object_list = []
+            for name,config in config_dict.items():
+                nparray_config = apply_nparray(config["nparrays"], config["keywords"])
+                object_list.append(target_class(**nparray_config))
+
+            return object_list
+
+
+        with open(config_file_path, 'r') as structure_config:
+            config_dict = json.load(structure_config)
+
+        instrument_list = make_objects_list(SensitiveInstrument, config_dict["instruments"])
+        magnetorquer_list = make_objects_list(Magnetorquer, config_dict["magnetorquers"])
+        reaction_wheel_list = make_objects_list(Wheel, config_dict["reaction_wheels"])
+
+        mt_system = MagnetorquerSystem(magnetorquer_list)
+        rw_system = ReactionWheelSystem(reaction_wheel_list, max_T, torque_limited)
+
+        sat_config_kwargs = apply_nparray(config_dict["satellite"]["nparrays"], config_dict["satellite"]["keywords"])
+
+        return Satellite(**sat_config_kwargs, rw_sys=rw_system, mt_sys=mt_system, sensitive_instruments=instrument_list)
+
