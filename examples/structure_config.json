@@ -1,0 +1,94 @@
+{
+	"satellite" : {
+		"nparrays": ["dimensions", "principal_moments", "product_moments"],
+		"keywords" : {
+			"mass": 3.0,
+			"dimensions": [0.1, 0.1, 0.2],
+			"absorption": 0.84,
+			"drag_coeff": 2.0,
+			"principal_moments": [1.378574142e-2, 1.378854578e-2, 5.49370596e-3],
+			"product_moments": [1.378574142e-3, 1.378854578e-3, 5.49370596e-4],
+			"reduced": false
+		}
+	},
+	"instruments": {
+		"thing1": {
+			"nparrays": ["boresight"],
+			"keywords": {
+				"boresight": [0, 0, -1],
+				"bounds": [15 , 100],
+				"forbidden": [true, false],
+				"obj_ids" : [0]
+			}
+		},
+		"thing2": {
+			"nparrays": ["boresight"],
+			"keywords": {
+				"boresight": [0, 0, -1],
+				"bounds": [15 , 100],
+				"forbidden": [true, false],
+				"obj_ids" : [0]
+			}
+		}
+	},
+	"magnetorquers": {
+		"mt_x": {
+			"nparrays": ["axis"],
+			"keywords": {
+				"mt_type": "LinearRod",
+				"axis": [1, 0, 0],
+				"max_A": 0.0625
+			}
+		},
+		"mt_y": {
+			"nparrays": ["axis"],
+			"keywords": {
+				"mt_type": "LinearRod",
+				"axis": [0, 1, 0],
+				"max_A": 0.0625
+			}
+		},
+		"mt_z": {
+			"nparrays": ["axis"],
+			"keywords": {
+				"mt_type": "Square",
+				"axis": [0, 0, 1],
+				"max_A": 0.2887
+			}
+		}
+	},
+	"reaction_wheels": {
+		"rw_1": {
+			"nparrays": ["axis"],
+			"keywords": {
+				"axis": [0.61237244, 0.61237244, 0.5],
+				"parallel_moment": 1.64023e-6,
+				"orthogonal_moment": 1.02562e-6
+			}
+		},
+		"rw_2": {
+			"nparrays": ["axis"],
+			"keywords": {
+				"axis": [-0.61237244, 0.61237244, 0.5],
+				"parallel_moment": 1.64023e-6,
+				"orthogonal_moment": 1.02562e-6
+			}
+		},
+		"rw_3": {
+			"nparrays": ["axis"],
+			"keywords": {
+				"axis": [-0.61237244, -0.61237244, 0.5],
+				"parallel_moment": 1.64023e-6,
+				"orthogonal_moment": 1.02562e-6
+			}
+		},
+		"rw_4": {
+			"nparrays": ["axis"],
+			"keywords": {
+				"axis": [0.61237244, -0.61237244, 0.5],
+				"parallel_moment": 1.64023e-6,
+				"orthogonal_moment": 1.02562e-6
+			}
+		}
+	}
+}
