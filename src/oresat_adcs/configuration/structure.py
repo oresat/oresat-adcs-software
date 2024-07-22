@@ -673,3 +673,14 @@ class Satellite():
 
         return Satellite(**sat_config_kwargs, rw_sys=rw_system, mt_sys=mt_system, sensitive_instruments=instrument_list)
 
+
+class ReducedSatellite():
+    '''Simple satellite model for reduced models'''
+
+    def __init__(self, mass, drag_coefficient, dimensions):
+        self.mass = mass
+        self.cd = drag_coefficient
+        self.dimensions = dimensions
+
+        # temporary approximation for any given cross sectional area
+        self.area = min(dimensions)*max(dimensions)

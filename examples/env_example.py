@@ -1,8 +1,7 @@
 import json
 import numpy as np
 from oresat_adcs.classes import jday
-from oresat_adcs.configuration import environment, structure
-
+from oresat_adcs.configuration import environment, structure, env3, env4
 
 if __name__ == "__main__":
     
@@ -52,4 +51,11 @@ if __name__ == "__main__":
     my_satellite = structure.Satellite.load("structure_config.json", max_T=0.005, torque_limited=True)
 
     my_other_env = environment.Environment(my_satellite, hi_fi=False, config=environment_config)
+
+
+
+    print("Blah")
+
+    my_env3 = env3.ReducedEnvironment(environment_config)
+    my_env4 = env4.Environment(my_satellite, hi_fi=False, config=environment_config)
     pass
