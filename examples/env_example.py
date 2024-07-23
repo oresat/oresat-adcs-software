@@ -3,6 +3,8 @@ import numpy as np
 from oresat_adcs.classes import jday
 from oresat_adcs.configuration import environment, structure, env3, env4
 
+from oresat_adcs.functions import frame
+
 if __name__ == "__main__":
     
     with open("environment_config.json", "r") as config_file:
@@ -55,7 +57,25 @@ if __name__ == "__main__":
 
 
     print("Blah")
+    my_reduced_satellite = structure.ReducedSatellite(mass=3, drag_coefficient=2, dimensions=np.array([0.1, 0.1, 0.2]))
+    my_env3 = env3.ReducedEnvironment(my_reduced_satellite, environment_config)
 
-    my_env3 = env3.ReducedEnvironment(environment_config)
-    my_env4 = env4.Environment(my_satellite, hi_fi=False, config=environment_config)
+    x_0   = np.array([5.581498e6, -3.881737e6, 1.421855e4])
+    v_0   = np.array([2.708896e3, 3.914674e3, 5.994012e3])
+    q_0   = np.array([1, 0,0 ,0])
+    clock = my_jclock
+    GCI_to_ECEF_mat = frame.inertial_to_ecef(clock)
+    temp_mag_moment = my_satellite.magnetorquers.actuate(np.array([0, 0, 0]))
+
+    print(my_env3.forces(x_0, v_0))
+
+    my_env4 = env4.Environment(my_satellite, config=environment_config, hi_fi=False)
+    
+    print(my_env4.env_F_and_T(position=x_0, 
+                              velocity=v_0,
+                              attitude=q_0,
+                              clock=my_jclock,
+                              GCI_to_ECEF=GCI_to_ECEF_mat,
+                              mag_moment=temp_mag_moment))
+    
     pass

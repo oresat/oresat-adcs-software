@@ -1,8 +1,11 @@
 import numpy as np
 from ..functions import frame, quaternion, vector
 
+from .env3 import ReducedEnvironment
 
-class Environment():
+
+
+class Environment(ReducedEnvironment):
     '''Environmental models for sun, aerodynamics, magnetic field, and gravity.
 
     Parameters
@@ -15,23 +18,8 @@ class Environment():
     hi_fi : bool
         True if using higher order terms of gravity model. False if using first order approximation.
     '''
-    def __init__(self, satellite, hi_fi, config):
-
-        required = ["AU", "EARTH_ROTATION", "G_NEWTON", "EARTH_RAD", "EARTH_MASS",
-                    "J2", "J3", "J4", "RHO", "MAG_REF_RADIUS",
-                    "G_1_1", "H_1_1", "G_1_0"]
-        
-        for attribute in required:
-            if attribute not in config.keys():
-                print("Error, required value not found")
-            self.__dict__[attribute] = config[attribute]["value"]
-
-        self.MU = self.G_NEWTON * self.EARTH_MASS #: Gravitational parameter of satellite w.r.t. Earth.
-        self.m     = self.MAG_REF_RADIUS**3 * 1E-09 * np.array([self.G_1_1, self.H_1_1, self.G_1_0]) # magnetic dipole in ECEF
-        
-        self.satellite = satellite
-
-        # Inherit everything above this line
+    def __init__(self, satellite, config, hi_fi):
+        super().__init__(satellite, config)
 
         self.SRP_coeff = 1362 * self.AU**2 / 299792458 # Newtons, eq D.56
         self.hi_fi = hi_fi # high fidelity
@@ -54,15 +42,9 @@ class Environment():
         numpy.ndarray
             Inertial unit vector pointing at sun from satellite.
         '''
-        T_UT1        = (clock.julian_date(clock.hour, clock.minute, clock.second) - 2451545) / 36525
-        mean_long    = (280.46 + 36000.771 * T_UT1) % 360 # degrees mean longitude
-        mean_anom    = np.radians((357.5277233 + 35999.05034 * T_UT1) % 360) # rad mean anomaly
-        ecl_long     = np.radians(mean_long + 1.914666471 * np.sin(mean_anom) + 0.019994643 * np.sin(2*mean_anom)) # ecliptic longitude
-        ecl_oblq     = np.radians(23.439291 - 0.0130042 * T_UT1)
-        earth_to_sun = np.array([np.cos(ecl_long),
-                                np.cos(ecl_oblq) * np.sin(ecl_long),
-                                np.sin(ecl_oblq) * np.sin(ecl_long)])
+        # earth_sun_vector exists in parent class
 
+        earth_to_sun = self.earth_sun_vector(clock)
         # remove stuff above this line: reduced environment will hvae an earth_sun_vector function
         
         sat_to_sun   = self.AU * earth_to_sun - x
@@ -120,27 +102,7 @@ class Environment():
             print("height out of bounds!", h) # when less lazy, allow for decaying orbit
         return rho_0 * np.exp((h_0 - h) / H) # kg/m^3
 
-    def relative_vel(self, x, v):
-        '''
-        Relative velocity of satellite, with respect to the atmosphere at this location,
-        assuming atmosphere rotates with earth with respect to inertial frame.
-
-        Parameters
-        ----------
-        x : numpy.ndarray
-            Position of satellite in inertial frame.
-        v : numpy.ndarray
-            Velocity of satellite in inertial frame.
-
-        Returns
-        -------
-        numpy.ndarray
-            Relative velocity of satellite.
-        '''
-        v_rel = np.array([v[0] + self.EARTH_ROTATION * x[1],
-                          v[1] + self.EARTH_ROTATION * x[0],
-                          v[2]])
-        return v_rel # m/s
+    # relative_vel exists in parent class
 
     # drag equation, unit agnostic
     def drag(self, rho, v, attitude):
@@ -206,7 +168,7 @@ class Environment():
                                                           -(15 - 70 * zoverrsquare + 63 * zoverr4th) * zoverr])
         return - coeff * (a + aj2 + aj3 + aj4)
 
-    def gravity(self, position, length, attitude):
+    def gravity(self, position, attitude):
         '''
         Gravitational forces and torques.
         Note that gravity torque is fairly predictable and we could even use it for feedforward in controls.
@@ -225,6 +187,7 @@ class Environment():
         numpy.ndarray
             Array of arrays for gravitational acceleration and torque.
         '''
+        length=np.linalg.norm(position)
         coeff  = self.MU / length**2
         if self.hi_fi:
             accel = self.hi_fi_gravity(position, length, coeff)
@@ -234,32 +197,7 @@ class Environment():
         T      = 3 * coeff / length * np.cross(n, self.satellite.total_moment.dot(n))
         return np.array([accel, T])
 
-    def magnetic_field(self, x, GCI_to_ECEF):
-        '''
-        Magnetic field dipole model, average 20-50 uT magnitude. Gradient of 1st order term of IGRF model of magnetic potential.
-        See page 403 - 406 or https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html for relevant details.
-        Be aware that every year, the approximated coefficients change a little.
-
-
-        Parameters
-        ----------
-        r_ecef : numpy.ndarray
-            Position of satellite in Earth-centered Earth-fixed frame.
-        length : float
-            Norm of position vector.
-        GCI_to_ECEF : numpy.ndarray
-            Matrix for coordinate transformation from inertial frame to ECEF frame.
-
-        Returns
-        -------
-        numpy.ndarray
-            Magnetic B-field (T) in inertial coordinates.
-        '''
-        r_ecef = GCI_to_ECEF.dot(x)
-        length = np.linalg.norm(x)
-        R      = (3 * np.dot(self.m, r_ecef) * r_ecef - self.m * length**2) / length**5 # nT
-        B      = GCI_to_ECEF.T.dot(R)
-        return B
+    # magnetic_field function in parent
 
     def env_F_and_T(self, position, velocity, attitude, clock, GCI_to_ECEF, mag_moment):
         '''
@@ -296,7 +234,7 @@ class Environment():
         v_rel        = self.relative_vel(position, velocity)
 
         D = self.drag(rho, v_rel, attitude)
-        G = self.gravity(position, length, attitude)
+        G = self.gravity(position, attitude)
         G[0] *= self.satellite.mass
         M = np.array([np.zeros(3), np.cross(mag_moment, B_body)])
         return D + G + M + srp

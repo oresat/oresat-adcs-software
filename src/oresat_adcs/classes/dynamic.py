@@ -150,8 +150,10 @@ class ReducedDynamicalSystem(DynamicalSystem):
         Initial velocity in ECI coordinates
     date_and_time : list
         Initial date and time. (Y, M, D, h, m, s) format.
-    satellite : oresat_adcs.configruation.strucutre.Satellite
+    satellite : oresat_adcs.configruation.structure.ReducedSatellite
         Satellite instance where the products of moment of inertia are NOT implemented (reduced=False) (Does this really even matter?)
+        satellite will be used for observer
+        This satellite may be a reduced satellite (I think)
     '''
     def __init__(self, position, lin_vel, date_and_time, satellite):
         self.simulator   = False
@@ -180,7 +182,7 @@ class ReducedDynamicalSystem(DynamicalSystem):
             Array of arrays for derivatives of state variables.
         '''
         F = self.enviro.forces(position, lin_vel)
-        dxdt, dvdt = lin_vel, F / self.enviro.M
+        dxdt, dvdt = lin_vel, F / self.satellite.mass
         return np.array([dxdt, dvdt])
 
 class Integrator():

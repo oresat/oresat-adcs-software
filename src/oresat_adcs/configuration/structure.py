@@ -674,6 +674,8 @@ class Satellite():
         return Satellite(**sat_config_kwargs, rw_sys=rw_system, mt_sys=mt_system, sensitive_instruments=instrument_list)
 
 
+
+
 class ReducedSatellite():
     '''Simple satellite model for reduced models'''
 
@@ -684,3 +686,8 @@ class ReducedSatellite():
 
         # temporary approximation for any given cross sectional area
         self.area = min(dimensions)*max(dimensions)
+
+
+
+
+
