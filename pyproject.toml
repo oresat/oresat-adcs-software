@@ -14,13 +14,20 @@ classifiers = [
 	"License :: OSI Approved :: GPLv3 License"
 ]
 dependencies = [
-	"numpy",
+	"numpy"
+]
+
+[project.optional-dependencies]
+dev = [
+	"build",
 	"scipy",
 	"pandas",
 	"matplotlib",
-	"pgi",
-	"psutil",
-	"pydbus"
+	"pgi"
+]
+legacy = [
+	"pydbus",
+	"psutil"
 ]
 
 [tool.setuptools.packages.find]
