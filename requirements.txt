@@ -1,4 +1,0 @@
-pydbus
-numpy
-scipy
-psutil
