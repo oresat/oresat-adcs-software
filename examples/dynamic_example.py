@@ -1,8 +1,9 @@
 
 import json
 import numpy as np
-from oresat_adcs.configuration import structure
+from oresat_adcs.configuration import structure 
 
+from oresat_adcs.configuration import env3, env4
 from oresat_adcs.classes import dynamic
 
 def apply_nparray(keys, dictionary):
@@ -32,43 +33,41 @@ if __name__ == "__main__":
     v_0   = np.array([2.708896e3, 3.914674e3, 5.994012e3])
     q_0   = np.array([1, 0,0 ,0])
     w_0   = np.array([0.08726646, 0.08726646, 0.08726646]) # 5 degrees/s / axis. worst case
-    whl_0 = np.array([300, -300, -300, 300]) * 0
+    whl_0 = np.array([0, 0, 0, 0])
+    cur_cmds = np.array([100, 100, 100])
+    whl_cmds = np.array([300, -300, -300, 300])
     t_0 = (2024 ,7, 7, 14, 0, 0)
     dt    = 0.05 # perhaps we want to choose this upstream?
 
 
     # Make the satellite instance from a configuration file
-    with open("structure_config.json", 'r') as structure_config:
-        my_config = json.load(structure_config)
+    my_reduced_satellite = structure.ReducedSatellite(mass=2.5, drag_coefficient=2, dimensions=np.array([0.1, 0.1, 0.2]))
+    my_satellite = structure.Satellite.load("structure_config.json", max_T=0.0005, torque_limited=True)
 
-    my_instruments = get_object_list(structure.SensitiveInstrument, my_config["instruments"])
-    my_torquers = get_object_list(structure.Magnetorquer, my_config["magnetorquers"])
-    my_wheels = get_object_list(structure.Wheel, my_config["reaction_wheels"])
-
-    my_mt_system = structure.MagnetorquerSystem(my_torquers)
-
-    max_T = 0.0005,
-    torque_limited=True
-    my_rw_system = structure.ReactionWheelSystem(my_wheels, max_T, torque_limited)
+    print(my_reduced_satellite.cd)
 
 
-    base_sat_configs = apply_nparray(my_config["satellite"]["nparrays"], my_config["satellite"]["keywords"])
+    with open("environment_config.json", "r") as config_file:
+        environment_config = json.load(config_file)
 
-    my_satellite = structure.Satellite(**base_sat_configs, 
-                                       rw_sys=my_rw_system, 
-                                       mt_sys=my_mt_system, 
-                                       sensitive_instruments=my_instruments)
+    my_reduced_env = env3.ReducedEnvironment(my_reduced_satellite, environment_config)
+
+    my_env = env4.Environment(my_satellite, environment_config, True)
+    
 
     # Make the dynamical models
     # Reduced Model
     # Init a dynamical model with a satellite object
     print("\nMaking reduced model with custom satellite")
-    custom_reduced_model = dynamic.ReducedDynamicalSystem(x_0, v_0, t_0, my_satellite)
+    custom_reduced_model = dynamic.ReducedDynamicalSystem(x_0, v_0, t_0, my_reduced_satellite, my_reduced_env)
 
+    print(custom_reduced_model.vector_field(x_0, v_0))
+    
     # Full Model
     # Init a dynamical model with a satellite object
     print("\nMaking full model with custom satellite")
-    custom_model = dynamic.DynamicalSystem(x_0, v_0, q_0, w_0, whl_0, t_0, my_satellite)
+    custom_model = dynamic.DynamicalSystem(x_0, v_0, q_0, w_0, whl_0, t_0, my_satellite, my_env)
+    print(custom_model.vector_field(x_0, v_0, q_0, w_0, whl_0, cur_cmds, whl_cmds))
 
     print("\nDone")
 

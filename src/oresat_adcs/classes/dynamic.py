@@ -52,7 +52,7 @@ class DynamicalSystem():
     satellite : oresat_adcs.configruation.strucutre.Satellite
         Satellite instance where the products of moment of inertia are NOT implemented (reduced=False) (Does this really even matter?)
     '''
-    def __init__(self, position, lin_vel, attitude, body_ang_vel, wheel_vel, date_and_time, satellite):
+    def __init__(self, position, lin_vel, attitude, body_ang_vel, wheel_vel, date_and_time, satellite, environment):
         self.simulator   = True
         self.state       = np.array([position, lin_vel, attitude, body_ang_vel, wheel_vel], dtype=object)
         self.init_date   = date_and_time
@@ -63,7 +63,7 @@ class DynamicalSystem():
         # Define the satellite, it should check for the correct object type
         self.satellite = satellite
 
-        self.enviro      = environment.Environment(self.satellite, hi_fi=True)
+        self.enviro      = environment
         #making up std dev as placeholders
         self.sensors     = [sensor.GPS_pos(mean=0, std_dev=30, model=self),
                             sensor.GPS_vel(mean=0, std_dev=2, model=self),
@@ -115,6 +115,8 @@ class DynamicalSystem():
         T_whl        = self.satellite.reaction_wheels.torque(whl_accl)
         H_whl        = self.satellite.reaction_wheels.momentum(wheel_vel)
 
+        print(F_env)
+        print(T_env)
         dxdt, dvdt   = (lin_vel, F_env / self.satellite.mass)
         dqdt         = 0.5 * quaternion.product(attitude, np.array([0, body_ang_vel[0], body_ang_vel[1], body_ang_vel[2]]))
         dwdt         = self.satellite.inv_tot_moment.dot(T_env - T_whl - np.cross(body_ang_vel, H_whl + self.satellite.total_moment.dot(body_ang_vel)))
@@ -155,7 +157,7 @@ class ReducedDynamicalSystem(DynamicalSystem):
         satellite will be used for observer
         This satellite may be a reduced satellite (I think)
     '''
-    def __init__(self, position, lin_vel, date_and_time, satellite):
+    def __init__(self, position, lin_vel, date_and_time, satellite, reduced_environment):
         self.simulator   = False
         self.state       = np.array([position, lin_vel])
 
@@ -164,7 +166,7 @@ class ReducedDynamicalSystem(DynamicalSystem):
         year, month, day, hour, minute, second = date_and_time
         self.clock       = jday.Clock(year, month, day, hour, minute, second)
         self.update_transformation_matrices()
-        self.enviro      = environment.ReducedEnvironment()
+        self.enviro      = reduced_environment
 
     def vector_field(self, position, lin_vel):
         '''This is the vector field for our state space. It defines the differential equation to be solved.

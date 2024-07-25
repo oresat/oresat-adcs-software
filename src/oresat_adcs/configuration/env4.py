@@ -221,7 +221,9 @@ class Environment(ReducedEnvironment):
         numpy.ndarray
             Array of arrays for all forces and torques acting on satellite.
         '''
-        B            = self.magnetic_field(position, GCI_to_ECEF)
+        r_ecef       = GCI_to_ECEF.dot(position)
+        length       = np.linalg.norm(position)
+        B            = self.magnetic_field(r_ecef, GCI_to_ECEF)
         B_body       = quaternion.sandwich(attitude, B)
         if self.hi_fi:
             lat, long, h = frame.ecef_to_lla(r_ecef)
