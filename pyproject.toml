@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oresat-adcs-software"
+version = "0.0.3"
+description = "A package of tools to manage the ADCS on OreSat"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "GPL-3.0"}
+classifiers = [
+	"Programming Language :: Python :: 3",
+	"License :: OSI Approved :: GPLv3 License"
+]
+dependencies = [
+	"numpy",
+	"scipy"
+]
+
+[project.optional-dependencies]
+dev = [
+	"build",
+	"pandas",
+	"matplotlib",
+	"pgi"
+]
+legacy = [
+	"pydbus",
+	"psutil"
+]
+
