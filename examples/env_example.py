@@ -56,7 +56,6 @@ if __name__ == "__main__":
 
 
 
-    print("Blah")
     my_reduced_satellite = structure.ReducedSatellite(mass=3, drag_coefficient=2, dimensions=np.array([0.1, 0.1, 0.2]))
     my_env3 = env3.ReducedEnvironment(my_reduced_satellite, environment_config)
 

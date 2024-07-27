@@ -128,6 +128,7 @@ class Environment(ReducedEnvironment):
         pressure = -0.5 * rho * self.satellite.drag_coeff * v_norm**2
         F_and_T  = self.satellite.drag_forces(pressure, v_ref)
         F_and_T[0] = quaternion.sandwich_opp(attitude, F_and_T[0])
+        print('F_and_T: ', F_and_T)
         return F_and_T
 
     def hi_fi_gravity(self, position, r, coeff):
@@ -239,4 +240,8 @@ class Environment(ReducedEnvironment):
         G = self.gravity(position, attitude)
         G[0] *= self.satellite.mass
         M = np.array([np.zeros(3), np.cross(mag_moment, B_body)])
+        #print('D: ', D)
+        #print('G: ', G)
+        #print('M: ', M)
+        #print('srp: ', srp)
         return D + G + M + srp
