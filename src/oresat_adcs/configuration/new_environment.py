@@ -26,7 +26,8 @@ class Environment():
     '''
     Simplified environmental models for sun, aerodynamics, and gravity.
     '''
-    def __init__(self):
+    def __init__(self, hi_fi = False):
+        self.hi_fi = hi_fi
         # Until I calcualte these, just keep them here
         self.MU = self.G_NEWTON * self.EARTH_MASS #: Gravitational parameter of satellite w.r.t. Earth.
         self.m     = self.MAG_REF_RADIUS**3 * 1E-09 * np.array([self.G_1_1, self.H_1_1, self.G_1_0]) # magnetic dipole in ECEF
@@ -53,41 +54,24 @@ class Environment():
         return v_rel # m/s
 
 
-    # this should be changed to calculate srp forces
-    def sun_vector(self, clock, x):
-        '''
-        Unit vector in inertial coordinates pointing from satellite to the sun.
-        More details on page 420 of Markely & Crassidis. For now assume the sun is a constant distance away.
-
-        Parameters
-        ----------
-        clock : jday.Clock
-            Clock is needed because the position of the sun depends on the date and time (obviously).
-        x : numpy.ndarray
-            Position of the satellite in inertial frame.
-
-        Returns
-        -------
-        numpy.ndarray
-            Inertial unit vector pointing at sun from satellite.
-        '''
+    def SRP_info(self, clock, x):
         T_UT1      = (clock.julian_date(clock.hour, clock.minute, clock.second) - 2451545) / 36525
         mean_long  = (280.46 + 36000.771 * T_UT1) % 360 # degrees mean longitude
         mean_anom  = np.radians((357.5277233 + 35999.05034 * T_UT1) % 360) # rad mean anomaly
         ecl_long   = np.radians(mean_long + 1.914666471 * np.sin(mean_anom) + 0.019994643 * np.sin(2*mean_anom)) # ecliptic longitude
         ecl_oblq   = np.radians(23.439291 - 0.0130042 * T_UT1)
+        
         earth_to_sun = np.array([np.cos(ecl_long),
                                 np.cos(ecl_oblq) * np.sin(ecl_long),
                                 np.sin(ecl_oblq) * np.sin(ecl_long)])
 
-        # check if satellite is in shadow
+        sat_to_sun   = self.AU * earth_to_sun - x
+
+        S_inertial = vector.normalize(sat_to_sun)
         in_shadow    = np.dot(x, earth_to_sun) < - np.sqrt(np.dot(x, x) - self.EARTH_RAD**2) # cylindrical approx for earth shadowing
-        S_inertial = vector.pointing_vector(x, self.AU * earth_to_sun)
+
         SRP          = self.SRP_coeff / np.dot(sat_to_sun, sat_to_sun) # solar radiation pressure
-        return S_inertial
-
-
-        return D + G
+        return SRP, in_shadow, S_inertial 
 
 
 
@@ -195,29 +179,25 @@ class Environment():
             accel = self.hi_fi_gravity(position, length, coeff)
         else:
             accel = -coeff * position / length
-        return accel
-
+        n      = quaternion.sandwich(attitude, -position / length)
+        T      = 3 * coeff / length * np.cross(n, self.satellite.total_moment.dot(n))
+        return np.array([accel, T])
 
     def magnetic_field(self, r_ecef, length, GCI_to_ECEF):
-        '''
-        Magnetic field dipole model, average 20-50 uT magnitude. Gradient of 1st order term of IGRF model of magnetic potential.
+        '''Magnetic field dipole model, average 20-50 uT magnitude. Gradient of 1st order term of IGRF model of magnetic potential.
         See page 403 - 406 or https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html for relevant details.
         Be aware that every year, the approximated coefficients change a little.
 
 
         Parameters
         ----------
-        r_ecef : numpy.ndarray
-            Position of satellite in Earth-centered Earth-fixed frame.
-        length : float
-            Norm of position vector.
-        GCI_to_ECEF : numpy.ndarray
-            Matrix for coordinate transformation from inertial frame to ECEF frame.
+        r_ecef (numpy.ndarray):Position of satellite in Earth-centered Earth-fixed frame.
+        length (float): Norm of position vector.
+        GCI_to_ECEF (numpy.ndarray): Matrix for coordinate transformation from inertial frame to ECEF frame.
 
         Returns
         -------
-        numpy.ndarray
-            Magnetic B-field (T) in inertial coordinates.
+        numpy.ndarray: Magnetic B-field (T) in inertial coordinates.
         '''
         R      = (3 * np.dot(self.m, r_ecef) * r_ecef - self.m * length**2) / length**5 # nT
         B      = GCI_to_ECEF.T.dot(R)
