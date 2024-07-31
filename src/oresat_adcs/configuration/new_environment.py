@@ -55,7 +55,7 @@ class Environment():
 
 
     def SRP_info(self, clock, x):
-        T_UT1      = (clock.julian_date(clock.hour, clock.minute, clock.second) - 2451545) / 36525
+        T_UT1      = (clock.julian_date() - 2451545) / 36525
         mean_long  = (280.46 + 36000.771 * T_UT1) % 360 # degrees mean longitude
         mean_anom  = np.radians((357.5277233 + 35999.05034 * T_UT1) % 360) # rad mean anomaly
         ecl_long   = np.radians(mean_long + 1.914666471 * np.sin(mean_anom) + 0.019994643 * np.sin(2*mean_anom)) # ecliptic longitude
@@ -156,7 +156,7 @@ class Environment():
         return - coeff * (a + aj2 + aj3 + aj4)
 
 
-    def gravity(self, position, length, attitude):
+    def gravity_accel(self, position, length):
         '''
         Gravitational forces and torques.
         Note that gravity torque is fairly predictable and we could even use it for feedforward in controls.
@@ -179,9 +179,7 @@ class Environment():
             accel = self.hi_fi_gravity(position, length, coeff)
         else:
             accel = -coeff * position / length
-        n      = quaternion.sandwich(attitude, -position / length)
-        T      = 3 * coeff / length * np.cross(n, self.satellite.total_moment.dot(n))
-        return np.array([accel, T])
+        return accel
 
     def magnetic_field(self, r_ecef, length, GCI_to_ECEF):
         '''Magnetic field dipole model, average 20-50 uT magnitude. Gradient of 1st order term of IGRF model of magnetic potential.

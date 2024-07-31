@@ -2,7 +2,7 @@ import numpy as np
 import json
 from ..functions import frame, quaternion, vector
 from ..classes import jday, sensor
-from . import structure, environment
+from . import structure, new_environment
 
 
 class OrbitalState():
@@ -14,10 +14,10 @@ class AttitudeState():
     pass
 
 
-class ReducedSatellite():
+class ReducedSatelliteModel():
     '''Simple satellite model for reduced models'''
 
-    def __init__(self, environment, mass, drag_coefficient, area, position, lin_vel, date_and_time):
+    def __init__(self, environment, mass, drag_coefficient, area, absorption, position, lin_vel, date_and_time):
         self.mass = mass
         self.drag_coefficient = drag_coefficient
         self.area = area
@@ -26,11 +26,9 @@ class ReducedSatellite():
 
         self.state = np.array([position, lin_vel])
         year, month, day, hour, minute, second = date_and_time
-        self.clock       = jday.Clock(year, month, day, hour, minute, second)
-        self.enviro      = reduced_environment
+        self.clock       = jday.JClock(year, month, day, hour, minute, second)
+        self.enviro      = environment
 
-        # replace this with frame directly
-        self.update_transformation_matrices()
         # relative velocity should be a part of frame too???
 
     def forces(self, x, v):
@@ -47,18 +45,27 @@ class ReducedSatellite():
         '''
         
         v_rel = self.enviro.relative_vel(x, v)
-        length = np.linalg.norm(position)
+        length = np.linalg.norm(x)
         v_norm   = np.linalg.norm(v_rel)
-        # drag force
-        D = = -0.5 * self.enviro.atmo_density() * self.drag_coefficient * self.area * v_norm * v
-        # gravity force
-        G = -(self.MU/length**3) * x * self.mass
-        # alternatively use something like this
-        # G = self.enviro.gravity_accel() * x * self.mass
+
+        # update transformation matrix
+        GCI_to_ECEF = frame.inertial_to_ecef(self.clock)
+        r_ecef       = GCI_to_ECEF.dot(x)
+        lat, long, h = frame.ecef_to_lla(r_ecef)
         
+        SRP, in_shadow, S_inertial = self.enviro.SRP_info(self.clock, x)
+
+        # drag force
+        D = -0.5 * self.enviro.atmo_density(h) * self.drag_coefficient * self.area * v_norm * v
+        # gravity force
+        G = self.enviro.gravity_accel(x, length) * x * self.mass
         # also have SRP force, assume srp is a pressure vector
-        # S = self.enviro.srp() * (2*self.reflection + self.absorption) * self.area
-        return D + G # + S
+        
+        if in_shadow:
+            return D + G
+
+        S = SRP * (2*self.reflection + self.absorption) * self.area * S_inertial
+        return D + G + S
 
 
     def vector_field(self, position, lin_vel):
@@ -135,6 +142,11 @@ def load(config_file_path, max_T, torque_limited=True):
         with open(config_file_path, 'r') as structure_config:
             config_dict = json.load(structure_config)
 
+        
+        # Implement sensors later just because
+        sensors_list = []
+
+
         instrument_list = make_objects_list(SensitiveInstrument, config_dict["instruments"])
         magnetorquer_list = make_objects_list(Magnetorquer, config_dict["magnetorquers"])
         reaction_wheel_list = make_objects_list(Wheel, config_dict["reaction_wheels"])
@@ -154,7 +166,7 @@ def load(config_file_path, max_T, torque_limited=True):
 
 
 
-class Satellite():
+class SatelliteModel():
     '''A rectangular prism satellite and its relevant material properties.
     At some point, add support for products of inertia, and parametrize magnetorquers.
 
@@ -175,23 +187,25 @@ class Satellite():
     sensitive_instruments : list(oresat_adcs.configuraiton.structure.SensitiveInstrument)
         A list of sensitive instrument instances
     '''
-    def __init__(self, mass, dimensions, absorption, drag_coeff, principal_moments, product_moments, reduced, sensors, rw_sys, mt_sys, sensitive_instruments=[]):
+    def __init__(self, environment, mass, dimensions, absorption, drag_coeff, principal_moments, product_moments, reduced, date_and_time, sensors, rw_sys, mt_sys, sensitive_instruments=[]):
         
         # The satellite should define its own dimensions and walls
         self.length         = dimensions[0]
         self.width          = dimensions[1]
         self.height         = dimensions[2]
-        self.walls          = (Wall(self.length/2, np.array([1, 0, 0]), self.width, self.height, absorption),
-                               Wall(self.length/2, np.array([-1, 0, 0]), self.width, self.height, absorption),
-                               Wall(self.width/2, np.array([0, 1, 0]), self.length, self.height, absorption),
-                               Wall(self.width/2, np.array([0, -1, 0]), self.length, self.height, absorption),
-                               Wall(self.height/2, np.array([0, 0, 1]), self.width, self.length, absorption),
-                               Wall(self.height/2, np.array([0, 0, -1]), self.width, self.length, absorption))
+        self.walls          = (structure.Wall(self.length/2, np.array([1, 0, 0]), self.width, self.height, absorption),
+                               structure.Wall(self.length/2, np.array([-1, 0, 0]), self.width, self.height, absorption),
+                               structure.Wall(self.width/2, np.array([0, 1, 0]), self.length, self.height, absorption),
+                               structure.Wall(self.width/2, np.array([0, -1, 0]), self.length, self.height, absorption),
+                               structure.Wall(self.height/2, np.array([0, 0, 1]), self.width, self.length, absorption),
+                               structure.Wall(self.height/2, np.array([0, 0, -1]), self.width, self.length, absorption))
 
         
         #: Estimated drag coefficient.
         self.drag_coeff      = drag_coeff
         self.mass            = mass
+        
+        self.enviro = environment
 
         self.sensors     = sensors
         self.reaction_wheels = rw_sys
@@ -216,14 +230,15 @@ class Satellite():
 
         # Dynamics
         self.simulator   = True
-        self.state       = np.array([position, lin_vel, attitude, body_ang_vel, wheel_vel], dtype=object)
+        # No arrays, maybe a dict or an object
+        #self.state       = np.array([position, lin_vel, attitude, body_ang_vel, wheel_vel], dtype=object)
         self.init_date   = date_and_time
         year, month, day, hour, minute, second = date_and_time
         self.clock       = jday.Clock(year, month, day, hour, minute, second)
 
 
         # just call frame or make it part of the environment
-        self.update_transformation_matrices()
+        # self.update_transformation_matrices()
 
     
     def measurement(self, noisy):
@@ -304,7 +319,7 @@ class Satellite():
         return F_and_T
 
 
-    def gravity_F_and_T(self, position, lenght, attitude):
+    def gravity_F_and_T(self, position, length, attitude):
         '''Gravitational forces and torques.
         Note that gravity torque is fairly predictable and we could even use it for feedforward in controls.
 
@@ -407,100 +422,6 @@ class Satellite():
         dwdt         = self.satellite.inv_tot_moment.dot(T_env - T_whl - np.cross(body_ang_vel, H_whl + self.satellite.total_moment.dot(body_ang_vel)))
         dw_rw_dt     = whl_accl
         return np.array([dxdt, dvdt, dqdt, dwdt, dw_rw_dt], dtype=object)
-
-
-
-
-
-
-
-
-class DynamicalSystem():
-    '''This class stores the state vector, Julian date, reference frame transformations,
-    satellite structural model, sensor models, and environmental models. It also calculates the vector field for the states.
-
-    Parameters
-    ----------
-    position : numpy.ndarray
-        Initial position in ECI coordinates
-    lin_vel : numpy.ndarray
-        Initial velocity in ECI coordinates
-    attitude : numpy.ndarray
-        Initial attitude quaternion with respect to inertial frame.
-    body_ang_vel : numpy.ndarray
-        Initial angular velocity in body frame coordinates with respect to inertial frame.
-    wheel_vel : numpy.ndarray
-        Initial velocities of reaction wheels.
-    date_and_time : list
-        Initial date and time. (Y, M, D, h, m, s) format.
-    satellite : oresat_adcs.configruation.strucutre.Satellite
-        Satellite instance where the products of moment of inertia are NOT implemented (reduced=False) (Does this really even matter?)
-    '''
-
-    def vector_field(self, position, lin_vel, attitude, body_ang_vel, wheel_vel,
-                     cur_cmd, whl_accl):
-        '''This is the vector field for our state space. It defines the differential equation to be solved.
-
-        Parameters
-        ----------
-        position : numpy.ndarray
-            Present position in ECI coordinates
-        lin_vel : numpy.ndarray
-            Present velocity in ECI coordinates
-        attitude : numpy.ndarray
-            Present attitude quaternion with respect to inertial frame.
-        body_ang_vel : numpy.ndarray
-            Present angular velocity in body frame coordinates with respect to inertial frame.
-        wheel_vel : numpy.ndarray
-            Present velocities of reaction wheels.
-        body_ang_accl : numpy.ndarray
-            Present (i.e. last) angular acceleration
-        cur_cmd : numpy.ndarray
-            Magnetorquer commands for currents.
-        whl_accl : numpy.ndarray
-            Reaction wheel acceleration commands.
-
-        Returns
-        -------
-        numpy.ndarray
-            Array of arrays for derivatives of state variables.
-        '''
-        #attitude     = vector.normalize(attitude) # we could do this for the intermediate RK4 steps, probably not necessary
-        mag_moment   = self.satellite.magnetorquers.actuate(cur_cmd)
-        T_whl        = self.satellite.reaction_wheels.torque(whl_accl)
-        H_whl        = self.satellite.reaction_wheels.momentum(wheel_vel)
-        
-        F_env, T_env = self.enviro.env_F_and_T(position, lin_vel, attitude, self.clock, self.GCI_to_ECEF, mag_moment)
-
-        dxdt, dvdt   = (lin_vel, F_env / self.satellite.mass)
-        dqdt         = 0.5 * quaternion.product(attitude, np.array([0, body_ang_vel[0], body_ang_vel[1], body_ang_vel[2]]))
-        dwdt         = self.satellite.inv_tot_moment.dot(T_env - T_whl - np.cross(body_ang_vel, H_whl + self.satellite.total_moment.dot(body_ang_vel)))
-        dw_rw_dt     = whl_accl
-        return np.array([dxdt, dvdt, dqdt, dwdt, dw_rw_dt], dtype=object)
-
-    def measurement(self, noisy):
-        '''Measures the present state of the system. In order:
-        position, velocity, attitude, angular rate, wheel velocities, magnetic field, sun vector.
-
-        Parameters
-        ----------
-        noisy (bool): True if measurements should contain noise, False if the true state should be returned.
-
-        Returns
-        -------
-        list: Contains numpy.ndarrays for measurements.
-        '''
-        return [sens.measurement(noisy) for sens in self.sensors]
-
-
-
-
-
-
-
-
-
-
 
 
 
