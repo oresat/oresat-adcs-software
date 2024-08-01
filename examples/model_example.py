@@ -108,4 +108,7 @@ if __name__ == "__main__":
                                         rw_sys=my_rw_system,
                                         mt_sys=my_mt_system,
                                         sensitive_instruments=my_instruments)
+    
+    print(my_satellite.env_F_and_T(position=x_0, velocity=v_0, attitude=q_0, clock=my_jclock, mag_moment=np.array([0, 0, 0])))
+
     pass

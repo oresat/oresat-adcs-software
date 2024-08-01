@@ -26,7 +26,7 @@ class Environment():
     '''
     Simplified environmental models for sun, aerodynamics, and gravity.
     '''
-    def __init__(self, hi_fi = False):
+    def __init__(self, hi_fi=False):
         self.hi_fi = hi_fi
         # Until I calcualte these, just keep them here
         self.MU = self.G_NEWTON * self.EARTH_MASS #: Gravitational parameter of satellite w.r.t. Earth.
@@ -35,18 +35,15 @@ class Environment():
 
 
     def relative_vel(self, x, v):
-        '''
-        Relative velocity of satellite, with respect to the atmosphere at this location,
+        '''Relative velocity of satellite, with respect to the atmosphere at this location,
         assuming atmosphere rotates with earth with respect to inertial frame.
 
-        Parameters
-        ----------
-        x : numpy.ndarray : Position of satellite in inertial frame.
-        v : numpy.ndarray : Velocity of satellite in inertial frame.
+        Parameters:
+            x (numpy.ndarray): Position of satellite in inertial frame.
+            v (numpy.ndarray): Velocity of satellite in inertial frame.
 
-        Returns
-        -------
-        numpy.ndarray : Relative velocity of satellite.
+        Returns:
+            numpy.ndarray : Relative velocity of satellite.
         '''
         v_rel = np.array([v[0] + self.EARTH_ROTATION * x[1],
                           v[1] + self.EARTH_ROTATION * x[0],
@@ -55,6 +52,18 @@ class Environment():
 
 
     def SRP_info(self, clock, x):
+        '''Unit vector in inertial coordinates pointing from satellite to the sun.
+        More details on page 420 of Markely & Crassidis. For now assume the sun is a constant distance away.
+
+        Parameters:
+            clock (jday.Clock): Clock is needed because the position of the sun depends on the date and time (obviously).
+            x (numpy.ndarray): Position of the satellite in inertial frame.
+
+        Returns:
+            float: Solar radiation pressure (N/m^2)
+            bool: True if position is in earth shadow
+            numpy.ndarray: normalized inertial unit vector pointing at the sun from the satellite
+        '''
         T_UT1      = (clock.julian_date() - 2451545) / 36525
         mean_long  = (280.46 + 36000.771 * T_UT1) % 360 # degrees mean longitude
         mean_anom  = np.radians((357.5277233 + 35999.05034 * T_UT1) % 360) # rad mean anomaly
@@ -75,22 +84,16 @@ class Environment():
 
 
 
-
     def atmo_density(self, h):
-        '''
-        Exponentially decaying atmosphere model. Refer to page 406 of Markely & Crassidis.
+        '''Exponentially decaying atmosphere model. Refer to page 406 of Markely & Crassidis.
         Eventually we may want a higher fidelity model.
         Be aware that this is undefined outside of 250 - 500 km.
 
-        Parameters
-        ----------
-        h : float
-            Height (m) above geode in geodetic coordinates.
+        Parameters:
+            h (float): Height (m) above geode in geodetic coordinates.
 
-        Returns
-        -------
-        float
-            Atmospheric density (kg/m^3).
+        Returns:
+            float: Atmospheric density (kg/m^3).
         '''
         if 250000 <= h and h < 300000:
             h_0   = 250000 # m
@@ -118,23 +121,16 @@ class Environment():
 
 
     def hi_fi_gravity(self, position, r, coeff):
-        '''
-        Higher order gravity model including J2, J3, and J4 zonal terms.
+        '''Higher order gravity model including J2, J3, and J4 zonal terms.
         Refer to Markely and Crassidis.
 
-        Parameters
-        ----------
-        position : numpy.ndarray
-            Position of satellite in inertial frame.
-        r : float
-            Norm of position vector.
-        coeff : float
-            For computational convenience, mu / r^2.
+        Parameters:
+            position (numpy.ndarray): Position of satellite in inertial frame.
+            r (float): Norm of position vector.
+            coeff (float) For computational convenience, mu / r^2.
 
-        Returns
-        -------
-        numpy.ndarray
-            Gravitational acceleration.
+        Returns:
+            numpy.ndarray: Gravitational acceleration.
         '''
         xoverr = position[0] / r
         yoverr = position[1] / r
@@ -157,22 +153,16 @@ class Environment():
 
 
     def gravity_accel(self, position, length):
-        '''
-        Gravitational forces and torques.
+        '''Gravitational forces and torques.
         Note that gravity torque is fairly predictable and we could even use it for feedforward in controls.
 
-        Parameters
-        ----------
-        position : numpy.ndarray
-            Position of satellite in inertial frame.
-        length : float
-            Norm of position vector.
-        attitude : numpy.ndarray
-            Attitude of satellite.
+        Parameters: 
+            position (numpy.ndarray): Position of satellite in inertial frame.
+            length (float): Norm of position vector.
+            attitude (numpy.ndarray): Attitude of satellite.
 
-        Returns
-        -------
-        numpy.ndarray : gravity acceleration vector
+        Returns:
+            numpy.ndarray : gravity acceleration vector
         '''
         coeff  = self.MU / length**2
         if self.hi_fi:
@@ -186,16 +176,13 @@ class Environment():
         See page 403 - 406 or https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html for relevant details.
         Be aware that every year, the approximated coefficients change a little.
 
+        Parameters:
+            r_ecef (numpy.ndarray): Position of satellite in Earth-centered Earth-fixed frame.
+            length (float): Norm of position vector.
+            GCI_to_ECEF (numpy.ndarray): Matrix for coordinate transformation from inertial frame to ECEF frame.
 
-        Parameters
-        ----------
-        r_ecef (numpy.ndarray):Position of satellite in Earth-centered Earth-fixed frame.
-        length (float): Norm of position vector.
-        GCI_to_ECEF (numpy.ndarray): Matrix for coordinate transformation from inertial frame to ECEF frame.
-
-        Returns
-        -------
-        numpy.ndarray: Magnetic B-field (T) in inertial coordinates.
+        Returns: 
+            numpy.ndarray: Magnetic B-field (T) in inertial coordinates.
         '''
         R      = (3 * np.dot(self.m, r_ecef) * r_ecef - self.m * length**2) / length**5 # nT
         B      = GCI_to_ECEF.T.dot(R)

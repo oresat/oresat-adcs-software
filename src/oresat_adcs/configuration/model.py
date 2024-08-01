@@ -147,19 +147,16 @@ def load(config_file_path, max_T, torque_limited=True):
         sensors_list = []
 
 
-        instrument_list = make_objects_list(SensitiveInstrument, config_dict["instruments"])
-        magnetorquer_list = make_objects_list(Magnetorquer, config_dict["magnetorquers"])
-        reaction_wheel_list = make_objects_list(Wheel, config_dict["reaction_wheels"])
+        instrument_list = make_objects_list(structure.SensitiveInstrument, config_dict["instruments"])
+        magnetorquer_list = make_objects_list(structure.Magnetorquer, config_dict["magnetorquers"])
+        reaction_wheel_list = make_objects_list(structure.Wheel, config_dict["reaction_wheels"])
 
-        mt_system = MagnetorquerSystem(magnetorquer_list)
-        rw_system = ReactionWheelSystem(reaction_wheel_list, max_T, torque_limited)
+        mt_system = structure.MagnetorquerSystem(magnetorquer_list)
+        rw_system = structure.ReactionWheelSystem(reaction_wheel_list, max_T, torque_limited)
 
         sat_config_kwargs = apply_nparray(config_dict["satellite"]["nparrays"], config_dict["satellite"]["keywords"])
 
-        return Satellite(**sat_config_kwargs, rw_sys=rw_system, mt_sys=mt_system, sensitive_instruments=instrument_list)
-
-
-
+        return SatelliteModel(**sat_config_kwargs, sensors=sensors_list, rw_sys=rw_system, mt_sys=mt_system, sensitive_instruments=instrument_list)
 
 
 
@@ -279,42 +276,52 @@ class SatelliteModel():
 
 
 
-    def solar_F_and_T(self, clock, x):
+    def solar_F_and_T(self, clock, x, attitude):
         '''Calculates solar radiation pressure torque on this wall.
         Assumes there is no diffuse reflection.
 
-        Parameters
-        ----------
-        clock (jday.Clock): Clock is needed because the position of the sun depends on the date and time (obviously).
-        x (numpy.ndarray): Position of the satellite in inertial frame.
-
+        Parameters:
+            clock (jday.Clock): Clock is needed because the position of the sun depends on the date and time (obviously).
+            x (numpy.ndarray): Position of the satellite in inertial frame.
+            attitude (numpy.ndarray): quaternion attitude in respect to the inertial frame.
 
         Returns
-        -------
-        numpy.ndarray
-            Force (N) and torque (N m) on satellite.
+            numpy.ndarray: Force (N) and torque (N m) on satellite.
         '''
+        # Get the solar pressure, shadow, and sun vector in inertial coordinates
         SRP, in_shadow, S_inertial = self.enviro.SRP_info(clock, x)
         
+        # If it is in a shadow, return nothing
         if in_shadow:
             return np.array([np.zeros(3), np.zeros(3)])
         
+        # If not in shadow, get the SRP force from each wall
         solar_F_and_T = sum([wall.srp_force(SRP, S_inertial) for wall in self.walls])
-        # check for coordinate transformation
-        solar_F_and_T[0] = quaternion.sandwich_opp(q, solar_F_and_T[0])
+
+        # check for coordinate transformation for forces
+        solar_F_and_T[0] = quaternion.sandwich_opp(attitude, solar_F_and_T[0])
         return solar_F_and_T
 
 
 
-    def drag_F_and_T(self, v_rel):
-        
+    def drag_F_and_T(self, v_rel, h, attitude):
+        '''Equation for drag taking satellite altitude and orientation into account.
+
+        Parameters: 
+            rho (float): Atmospheric density.
+            v (numpy.ndarray): Velocity of satellite in inertial frame.
+            attitude (numpy.ndarray): Attitude of satellite.
+
+        Returns:
+            numpy.ndarray: Array of arrays for drag force and torque on satellite.
+        '''
         drag_v_norm   = np.linalg.norm(v_rel)
         drag_v_ref    = quaternion.sandwich(attitude, v_rel / drag_v_norm)
         drag_pressure = -0.5 * self.enviro.atmo_density(h) * self.drag_coeff * drag_v_norm**2
 
         F_and_T = sum([wall.drag_force(drag_pressure, drag_v_ref) for wall in self.walls])
 
-        # coordinate transformation
+        # check coordinate transformation for forces
         F_and_T[0] = quaternion.sandwich_opp(attitude, F_and_T[0])
         return F_and_T
 
@@ -333,13 +340,9 @@ class SatelliteModel():
         -------
         numpy.ndarray : gravity force and torque vector
         '''
-        coeff  = self.MU / length**2
-        if self.hi_fi:
-            accel = self.hi_fi_gravity(position, length, coeff)
-        else:
-            accel = -coeff * position / length
+        accel = self.enviro.gravity_accel(position, length)
         n      = quaternion.sandwich(attitude, -position / length)
-        T      = 3 * coeff / length * np.cross(n, self.total_moment.dot(n))
+        T      = 3 * (self.enviro.MU) / (length**3) * np.cross(n, self.total_moment.dot(n))
 
 
         # check for coordinate transformation
@@ -355,28 +358,25 @@ class SatelliteModel():
         position (numpy.ndarray): Position of satellite in inertial frame.
         velocity (numpy.ndarray): Velocity of satellite in inertial frame.
         attitude (numpy.ndarray): Attitude of satellite.
-        GCI_to_ECEF (numpy.ndarray): Matrix for coordinate transformation from inertial frame to ECEF frame.
+        clock (oresat_adcs.classes.jday.Clock): Clock object
         mag_moment (numpy.ndarray): Magnetic dipole moment of satellite.
 
         Returns
         -------
         numpy.ndarray: Array of arrays for all forces and torques acting on satellite.
         '''
-        GCI_to_ECEF = frame.inertial_to_ecef(self.clock)
+        GCI_to_ECEF  = frame.inertial_to_ecef(clock)
         r_ecef       = GCI_to_ECEF.dot(position)
         length       = np.linalg.norm(position)
-
         # do high fidelity gravity, alititude may change
         lat, long, h = frame.ecef_to_lla(r_ecef)
-        rho          = self.atmo_density(h)
         
+        # Solar forces and torques
+        S_blah = self.solar_F_and_T(clock, position, attitude)
 
-        # Solar
-        S_blah = self.solar_F_and_T(clock, position)
-
-        # drag
-        v_rel = self.relative_vel(position, velocity)
-        D = self.drag_F_and_T(v_rel)
+        # drag forces and torques
+        v_rel = self.enviro.relative_vel(position, velocity)
+        D = self.drag_F_and_T(v_rel, h, attitude)
         
         # gravity, make sure it is hi-fi or so
         G = self.gravity_F_and_T(position, length, attitude)
@@ -388,11 +388,10 @@ class SatelliteModel():
 
         # Put the forces in the correct reference frame
         # forces = quaternion.sandwich(attitude, old_forces)
-        return D + G + M + srp
+        return D + G + M + S_blah
 
 
-    def vector_field(self, position, lin_vel, attitude, body_ang_vel, wheel_vel,
-                     cur_cmd, whl_accl):
+    def vector_field(self, position, lin_vel, attitude, body_ang_vel, wheel_vel, cur_cmd, whl_accl):
         '''This is the vector field for our state space. It defines the differential equation to be solved.
 
         Parameters
