@@ -111,4 +111,10 @@ if __name__ == "__main__":
     
     print(my_satellite.env_F_and_T(position=x_0, velocity=v_0, attitude=q_0, clock=my_jclock, mag_moment=np.array([0, 0, 0])))
 
+    print(my_satellite.vector_field(position=x_0, lin_vel=v_0, attitude=q_0, 
+                                    body_ang_vel=np.array([0, 0, 0]), 
+                                    wheel_vel=np.array([0, 0, 0, 0],),
+                                    cur_cmd=np.array([0, 0, 0]),
+                                    whl_accl=np.array([0, 0, 0, 0])))
+
     pass

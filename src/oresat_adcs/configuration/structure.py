@@ -382,6 +382,11 @@ class ReactionWheelSystem():
         numpy.ndarray
             Torque of wheel system (N m).
         '''
+        print(accls)
+        print(self.wheels)
+        for i, wheel in enumerate(self.wheels):
+            print(wheel.torque(accls[i]))
+
         return sum([wheel.torque(accls[i]) for i, wheel in enumerate(self.wheels)])
 
 class Wall():

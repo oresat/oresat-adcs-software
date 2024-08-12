@@ -414,7 +414,7 @@ class SatelliteModel():
         T_whl        = self.reaction_wheels.torque(whl_accl)
         H_whl        = self.reaction_wheels.momentum(wheel_vel)
 
-        F_env, T_env = self.enviro.env_F_and_T(position, lin_vel, attitude, self.clock, mag_moment)
+        F_env, T_env = self.env_F_and_T(position, lin_vel, attitude, self.clock, mag_moment)
 
         dxdt, dvdt   = (lin_vel, F_env / self.mass)
         dqdt         = 0.5 * quaternion.product(attitude, np.array([0, body_ang_vel[0], body_ang_vel[1], body_ang_vel[2]]))
