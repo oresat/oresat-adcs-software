@@ -35,12 +35,10 @@ class ReducedSatelliteModel():
         '''Forces acting on satellite.
 
         Parameters
-        ----------
-        x (numpy.ndarray): Position of satellite in inertial frame.
-        v (numpy.ndarray): Velocity of satellite in inertial frame.
+            x (numpy.ndarray): Position of satellite in inertial frame.
+            v (numpy.ndarray): Velocity of satellite in inertial frame.
 
         Returns
-        -------
         numpy.ndarray: Total forces acting on satellite.
         '''
         
@@ -73,13 +71,11 @@ class ReducedSatelliteModel():
         It defines the differential equation to be solved.
 
         Parameters
-        ----------
-        position (numpy.ndarray) : Present position in ECI coordinates
-        lin_vel (numpy.ndarray) : Present velocity in ECI coordinates
+            position (numpy.ndarray) : Present position in ECI coordinates
+            lin_vel (numpy.ndarray) : Present velocity in ECI coordinates
 
         Returns
-        -------
-        numpy.ndarray: Array of arrays for derivatives of state variables.
+            numpy.ndarray: Array of arrays for derivatives of state variables.
         '''
         F = self.forces(position, lin_vel)
         dxdt, dvdt = lin_vel, F / self.mass
@@ -95,34 +91,23 @@ def load(config_file_path, max_T, torque_limited=True):
         '''Class function to create a satellite object
 
         Parameters
-        ----------
-        config_file_path : str
-            Path to json configuration file, see examples
-        max_T : float
-            Config parameter to limite the maximum torque of the reaction wheel system
-        torque_limited : bool
-            Config parameter to limit the reaction wheels
+            config_file_path : str : Path to json configuration file, see examples
+            max_T : float : Config parameter to limite the maximum torque of the reaction wheel system
+            torque_limited : bool : Config parameter to limit the reaction wheels
 
         Returns
-        -------
-        oresat_adcs.configuration.structure.Satellite object
-            Satellite object built from config file
+            oresat_adcs.configuration.structure.Satellite object : Satellite object built from config file
         '''
         
         def apply_nparray(keys, dictionary):
             """Helper function to make certain lists into numpy arrays
 
             Parameters
-            ----------
-            keys : list
-                List of keys whos values should be changed to numpy arrays
-            dictionary : dict
-                Configuration dictionary to match the keyword cards of classes
+                keys : list: List of keys whos values should be changed to numpy arrays
+                dictionary : dict : Configuration dictionary to match the keyword cards of classes
 
             Returns
-            -------
-            dictionary : dict
-                Dictionary that values properly matching keyword arguments
+                dictionary : dict : Dictionary that values properly matching keyword arguments
             """
             for key in keys:
                 dictionary[key] = np.array(dictionary[key])
@@ -166,23 +151,15 @@ def load(config_file_path, max_T, torque_limited=True):
 class SatelliteModel():
     '''A rectangular prism satellite and its relevant material properties.
     At some point, add support for products of inertia, and parametrize magnetorquers.
-
     Note that if you want a reduced dynamical system or reduced environment, products of inertia should be set to False
 
     Parameters
-    ----------
-    dimensions : np.array
-        Dimension of satellite walls in meters: [length, width, height]
-    principal_moments : numpy.ndarray
-        Principal moments of inertia for satellite, minus reaction wheels.
-    products_of_inertia : bool
-        Changes the moment of inertia, set to False if you use a reduced dynamical system or reduced environement
-    reaction_wheel_system : oresat_adcs.configuration.structure.ReactionWheelSystem
-        A custom ReactionWheelSystem instance to use
-    magnetorquer_system : oresat_adcs.configuration.structure.MagnetorquerSystem
-        A custom ReactionWheelSystem instance to use
-    sensitive_instruments : list(oresat_adcs.configuraiton.structure.SensitiveInstrument)
-        A list of sensitive instrument instances
+        dimensions : np.array : Dimension of satellite walls in meters: [length, width, height]
+        principal_moments : numpy.ndarray : Principal moments of inertia for satellite, minus reaction wheels.
+        products_of_inertia : bool : Changes the moment of inertia, set to False if you use a reduced dynamical system or reduced environement
+        reaction_wheel_system : configuration.structure.ReactionWheelSystem : A custom ReactionWheelSystem instance to use
+        magnetorquer_system : configuration.structure.MagnetorquerSystem : A custom ReactionWheelSystem instance to use
+        sensitive_instruments : list(oresat_adcs.configuraiton.structure.SensitiveInstrument) : A list of sensitive instrument instances
     '''
     def __init__(self, environment, mass, dimensions, absorption, drag_coeff, principal_moments, product_moments, reduced, date_and_time, sensors, rw_sys, mt_sys, sensitive_instruments=[]):
         
@@ -243,12 +220,10 @@ class SatelliteModel():
         position, velocity, attitude, angular rate, wheel velocities, magnetic field, sun vector.
 
         Parameters
-        ----------
-        noisy (bool): True if measurements should contain noise, False if the true state should be returned.
+            noisy (bool): True if measurements should contain noise, False if the true state should be returned.
 
         Returns
-        -------
-        list: Contains numpy.ndarrays for measurements.
+            list: Contains numpy.ndarrays for measurements.
         '''
         return [sens.measurement(noisy) for sens in self.sensors]
 
@@ -261,14 +236,10 @@ class SatelliteModel():
         At some point, take a more rigorous look at this.
 
         Parameters
-        ----------
-        v_ref : numpy.ndarray
-            Vector defining the plane the surfaces are projected onto.
+            v_ref : numpy.ndarray : Vector defining the plane the surfaces are projected onto.
 
         Returns
-        -------
-        tuple
-            First entry is the projected surface area, second is the center of pressure vector.
+            tuple : First entry is the projected surface area, second is the center of pressure vector.
         '''
         (A, CoP) = sum([wall.center_of_pressure(v_ref) for wall in self.walls])
 
@@ -331,14 +302,12 @@ class SatelliteModel():
         Note that gravity torque is fairly predictable and we could even use it for feedforward in controls.
 
         Parameters
-        ----------
-        position (numpy.ndarray): Position of satellite in inertial frame.
-        length (float): Norm of position vector.
-        attitude (numpy.ndarray): Attitude of satellite.
+            position (numpy.ndarray): Position of satellite in inertial frame.
+            length (float): Norm of position vector.
+            attitude (numpy.ndarray): Attitude of satellite.
 
         Returns
-        -------
-        numpy.ndarray : gravity force and torque vector
+            numpy.ndarray : gravity force and torque vector
         '''
         accel = self.enviro.gravity_accel(position, length)
         n      = quaternion.sandwich(attitude, -position / length)
@@ -354,16 +323,14 @@ class SatelliteModel():
         '''External forces and torques acting on satellite.
 
         Parameters
-        ----------
-        position (numpy.ndarray): Position of satellite in inertial frame.
-        velocity (numpy.ndarray): Velocity of satellite in inertial frame.
-        attitude (numpy.ndarray): Attitude of satellite.
-        clock (oresat_adcs.classes.jday.Clock): Clock object
-        mag_moment (numpy.ndarray): Magnetic dipole moment of satellite.
+            position (numpy.ndarray): Position of satellite in inertial frame.
+            velocity (numpy.ndarray): Velocity of satellite in inertial frame.
+            attitude (numpy.ndarray): Attitude of satellite.
+            clock (oresat_adcs.classes.jday.Clock): Clock object
+            mag_moment (numpy.ndarray): Magnetic dipole moment of satellite.
 
         Returns
-        -------
-        numpy.ndarray: Array of arrays for all forces and torques acting on satellite.
+            numpy.ndarray: Array of arrays for all forces and torques acting on satellite.
         '''
         GCI_to_ECEF  = frame.inertial_to_ecef(clock)
         r_ecef       = GCI_to_ECEF.dot(position)
@@ -395,19 +362,17 @@ class SatelliteModel():
         '''This is the vector field for our state space. It defines the differential equation to be solved.
 
         Parameters
-        ----------
-        position (numpy.ndarray): Present position in ECI coordinates
-        lin_vel (numpy.ndarray): Present velocity in ECI coordinates
-        attitude (numpy.ndarray): Present attitude quaternion with respect to inertial frame.
-        body_ang_vel (numpy.ndarray): Present angular velocity in body frame coordinates with respect to inertial frame.
-        wheel_vel (numpy.ndarray): Present velocities of reaction wheels.
-        body_ang_accl (numpy.ndarray): Present (i.e. last) angular acceleration
-        cur_cmd (numpy.ndarray): Magnetorquer commands for currents.
-        whl_accl (numpy.ndarray): Reaction wheel acceleration commands.
+            position (numpy.ndarray): Present position in ECI coordinates
+            lin_vel (numpy.ndarray): Present velocity in ECI coordinates
+            attitude (numpy.ndarray): Present attitude quaternion with respect to inertial frame.
+            body_ang_vel (numpy.ndarray): Present angular velocity in body frame coordinates with respect to inertial frame.
+            wheel_vel (numpy.ndarray): Present velocities of reaction wheels.
+            body_ang_accl (numpy.ndarray): Present (i.e. last) angular acceleration
+            cur_cmd (numpy.ndarray): Magnetorquer commands for currents.
+            whl_accl (numpy.ndarray): Reaction wheel acceleration commands.
 
         Returns
-        -------
-        numpy.ndarray: Array of arrays for derivatives of state variables.
+            numpy.ndarray: Array of arrays for derivatives of state variables.
         '''
         #attitude     = vector.normalize(attitude) # we could do this for the intermediate RK4 steps, probably not necessary
         mag_moment   = self.magnetorquers.actuate(cur_cmd)
@@ -438,11 +403,8 @@ class Integrator():
     '''This is a numerical integrator for propagating an initial state through state space.
 
     Parameters
-    ----------
-    model : DynamicalSystem
-        Model that is to be numerically integrated.
-    dt : float
-        Fixed time-step.
+        model : DynamicalSystem : Model that is to be numerically integrated.
+        dt : float : Fixed time-step.
     '''
     def __init__(self, model, dt):
         self.model         = model
@@ -454,18 +416,12 @@ class Integrator():
         However, this is a nice general purpose tool. Error is on the order of dt^5.
 
         Parameters
-        ----------
-        state : numpy.ndarray
-            Last state of system.
-        param : list
-            Any exogenous inputs to system.
+            state (numpy.ndarray): Last state of system.
+            param (list): Any exogenous inputs to system.
 
         Returns
-        -------
-        numpy.ndarray
-            State of system at next time step.
-        numpy.ndarray
-            The angular acceleration, in the case of a DynamicalSystem model.
+        numpy.ndarray: State of system at next time step.
+        numpy.ndarray: The angular acceleration, in the case of a DynamicalSystem model.
         '''
         k1     = self.f(*state, *param)
         k2     = self.f(*(state + k1 * self.dt/2), *param)
@@ -478,11 +434,8 @@ class Integrator():
         '''This takes the model one step forward and updates its clock, transformations, and sensors.
 
         Parameters
-        ----------
-        state : numpy.ndarray
-            Last state of system.
-        param : list
-            Any exogenous inputs to system.
+            state : numpy.ndarray : Last state of system.
+            param : list : Any exogenous inputs to system.
         '''
         next_step         = self.RK4_step(state, param)
         if self.model.simulator:
@@ -498,11 +451,8 @@ class Integrator():
         Then it propagates the dynamic model for that duration using those commands.
 
         Parameters
-        ----------
-        duration : float
-            The length of time (s) to integrate over.
-        zero_order_hold : list
-            Two numpy.ndarrays, for current commands and acceleration commands.
+            duration : float : The length of time (s) to integrate over.
+            zero_order_hold : list : Two numpy.ndarrays, for current commands and acceleration commands.
         '''
         t = self.dt
         while t < duration or abs(t - duration) < 0.001:
