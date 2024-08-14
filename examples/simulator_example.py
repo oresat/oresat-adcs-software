@@ -1,6 +1,7 @@
 
 import numpy as np
-from oresat_adcs.configuration import structure
+from oresat_adcs.classes import jday
+from oresat_adcs.configuration import structure, model, new_environment
 from oresat_adcs.system import simulator
 
 
@@ -17,6 +18,10 @@ if __name__ == "__main__":
     t_0 = (2024 ,7, 7, 14, 0, 0)
     dt    = 0.05 # perhaps we want to choose this upstream?
 
+    my_jclock = jday.JClock(2024, 7, 7, 14, 0, 0) 
+    my_orbit = model.OrbitalState(x_0, v_0, my_jclock)
+    my_env = new_environment.OrbitalEnvironment()
+
 
     my_instruments= [structure.SensitiveInstrument(np.array([0, 0, -1]), bounds=[15, 100], forbidden=[True, False], obj_ids=[0]),
                      structure.SensitiveInstrument(np.array([0, -1, 0]), bounds=[180, 180], forbidden=[False, False], obj_ids=[])]
@@ -25,12 +30,9 @@ if __name__ == "__main__":
     # make torqer system
     linearized = True
     mt_type = "LinearRod" if linearized else "Rod"
-
-
     torquers = [structure.Magnetorquer(mt_type, np.array([1, 0, 0]), 0.0625),
                 structure.Magnetorquer(mt_type, np.array([0, 1, 0]), 0.0625),
                 structure.Magnetorquer("Square", np.array([0, 0, 1]), 0.2887)]
-    
     my_mt_system = structure.MagnetorquerSystem(torquers)
 
     # make reaction wheel system
@@ -62,14 +64,18 @@ if __name__ == "__main__":
     products_of_inertia = principal_moments*0.1
 
     dimensions = np.array([0.1, 0.1, 0.2])
+    sensors = []
 
-    my_satellite = structure.Satellite(mass=mass,
+    my_satellite = model.SatelliteModel(environment=my_env,
+                                        mass=mass,
                                        dimensions=dimensions,
                                        absorption=absorption,
                                        drag_coeff = drag,
                                        principal_moments=principal_moments,
                                        product_moments=products_of_inertia,
                                        reduced=False,
+                                       date_and_time=t_0,
+                                       sensors=sensors,
                                        rw_sys=my_rw_system, 
                                        mt_sys=my_mt_system,
                                        sensitive_instruments=my_instruments)

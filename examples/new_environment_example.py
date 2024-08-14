@@ -13,6 +13,8 @@ if __name__ == "__main__":
 
     my_orbit = model.OrbitalState(pos, vel, my_jclock)
 
+    print(my_orbit)
+    print(*my_orbit)
     my_env = new_environment.OrbitalEnvironment()
 
     # normally position, velocity, and clock would all change each time

@@ -374,7 +374,7 @@ class SatelliteModel():
         length       = np.linalg.norm(position)
         # do high fidelity gravity, alititude may change
         lat, long, h = frame.ecef_to_lla(r_ecef)
-        
+
         # Solar forces and torques
         S_blah = self.solar_F_and_T(orbit_now, attitude)
 
