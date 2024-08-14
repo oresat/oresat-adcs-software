@@ -3,6 +3,10 @@ from ..functions import frame, quaternion, vector
 
 
 
+
+
+
+
 class Environment():
     AU    = 1.496e11 # m, 1 mean distance from earth to sun
     EARTH_ROTATION = 7.2921158553e-5 #: Rotation of Earth around its axis (rad/s).

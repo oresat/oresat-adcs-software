@@ -208,7 +208,7 @@ class SatelliteModel():
         #self.state       = np.array([position, lin_vel, attitude, body_ang_vel, wheel_vel], dtype=object)
         self.init_date   = date_and_time
         year, month, day, hour, minute, second = date_and_time
-        self.clock       = jday.Clock(year, month, day, hour, minute, second)
+        self.clock       = jday.JClock(year, month, day, hour, minute, second)
 
 
         # just call frame or make it part of the environment
@@ -383,7 +383,7 @@ class SatelliteModel():
 
         dxdt, dvdt   = (lin_vel, F_env / self.mass)
         dqdt         = 0.5 * quaternion.product(attitude, np.array([0, body_ang_vel[0], body_ang_vel[1], body_ang_vel[2]]))
-        dwdt         = self.satellite.inv_tot_moment.dot(T_env - T_whl - np.cross(body_ang_vel, H_whl + self.satellite.total_moment.dot(body_ang_vel)))
+        dwdt         = self.inv_tot_moment.dot(T_env - T_whl - np.cross(body_ang_vel, H_whl + self.total_moment.dot(body_ang_vel)))
         dw_rw_dt     = whl_accl
         return np.array([dxdt, dvdt, dqdt, dwdt, dw_rw_dt], dtype=object)
 
