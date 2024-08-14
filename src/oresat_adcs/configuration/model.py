@@ -6,7 +6,42 @@ from . import structure, new_environment
 
 
 class OrbitalState():
-    '''State for orbital mechanics'''
+    '''State for orbital mechanics (basically a struct)
+    
+    Attributes
+        position (numpy.ndarray)
+        velocity (numpy.ndarray)
+        clock (clock.JClock)
+        
+        GCI_to_ECEF (numpy.ndarray): Matrix for coordinate transformation from inertial frame to ECEF frame.
+        r_ecef (numpy.ndarray): position in earth centered earth fixed frame
+        length (float): norm of position vector
+        lat: latitude
+        long: longitude
+        h: height (meters) above geode in geodedic coordinates
+    '''
+
+    def __init__(self, position, velocity, clock):
+        self.update(position, velocity, clock)
+
+    def update(self, position, velocity, clock):
+        '''Updates attributes of the orbital state'''
+        self.position = position
+        self.velocity = velocity
+        self.clock = clock
+
+        # Some functions use x and v, double check that these are in the same reference frame
+        self.x = position
+        self.v = velocity
+
+        # other useful parameters
+        # this entire thing may be optimized with a JIT compiler
+        self.GCI_to_ECEF  = frame.inertial_to_ecef(clock)
+        self.r_ecef       = self.GCI_to_ECEF.dot(position)
+        self.length       = np.linalg.norm(position)
+        # do high fidelity gravity, alititude may change
+        self.lat, self.long, self.h = frame.ecef_to_lla(self.r_ecef)
+
     pass
 
 class AttitudeState():
@@ -31,7 +66,7 @@ class ReducedSatelliteModel():
 
         # relative velocity should be a part of frame too???
 
-    def forces(self, x, v):
+    def forces(self, orbit):
         '''Forces acting on satellite.
 
         Parameters
@@ -41,22 +76,21 @@ class ReducedSatelliteModel():
         Returns
         numpy.ndarray: Total forces acting on satellite.
         '''
-        
-        v_rel = self.enviro.relative_vel(x, v)
-        length = np.linalg.norm(x)
+        v_rel = self.enviro.relative_vel(orbit)
+        #length = np.linalg.norm(x)
         v_norm   = np.linalg.norm(v_rel)
 
         # update transformation matrix
-        GCI_to_ECEF = frame.inertial_to_ecef(self.clock)
-        r_ecef       = GCI_to_ECEF.dot(x)
-        lat, long, h = frame.ecef_to_lla(r_ecef)
+        #GCI_to_ECEF = frame.inertial_to_ecef(self.clock)
+        #r_ecef       = GCI_to_ECEF.dot(x)
+        #lat, long, h = frame.ecef_to_lla(r_ecef)
         
-        SRP, in_shadow, S_inertial = self.enviro.SRP_info(self.clock, x)
+        SRP, in_shadow, S_inertial = self.enviro.SRP_info(orbit)
 
         # drag force
-        D = -0.5 * self.enviro.atmo_density(h) * self.drag_coefficient * self.area * v_norm * v
+        D = -0.5 * self.enviro.atmo_density(orbit) * self.drag_coefficient * self.area * v_norm * orbit.v
         # gravity force
-        G = self.enviro.gravity_accel(x, length) * x * self.mass
+        G = self.enviro.gravity_accel(orbit) * orbit.x * self.mass
         # also have SRP force, assume srp is a pressure vector
         
         if in_shadow:
@@ -77,7 +111,8 @@ class ReducedSatelliteModel():
         Returns
             numpy.ndarray: Array of arrays for derivatives of state variables.
         '''
-        F = self.forces(position, lin_vel)
+        orbit_now = OrbitalState(position, lin_vel, self.clock)
+        F = self.forces(orbit_now)
         dxdt, dvdt = lin_vel, F / self.mass
         return np.array([dxdt, dvdt])
 
@@ -154,6 +189,7 @@ class SatelliteModel():
     Note that if you want a reduced dynamical system or reduced environment, products of inertia should be set to False
 
     Parameters
+        environement: class that contains models of the orbit environment
         dimensions : np.array : Dimension of satellite walls in meters: [length, width, height]
         principal_moments : numpy.ndarray : Principal moments of inertia for satellite, minus reaction wheels.
         products_of_inertia : bool : Changes the moment of inertia, set to False if you use a reduced dynamical system or reduced environement
@@ -247,7 +283,7 @@ class SatelliteModel():
 
 
 
-    def solar_F_and_T(self, clock, x, attitude):
+    def solar_F_and_T(self, orbit, attitude):
         '''Calculates solar radiation pressure torque on this wall.
         Assumes there is no diffuse reflection.
 
@@ -260,7 +296,7 @@ class SatelliteModel():
             numpy.ndarray: Force (N) and torque (N m) on satellite.
         '''
         # Get the solar pressure, shadow, and sun vector in inertial coordinates
-        SRP, in_shadow, S_inertial = self.enviro.SRP_info(clock, x)
+        SRP, in_shadow, S_inertial = self.enviro.SRP_info(orbit)
         
         # If it is in a shadow, return nothing
         if in_shadow:
@@ -275,20 +311,20 @@ class SatelliteModel():
 
 
 
-    def drag_F_and_T(self, v_rel, h, attitude):
+    def drag_F_and_T(self, orbit_now, attitude):
         '''Equation for drag taking satellite altitude and orientation into account.
 
         Parameters: 
             rho (float): Atmospheric density.
-            v (numpy.ndarray): Velocity of satellite in inertial frame.
             attitude (numpy.ndarray): Attitude of satellite.
 
         Returns:
             numpy.ndarray: Array of arrays for drag force and torque on satellite.
         '''
+        v_rel = self.enviro.relative_vel(orbit_now)
         drag_v_norm   = np.linalg.norm(v_rel)
         drag_v_ref    = quaternion.sandwich(attitude, v_rel / drag_v_norm)
-        drag_pressure = -0.5 * self.enviro.atmo_density(h) * self.drag_coeff * drag_v_norm**2
+        drag_pressure = -0.5 * self.enviro.atmo_density(orbit_now) * self.drag_coeff * drag_v_norm**2
 
         F_and_T = sum([wall.drag_force(drag_pressure, drag_v_ref) for wall in self.walls])
 
@@ -297,7 +333,7 @@ class SatelliteModel():
         return F_and_T
 
 
-    def gravity_F_and_T(self, position, length, attitude):
+    def gravity_F_and_T(self, orbit, attitude):
         '''Gravitational forces and torques.
         Note that gravity torque is fairly predictable and we could even use it for feedforward in controls.
 
@@ -309,9 +345,9 @@ class SatelliteModel():
         Returns
             numpy.ndarray : gravity force and torque vector
         '''
-        accel = self.enviro.gravity_accel(position, length)
-        n      = quaternion.sandwich(attitude, -position / length)
-        T      = 3 * (self.enviro.MU) / (length**3) * np.cross(n, self.total_moment.dot(n))
+        accel = self.enviro.gravity_accel(orbit)
+        n      = quaternion.sandwich(attitude, -orbit.position / orbit.length)
+        T      = 3 * (self.enviro.MU) / (orbit.length**3) * np.cross(n, self.total_moment.dot(n))
 
 
         # check for coordinate transformation
@@ -332,6 +368,7 @@ class SatelliteModel():
         Returns
             numpy.ndarray: Array of arrays for all forces and torques acting on satellite.
         '''
+        orbit_now = OrbitalState(position, velocity, clock)
         GCI_to_ECEF  = frame.inertial_to_ecef(clock)
         r_ecef       = GCI_to_ECEF.dot(position)
         length       = np.linalg.norm(position)
@@ -339,17 +376,17 @@ class SatelliteModel():
         lat, long, h = frame.ecef_to_lla(r_ecef)
         
         # Solar forces and torques
-        S_blah = self.solar_F_and_T(clock, position, attitude)
+        S_blah = self.solar_F_and_T(orbit_now, attitude)
 
         # drag forces and torques
-        v_rel = self.enviro.relative_vel(position, velocity)
-        D = self.drag_F_and_T(v_rel, h, attitude)
+        #v_rel = self.enviro.relative_vel(orbit_now)
+        D = self.drag_F_and_T(orbit_now, attitude)
         
         # gravity, make sure it is hi-fi or so
-        G = self.gravity_F_and_T(position, length, attitude)
+        G = self.gravity_F_and_T(orbit_now, attitude)
 
         # Magnetic Field
-        B = self.enviro.magnetic_field(r_ecef, length, GCI_to_ECEF)
+        B = self.enviro.magnetic_field(orbit_now)
         B_body = quaternion.sandwich(attitude, B)
         M = np.array([np.zeros(3), np.cross(mag_moment, B_body)])
 

@@ -23,7 +23,7 @@ if __name__ == "__main__":
 
     
     '''Test new environment'''
-    my_env = new_environment.Environment(hi_fi=True)
+    my_env = new_environment.OrbitalEnvironment(hi_fi=True)
 
 
 
