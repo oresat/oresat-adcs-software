@@ -3,10 +3,6 @@ from ..functions import frame, quaternion, vector
 
 
 
-
-
-
-
 class Environment():
     AU    = 1.496e11 # m, 1 mean distance from earth to sun
     EARTH_ROTATION = 7.2921158553e-5 #: Rotation of Earth around its axis (rad/s).
@@ -267,6 +263,7 @@ class OrbitalEnvironment():
         sat_to_sun   = self.AU * earth_to_sun - orbit.x
 
         S_inertial = vector.normalize(sat_to_sun)
+
         in_shadow    = np.dot(orbit.x, earth_to_sun) < - np.sqrt(np.dot(orbit.x, orbit.x) - self.EARTH_RAD**2) # cylindrical approx for earth shadowing
 
         SRP          = self.SRP_coeff / np.dot(sat_to_sun, sat_to_sun) # solar radiation pressure
