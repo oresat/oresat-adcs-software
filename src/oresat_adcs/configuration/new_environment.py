@@ -221,7 +221,7 @@ class OrbitalEnvironment():
         self.SRP_coeff = 1362 * self.AU**2 / 299792458 # Newtons, eq D.56
 
 
-    def relative_vel(self, orbit):
+    def relative_vel(self, state):
         '''Relative velocity of satellite, with respect to the atmosphere at this location,
         assuming atmosphere rotates with earth with respect to inertial frame.
 
@@ -232,13 +232,13 @@ class OrbitalEnvironment():
         Returns:
             numpy.ndarray : Relative velocity of satellite.
         '''
-        v_rel = np.array([orbit.v[0] + self.EARTH_ROTATION * orbit.x[1],
-                          orbit.v[1] + self.EARTH_ROTATION * orbit.x[0],
-                          orbit.v[2]])
+        v_rel = np.array([state.v[0] + self.EARTH_ROTATION * state.x[1],
+                          state.v[1] + self.EARTH_ROTATION * state.x[0],
+                          state.v[2]])
         return v_rel # m/s
 
 
-    def SRP_info(self, orbit):
+    def SRP_info(self, state):
         '''Unit vector in inertial coordinates pointing from satellite to the sun.
         More details on page 420 of Markely & Crassidis. For now assume the sun is a constant distance away.
 
@@ -250,7 +250,7 @@ class OrbitalEnvironment():
             bool: True if position is in earth shadow
             numpy.ndarray: normalized inertial unit vector pointing at the sun from the satellite
         '''
-        T_UT1      = (orbit.clock.julian_date() - 2451545) / 36525
+        T_UT1      = (state.clock.julian_date() - 2451545) / 36525
         mean_long  = (280.46 + 36000.771 * T_UT1) % 360 # degrees mean longitude
         mean_anom  = np.radians((357.5277233 + 35999.05034 * T_UT1) % 360) # rad mean anomaly
         ecl_long   = np.radians(mean_long + 1.914666471 * np.sin(mean_anom) + 0.019994643 * np.sin(2*mean_anom)) # ecliptic longitude
@@ -260,18 +260,18 @@ class OrbitalEnvironment():
                                 np.cos(ecl_oblq) * np.sin(ecl_long),
                                 np.sin(ecl_oblq) * np.sin(ecl_long)])
 
-        sat_to_sun   = self.AU * earth_to_sun - orbit.x
+        sat_to_sun   = self.AU * earth_to_sun - state.x
 
         S_inertial = vector.normalize(sat_to_sun)
 
-        in_shadow    = np.dot(orbit.x, earth_to_sun) < - np.sqrt(np.dot(orbit.x, orbit.x) - self.EARTH_RAD**2) # cylindrical approx for earth shadowing
+        in_shadow    = np.dot(state.x, earth_to_sun) < - np.sqrt(np.dot(state.x, state.x) - self.EARTH_RAD**2) # cylindrical approx for earth shadowing
 
         SRP          = self.SRP_coeff / np.dot(sat_to_sun, sat_to_sun) # solar radiation pressure
         return SRP, in_shadow, S_inertial 
 
 
 
-    def atmo_density(self, orbit):
+    def atmo_density(self, state):
         '''Exponentially decaying atmosphere model. Refer to page 406 of Markely & Crassidis.
         Eventually we may want a higher fidelity model.
         Be aware that this is undefined outside of 250 - 500 km.
@@ -282,32 +282,32 @@ class OrbitalEnvironment():
         Returns:
             float: Atmospheric density (kg/m^3).
         '''
-        if 250000 <= orbit.h < 300000:
+        if 250000 <= state.h < 300000:
             h_0   = 250000 # m
             rho_0 = 7.248 * 10**(-11) # kg/m^3
             H     = 46900 # m
-        elif 300000 <= orbit.h < 350000:
+        elif 300000 <= state.h < 350000:
             h_0   = 300000 # m
             rho_0 = 2.418 * 10**(-11) # kg/m^3
             H     = 52500 # m
-        elif 350000 <= orbit.h < 400000:
+        elif 350000 <= state.h < 400000:
             h_0   = 350000 # m
             rho_0 = 9.158 * 10**(-12) # kg/m^3
             H     = 56400 # m
-        elif 400000 <= orbit.h < 450000:
+        elif 400000 <= state.h < 450000:
             h_0   = 400000 # m
             rho_0 = 3.727 * 10**(-12) # kg/m^3
             H     = 59400 # m
-        elif 450000 <= orbit.h < 500000:
+        elif 450000 <= state.h < 500000:
             h_0   = 400000 # m
             rho_0 = 1.585 * 10**(-12) # kg/m^3
             H     = 62200 # m
         else:
-            print("height out of bounds!", orbit.h) # when less lazy, allow for decaying orbit
-        return rho_0 * np.exp((h_0 - orbit.h) / H) # kg/m^3
+            print("height out of bounds!", state.h) # when less lazy, allow for decaying orbit
+        return rho_0 * np.exp((h_0 - state.h) / H) # kg/m^3
 
 
-    def hi_fi_gravity(self, orbit, coeff):
+    def hi_fi_gravity(self, state, coeff):
         '''Higher order gravity model including J2, J3, and J4 zonal terms.
         Refer to Markely and Crassidis.
 
@@ -319,14 +319,14 @@ class OrbitalEnvironment():
         Returns:
             numpy.ndarray: Gravitational acceleration.
         '''
-        xoverr = orbit.position[0] / orbit.length
-        yoverr = orbit.position[1] / orbit.length
-        zoverr = orbit.position[2] / orbit.length
+        xoverr = state.position[0] / state.length
+        yoverr = state.position[1] / state.length
+        zoverr = state.position[2] / state.length
         zoverrsquare = zoverr**2
         zoverrcube = zoverr*zoverrsquare
         zoverr4th = zoverrsquare**2
-        rearthoverr = self.EARTH_RAD / orbit.length
-        a   = orbit.position / orbit.length
+        rearthoverr = self.EARTH_RAD / state.length
+        a   = state.position / state.length
         aj2 = 3/2 * self.J2 * rearthoverr**2 * np.array([(1 - 5 * zoverrsquare) * xoverr,
                                                           (1 - 5 * zoverrsquare) * yoverr,
                                                           (3 - 5 * zoverrsquare) * zoverr])
@@ -339,7 +339,7 @@ class OrbitalEnvironment():
         return - coeff * (a + aj2 + aj3 + aj4)
 
 
-    def gravity_accel(self, orbit):
+    def gravity_accel(self, state):
         '''Gravitational forces and torques.
         Note that gravity torque is fairly predictable and we could even use it for feedforward in controls.
 
@@ -351,14 +351,14 @@ class OrbitalEnvironment():
         Returns:
             numpy.ndarray : gravity acceleration vector
         '''
-        coeff  = self.MU / orbit.length**2
+        coeff  = self.MU / state.length**2
         if self.hi_fi:
-            accel = self.hi_fi_gravity(orbit, coeff)
+            accel = self.hi_fi_gravity(state, coeff)
         else:
-            accel = -coeff * orbit.position / orbit.length
+            accel = -coeff * state.position / state.length
         return accel
 
-    def magnetic_field(self, orbit):
+    def magnetic_field(self, state):
         '''Magnetic field dipole model, average 20-50 uT magnitude. Gradient of 1st order term of IGRF model of magnetic potential.
         See page 403 - 406 or https://www.ngdc.noaa.gov/IAGA/vmod/igrf.html for relevant details.
         Be aware that every year, the approximated coefficients change a little.
@@ -371,7 +371,7 @@ class OrbitalEnvironment():
         Returns: 
             numpy.ndarray: Magnetic B-field (T) in inertial coordinates.
         '''
-        R      = (3 * np.dot(self.m, orbit.r_ecef) * orbit.r_ecef - self.m * orbit.length**2) / orbit.length**5 # nT
-        B      = orbit.GCI_to_ECEF.T.dot(R)
+        R      = (3 * np.dot(self.m, state.r_ecef) * state.r_ecef - self.m * state.length**2) / state.length**5 # nT
+        B      = state.GCI_to_ECEF.T.dot(R)
         return B
 
