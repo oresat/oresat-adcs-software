@@ -1,8 +1,8 @@
 import numpy as np
 import json
 from ..functions import frame, quaternion, vector
-from ..classes import jday, sensor
-from . import structure, new_environment
+from . import jday, sensor
+from ..configuration import environment, structure
 
 
 

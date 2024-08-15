@@ -3,7 +3,8 @@ from numpy.random import default_rng
 from scipy import optimize
 
 from ..functions import quaternion, vector
-from . import sensor, dynamic
+from . import dynamics
+from . import sensor
 
 
 class DiscreteAttitudeStartrackerKalman():
@@ -197,7 +198,7 @@ class DiscretePositionKalman():
         self.a = 1.28e-6   # s^-2, mu/r^3 for circular orbit
         self.b = 1.618e-10 # s^-1, drag coeff assuming constant speed and density
 
-        self.model = dynamic.ReducedDynamicalSystem(x, v, date_and_time)
+        self.model = dynamics.ReducedDynamicalSystem(x, v, date_and_time)
         self.x = np.block([self.model.state[0], self.model.state[1]])
 
     def estimate_attitude(self, B_ref, a_ref):

@@ -1,4 +1,5 @@
 import numpy as np
+
 import json
 from ..functions import vector
 
@@ -495,29 +496,21 @@ class Wall():
         T      = np.cross(cp, F)
         return np.array([F, T])
 
-
 class Satellite():
     '''A rectangular prism satellite and its relevant material properties.
     At some point, add support for products of inertia, and parametrize magnetorquers.
-
     Note that if you want a reduced dynamical system or reduced environment, products of inertia should be set to False
 
     Parameters
-    ----------
-    dimensions : np.array
-        Dimension of satellite walls in meters: [length, width, height]
-    principal_moments : numpy.ndarray
-        Principal moments of inertia for satellite, minus reaction wheels.
-    products_of_inertia : bool
-        Changes the moment of inertia, set to False if you use a reduced dynamical system or reduced environement
-    reaction_wheel_system : oresat_adcs.configuration.structure.ReactionWheelSystem
-        A custom ReactionWheelSystem instance to use
-    magnetorquer_system : oresat_adcs.configuration.structure.MagnetorquerSystem
-        A custom ReactionWheelSystem instance to use
-    sensitive_instruments : list(oresat_adcs.configuraiton.structure.SensitiveInstrument)
-        A list of sensitive instrument instances
+        environement: class that contains models of the orbit environment
+        dimensions : np.array : Dimension of satellite walls in meters: [length, width, height]
+        principal_moments : numpy.ndarray : Principal moments of inertia for satellite, minus reaction wheels.
+        products_of_inertia : bool : Changes the moment of inertia, set to False if you use a reduced dynamical system or reduced environement
+        reaction_wheel_system : configuration.structure.ReactionWheelSystem : A custom ReactionWheelSystem instance to use
+        magnetorquer_system : configuration.structure.MagnetorquerSystem : A custom ReactionWheelSystem instance to use
+        sensitive_instruments : list(oresat_adcs.configuraiton.structure.SensitiveInstrument) : A list of sensitive instrument instances
     '''
-    def __init__(self, mass, dimensions, absorption, drag_coeff, principal_moments, product_moments, reduced, rw_sys, mt_sys, sensitive_instruments=[]):
+    def __init__(self, mass, dimensions, absorption, drag_coeff, principal_moments, product_moments, reduced, sensors, rw_sys, mt_sys, sensitive_instruments=[]):
         
         # The satellite should define its own dimensions and walls
         self.length         = dimensions[0]
@@ -530,17 +523,16 @@ class Satellite():
                                Wall(self.height/2, np.array([0, 0, 1]), self.width, self.length, absorption),
                                Wall(self.height/2, np.array([0, 0, -1]), self.width, self.length, absorption))
 
-        
+        print(self.walls) 
         #: Estimated drag coefficient.
         self.drag_coeff      = drag_coeff
         self.mass            = mass
+        
+        #self.enviro = environment
 
-
-        # Define the reaction wheels
+        self.sensors     = sensors
         self.reaction_wheels = rw_sys
-        # define the magnetorquers
         self.magnetorquers = mt_sys
-        # define the sensitive instruments
         self.instruments = sensitive_instruments
         
         #: Moment of inertia for reaction wheels about spin axes with respect to principal axes.
@@ -559,140 +551,18 @@ class Satellite():
         self.inv_tot_moment  = np.linalg.inv(self.total_moment)
 
 
-    def area_and_cop(self, v_ref):
-        '''Projected surface area and center of pressure for whole satellite.
-        Note that I (Cory) don't have a great deal of confidence in this CoP calculation.
-        At some point, take a more rigorous look at this.
-
-        Parameters
-        ----------
-        v_ref : numpy.ndarray
-            Vector defining the plane the surfaces are projected onto.
-
-        Returns
-        -------
-        tuple
-            First entry is the projected surface area, second is the center of pressure vector.
-        '''
-        (A, CoP) = sum([wall.center_of_pressure(v_ref) for wall in self.walls])
-
-        return (A, CoP / A)
-
-    def srp_forces(self, SRP, S):
-        '''Calculates solar radiation pressure torque on this wall.
-        Assumes there is no diffuse reflection.
-
-        Parameters
-        ----------
-        SRP : float
-            Solar radiation pressure.
-        S : numpy.ndarray
-            Sun vector in body coordinates.
-
-        Returns
-        -------
-        numpy.ndarray
-            Force (N) and torque (N m) on satellite.
-        '''
-        F_and_T = sum([wall.srp_force(SRP, S) for wall in self.walls])
-        return F_and_T
-
-    def drag_forces(self, drag_pressure, v):
-        '''Calculates solar radiation pressure torque on this wall.
-        Assumes there is no diffuse reflection.
-
-        Parameters
-        ----------
-        SRP : float
-            Solar radiation pressure.
-        S : numpy.ndarray
-            Sun vector in body coordinates.
-
-        Returns
-        -------
-        numpy.ndarray
-            Force (N) and torque (N m) on satellite.
-        '''
-        F_and_T = sum([wall.drag_force(drag_pressure, v) for wall in self.walls])
-        return F_and_T
-
-    def load(config_file_path, max_T, torque_limited=True):
-        '''Class function to create a satellite object
-
-        Parameters
-        ----------
-        config_file_path : str
-            Path to json configuration file, see examples
-        max_T : float
-            Config parameter to limite the maximum torque of the reaction wheel system
-        torque_limited : bool
-            Config parameter to limit the reaction wheels
-
-        Returns
-        -------
-        oresat_adcs.configuration.structure.Satellite object
-            Satellite object built from config file
-        '''
+        # Dynamics
+        self.simulator   = True
         
-        def apply_nparray(keys, dictionary):
-            """Helper function to make certain lists into numpy arrays
-
-            Parameters
-            ----------
-            keys : list
-                List of keys whos values should be changed to numpy arrays
-            dictionary : dict
-                Configuration dictionary to match the keyword cards of classes
-
-            Returns
-            -------
-            dictionary : dict
-                Dictionary that values properly matching keyword arguments
-            """
-            for key in keys:
-                dictionary[key] = np.array(dictionary[key])
-            return dictionary
+        
+        
+        # No arrays, maybe a dict or an object
+        #self.state       = np.array([position, lin_vel, attitude, body_ang_vel, wheel_vel], dtype=object)
+        #self.init_date   = date_and_time
+        #year, month, day, hour, minute, second = date_and_time
+        #self.clock       = jday.JClock(year, month, day, hour, minute, second)
 
 
-        def make_objects_list(target_class, config_dict):
-            """Helper function to return a list of objects based on a confituration dictionary"""
-            object_list = []
-            for name,config in config_dict.items():
-                nparray_config = apply_nparray(config["nparrays"], config["keywords"])
-                object_list.append(target_class(**nparray_config))
-
-            return object_list
-
-
-        with open(config_file_path, 'r') as structure_config:
-            config_dict = json.load(structure_config)
-
-        instrument_list = make_objects_list(SensitiveInstrument, config_dict["instruments"])
-        magnetorquer_list = make_objects_list(Magnetorquer, config_dict["magnetorquers"])
-        reaction_wheel_list = make_objects_list(Wheel, config_dict["reaction_wheels"])
-
-        mt_system = MagnetorquerSystem(magnetorquer_list)
-        rw_system = ReactionWheelSystem(reaction_wheel_list, max_T, torque_limited)
-
-        sat_config_kwargs = apply_nparray(config_dict["satellite"]["nparrays"], config_dict["satellite"]["keywords"])
-
-        return Satellite(**sat_config_kwargs, rw_sys=rw_system, mt_sys=mt_system, sensitive_instruments=instrument_list)
-
-
-
-
-class ReducedSatellite():
-    '''Simple satellite model for reduced models'''
-
-    def __init__(self, mass, drag_coefficient, dimensions):
-        self.mass = mass
-        self.cd = drag_coefficient
-        self.dimensions = dimensions
-
-        # temporary approximation for any given cross sectional area
-        self.area = min(dimensions)*max(dimensions)
-
-
-
-
+        # just call frame or make it part of the environment
+        # self.update_transformation_matrices()lass Satellite():
 

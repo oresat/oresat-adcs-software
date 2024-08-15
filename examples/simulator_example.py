@@ -1,7 +1,7 @@
 
 import numpy as np
 from oresat_adcs.classes import jday
-from oresat_adcs.configuration import structure, model, new_environment
+from oresat_adcs.configuration import environment, structure, model
 from oresat_adcs.system import simulator
 
 
@@ -20,7 +20,7 @@ if __name__ == "__main__":
 
     my_jclock = jday.JClock(2024, 7, 7, 14, 0, 0) 
     my_orbit = model.OrbitalState(x_0, v_0, my_jclock)
-    my_env = new_environment.OrbitalEnvironment()
+    my_env = environment.OrbitalEnvironment()
 
 
     my_instruments= [structure.SensitiveInstrument(np.array([0, 0, -1]), bounds=[15, 100], forbidden=[True, False], obj_ids=[0]),
