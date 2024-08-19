@@ -51,20 +51,17 @@ if __name__ == "__main__":
     sun = new_sensors.SunSensor(mean=0, std_dev=1e-6, env=my_env)
 
 
-    gps_pos = new_sensors.GPS_pos(mean=0, std_dev=30, env=my_env)
     print(my_state.position)
     print(gps_pos.measurement(my_state, noisy=False))
     print(gps_pos.measurement(my_state, noisy=True))
     print("\n")
 
-    gps_vel = new_sensors.GPS_vel(mean=0, std_dev=2, env=my_env)
     print(my_state.velocity)
     print(gps_vel.measurement(my_state, noisy=False))
     print(gps_vel.measurement(my_state, noisy=True))
     print("\n")
 
 
-    star_tracker = new_sensors.StarTracker(mean=0, std_dev=0.75e-7, env=my_env, size=4)
     print(my_state.attitude)
     print(star_tracker.measurement(my_state, noisy=False))
     print(star_tracker.measurement(my_state, noisy=True))
@@ -88,21 +85,18 @@ if __name__ == "__main__":
     print("\n")
     
 
-    wheel_vel_sensors = new_sensors.Wheel_vel(mean=0, std_dev=0.0001, env=my_env, size=4)
     print(my_state.wheel_vel)
     print(wheel_vel_sensors.measurement(my_state, noisy=False))
     print(wheel_vel_sensors.measurement(my_state, noisy=True))
     print("\n")
 
 
-    mag = new_sensors.Magnetometer(mean=0, std_dev=4e-8, env=my_env) # from datasheet
     print(my_env.magnetic_field(my_state))
     # technically if the quaternion were different, the noise-less 
     print(mag.measurement(my_state, noisy=False))
     print(mag.measurement(my_state, noisy=True))
     print("\n")
 
-    sun = new_sensors.SunSensor(mean=0, std_dev=1e-6, env=my_env)
     print(my_env.SRP_info(my_state)[2])
     print(sun.measurement(my_state, noisy=False))
     print(sun.measurement(my_state, noisy=True))

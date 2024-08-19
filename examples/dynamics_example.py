@@ -83,8 +83,7 @@ if __name__ == "__main__":
 
     my_dynamics = dynamics.Dynamics(my_satellite, my_env)
 
-    print(my_dynamics.vector_field(my_state.vector,
-                                   my_state.clock, 
+    print(my_dynamics.vector_field(my_state,
                                    cur_cmd=np.array([0, 0, 0]),
                                    whl_accl=np.array([0, 0, 0, 0])))
     

@@ -10,7 +10,6 @@ class SimulatorDaemonInterface():
     def __init__(self, dynamics_model, initial_state, dt):
         dt    = 0.05 # perhaps we want to choose this upstream?
 
-        #self.model        = dynamic.DynamicalSystem(x_0, v_0, q_0, w_0, whl_0, t_0, satellite)
         self.model = dynamics_model
         self.integrator   = dynamics.Integrator(self.model, initial_state, dt)
 
