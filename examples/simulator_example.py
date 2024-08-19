@@ -1,7 +1,7 @@
 
 import numpy as np
-from oresat_adcs.classes import jday
-from oresat_adcs.configuration import environment, structure, model
+from oresat_adcs.classes import jday, dynamics, sensor
+from oresat_adcs.configuration import environment, structure
 from oresat_adcs.system import simulator
 
 
@@ -18,15 +18,17 @@ if __name__ == "__main__":
     t_0 = (2024 ,7, 7, 14, 0, 0)
     dt    = 0.05 # perhaps we want to choose this upstream?
 
-    my_jclock = jday.JClock(2024, 7, 7, 14, 0, 0) 
-    my_orbit = model.OrbitalState(x_0, v_0, my_jclock)
-    my_env = environment.OrbitalEnvironment()
+    my_jclock = jday.JClock(*t_0)
+    my_state =  dynamics.DynamicState(x_0, v_0, q_0, w_0, whl_0, my_jclock)
+
+    my_env = environment.OrbitalEnvironment(hi_fi=True)
+
 
 
     my_instruments= [structure.SensitiveInstrument(np.array([0, 0, -1]), bounds=[15, 100], forbidden=[True, False], obj_ids=[0]),
                      structure.SensitiveInstrument(np.array([0, -1, 0]), bounds=[180, 180], forbidden=[False, False], obj_ids=[])]
-    
-    
+
+
     # make torqer system
     linearized = True
     mt_type = "LinearRod" if linearized else "Rod"
@@ -36,7 +38,7 @@ if __name__ == "__main__":
     my_mt_system = structure.MagnetorquerSystem(torquers)
 
     # make reaction wheel system
-    inclination = np.pi / 3    
+    inclination = np.pi / 3
     azimuth = np.pi / 4
     parallel_moment = 1.64023e-6
     orthogonal_moment = 1.02562e-6
@@ -49,7 +51,6 @@ if __name__ == "__main__":
               structure.Wheel(given_axes[1], parallel_moment, orthogonal_moment),
               structure.Wheel(given_axes[2], parallel_moment, orthogonal_moment),
               structure.Wheel(given_axes[3], parallel_moment, orthogonal_moment)]
-
     my_rw_system = structure.ReactionWheelSystem(wheels, max_T, torque_limited)
 
 
@@ -62,27 +63,37 @@ if __name__ == "__main__":
                                   5.49370596e-3])
     # products of inertia: xy, xz, yz
     products_of_inertia = principal_moments*0.1
-
     dimensions = np.array([0.1, 0.1, 0.2])
+
+
+    '''
+    sensors     = [sensor.GPS_pos(mean=0, std_dev=30, model=self),
+                            sensor.GPS_vel(mean=0, std_dev=2, model=self),
+                            sensor.StarTracker(mean=0, std_dev=0.75e-7, model=self),
+                            sensor.Gyro(arw_mean=0, arw_std_dev=2.79e-4, rrw_mean=0, rrw_std_dev=8.73e-7, init_bias=3.15e-5, model=self),
+                            sensor.Wheel_vel(mean=0, std_dev=0.0001, model=self),
+                            sensor.Magnetometer(mean=0, std_dev=4e-8, model=self), # from datasheet
+                            sensor.SunSensor(mean=0, std_dev=1e-6, model=self)
+                            ]
+                            '''
     sensors = []
+    my_satellite = structure.Satellite(mass=3.0,
+                                        dimensions=np.array([0.1, 0.1, 0.2]),
+                                        absorption=0.84,
+                                        drag_coeff=1.0,
+                                        principal_moments=principal_moments,
+                                        product_moments=products_of_inertia,
+                                        reduced=False,
+                                        sensors=sensors,
+                                        rw_sys=my_rw_system,
+                                        mt_sys=my_mt_system,
+                                        sensitive_instruments=my_instruments)
+    
 
-    my_satellite = model.SatelliteModel(environment=my_env,
-                                        mass=mass,
-                                       dimensions=dimensions,
-                                       absorption=absorption,
-                                       drag_coeff = drag,
-                                       principal_moments=principal_moments,
-                                       product_moments=products_of_inertia,
-                                       reduced=False,
-                                       date_and_time=t_0,
-                                       sensors=sensors,
-                                       rw_sys=my_rw_system, 
-                                       mt_sys=my_mt_system,
-                                       sensitive_instruments=my_instruments)
-
+    my_dynamics = dynamics.Dynamics(my_satellite, my_env)
 
     # Create the simulation
-    my_simulator = simulator.SimulatorDaemonInterface(my_satellite)
+    my_simulator = simulator.SimulatorDaemonInterface(my_dynamics, my_state, dt)
 
 
     # try some simulation
@@ -92,16 +103,15 @@ if __name__ == "__main__":
 
     # format simulation output quaternion to be like a csv
     output = ""
-    total_iterations = 1000
+    total_iterations = 3
     for iteration in range(total_iterations):
         out = my_simulator.propagate(2, cmds)
 
-        output += (",".join([str(component) for component in out[2]])) + "\n"
+        #output += (",".join([str(component) for component in out[2]])) + "\n"
 
-        if iteration % 10 == 0:
-            print("Iteration ", iteration, " of ", total_iterations," complete")
+        print("Iteration ", iteration, " of ", total_iterations," complete")
 
-    print(output)
+    #print(output)
 
 
     print("\nDone")

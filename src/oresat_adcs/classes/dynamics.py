@@ -5,6 +5,99 @@ from . import jday, sensor
 from ..configuration import environment, structure
 
 
+class SatelliteState(np.ndarray):
+    
+    def __new__(cls, input_array, info=None):
+        obj = np.asarray(input_array).view(cls)
+        
+        # add attributes
+        obj.info = info
+        return obj
+
+    def __array_finalize__(self, obj):
+        # see InfoArray.__array_finalize__ for comments
+        if obj is None: return
+        self.info = getattr(obj, 'info', None)
+
+    def attach_clock(self, clock):
+        '''Adds a clock as an attribute'''
+        self.clock = clock
+
+    def update_aliases_and_refs(self):
+        '''Updates alias attributes and reference attributes'''
+        # alias variables
+        self.position = self[0]
+        self.velocity = self[1]
+        self.attitude = self[2]
+        self.body_ang_vel = self[3]
+        self.wheel_vel = self[4]
+
+        # more alias variables
+        self.x = self.position
+        self.v = self.velocity
+        
+        # Reference variables
+        # remember to attach a clock
+        self.GCI_to_ECEF  = frame.inertial_to_ecef(self.clock)
+        self.r_ecef       = self.GCI_to_ECEF.dot(self.position)
+        self.length       = np.linalg.norm(self.position)
+        self.lat, self.long, self.h = frame.ecef_to_lla(self.r_ecef)
+        pass
+
+
+
+class DynamicState():
+    '''This could also be the integrator???
+    
+    Parameters
+        position (numpy.ndarray): position in inertial coorindates
+        velocity (numpy.ndarray): linear velocity in inertial coordinates'''
+
+    def __init__(self, position, velocity, attitude, body_ang_velocity, wheel_vel, clock):
+        self.clock = clock
+        self.update_vector(np.array([position, velocity, attitude, body_ang_velocity, wheel_vel], dtype=object))
+        self.update_other()
+        pass
+
+    def __add__(self, other):
+        '''Other should be a numpy array'''
+        # if other is another DynamicState, thats weird and then add vectors
+        # if other is a numpy array, add vectors
+        return DynamicState(*(self.vector + other), self.clock)
+    
+    def update_vector(self, state_vector):
+        '''Updates state via a numpy.ndarray'''
+        self.vector = state_vector
+        self.position = self.vector[0]
+        self.velocity = self.vector[1]
+        self.attitude = self.vector[2]
+        self.body_ang_vel = self.vector[3]
+        self.wheel_vel = self.vector[4]
+
+        self.x = self.position
+        self.v = self.velocity
+
+
+    def update_clock(self, dt):
+        '''Updates the clock and parameters that depend on clock.
+        Alternatively, the clock can be tick-ed forward directly'''
+        self.clock.tick(dt)
+        
+
+    def update_other(self):
+        '''Other updates to do after both position and clock have been updated'''
+        self.GCI_to_ECEF  = frame.inertial_to_ecef(self.clock)
+        self.r_ecef       = self.GCI_to_ECEF.dot(self.position)
+        self.length       = np.linalg.norm(self.position)
+        self.lat, self.long, self.h = frame.ecef_to_lla(self.r_ecef)
+
+    def vector():
+        '''Returns state as numpy.ndarray for matrix simplicity'''
+        return np.array()
+
+
+
+
 
 
 class Dynamics():
@@ -21,15 +114,13 @@ class Dynamics():
         magnetorquer_system : configuration.structure.MagnetorquerSystem : A custom ReactionWheelSystem instance to use
         sensitive_instruments : list(oresat_adcs.configuraiton.structure.SensitiveInstrument) : A list of sensitive instrument instances
     '''
-    def __init__(self, satellite, environment, state):
+    def __init__(self, satellite, environment):
         
         self.satellite = satellite 
         self.enviro = environment
-
-
         # Dynamics
         self.simulator   = True
-        
+
 
     
     def measurement(self, noisy):
@@ -42,6 +133,7 @@ class Dynamics():
         Returns
             list: Contains numpy.ndarrays for measurements.
         '''
+        print("hey")
         return [sens.measurement(noisy) for sens in self.satellite.sensors]
 
 
@@ -192,6 +284,7 @@ class Dynamics():
             numpy.ndarray: Array of arrays for derivatives of state variables.
         '''
         #attitude     = vector.normalize(attitude) # we could do this for the intermediate RK4 steps, probably not necessary
+
         mag_moment   = self.satellite.magnetorquers.actuate(cur_cmd)
         T_whl        = self.satellite.reaction_wheels.torque(whl_accl)
         H_whl        = self.satellite.reaction_wheels.momentum(state.wheel_vel)
@@ -212,44 +305,6 @@ class Dynamics():
 
 
 
-
-class SatelliteState():
-    '''This could also be the integrator???
-    
-    Parameters
-        position (numpy.ndarray): position in inertial coorindates
-        velocity (numpy.ndarray): linear velocity in inertial coordinates'''
-
-    def __init__(self, position, velocity, attitude, body_ang_velocity, wheel_vel, clock):
-        self.position = position
-        self.velocity = velocity
-        self.attitude = attitude
-        self.body_ang_vel = body_ang_velocity
-        self.wheel_vel = wheel_vel
-        self.vector = np.array([position, velocity, attitude, body_ang_velocity, wheel_vel], dtype=object)
-
-        self.clock = clock
-        self.update()
-        pass
-
-    def update(self):
-        self.x = self.position
-        self.v = self.velocity
-
-        self.GCI_to_ECEF  = frame.inertial_to_ecef(self.clock)
-        self.r_ecef       = self.GCI_to_ECEF.dot(self.position)
-        self.length       = np.linalg.norm(self.position)
-        # do high fidelity gravity, alititude may change
-        self.lat, self.long, self.h = frame.ecef_to_lla(self.r_ecef)
-
-    def vector():
-        '''Returns state as numpy.ndarray for matrix simplicity'''
-        return np.array()
-
-
-
-
-
 class Integrator():
     '''This is a numerical integrator for propagating an initial state through state space.
 
@@ -257,9 +312,10 @@ class Integrator():
         model : DynamicalSystem : Model that is to be numerically integrated.
         dt : float : Fixed time-step.
     '''
-    def __init__(self, model, dt):
+    def __init__(self, model, initial_state, dt):
         self.model         = model
         self.f             = self.model.vector_field
+        self.state = initial_state
         self.dt            = dt
 
     def RK4_step(self, state, param):
@@ -271,15 +327,17 @@ class Integrator():
             param (list): Any exogenous inputs to system.
 
         Returns
-        numpy.ndarray: State of system at next time step.
-        numpy.ndarray: The angular acceleration, in the case of a DynamicalSystem model.
+            numpy.ndarray: State of system at next time step.
+            numpy.ndarray: The angular acceleration, in the case of a DynamicalSystem model.
         '''
-        k1     = self.f(*state, *param)
-        k2     = self.f(*(state + k1 * self.dt/2), *param)
-        k3     = self.f(*(state + k2 * self.dt/2), *param)
-        k4     = self.f(*(state + k3 * self.dt), *param)
+        # the clock hadn't been updated for these time steps
+        # state should be updated via adding
+        k1     = self.f(state, *param)
+        k2     = self.f((state + k1 * self.dt/2), *param)
+        k3     = self.f((state + k2 * self.dt/2), *param)
+        k4     = self.f((state+ k3 * self.dt), *param)
         change = (k1 + 2*k2 + 2*k3 + k4) / 6
-        return state + change * self.dt
+        return state.vector + change * self.dt
 
     def update(self, state, param):
         '''This takes the model one step forward and updates its clock, transformations, and sensors.
@@ -291,11 +349,15 @@ class Integrator():
         next_step         = self.RK4_step(state, param)
         if self.model.simulator:
             next_step[2]  = vector.normalize(next_step[2])
-        self.model.state  = next_step
-        self.model.clock.tick(self.dt)
-        self.model.update_transformation_matrices()
-        if self.model.simulator:
-            self.model.sensors[3].propagate(self.dt)
+        
+        # Make sure transform matrix is updated correctly
+        #self.model.state  = next_step
+        state.update_vector(next_step)
+        state.update_clock(self.dt)
+        state.update_other()
+        # commented out for testing
+        #if self.model.simulator:
+        #    self.model.sensors[3].propagate(self.dt)
 
     def integrate(self, duration, zero_order_hold):
         '''This is a front-facing interface for the library. It takes an integration duration and a set of fixed exogenous commands.
@@ -310,9 +372,9 @@ class Integrator():
             if self.model.simulator:
                 cur_cmd  = zero_order_hold[0]
                 accl_cmd = zero_order_hold[1]
-                self.update(self.model.state, [cur_cmd, accl_cmd])
+                self.update(self.state, [cur_cmd, accl_cmd])
             else:
-                self.update(self.model.state, [])
+                self.update(self.state, [])
             t += self.dt
 
 

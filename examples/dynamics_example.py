@@ -20,7 +20,7 @@ if __name__ == "__main__":
     dt    = 0.05 # perhaps we want to choose this upstream?
 
     my_jclock = jday.JClock(*t_0)
-    my_state =  dynamics.SatelliteState(x_0, v_0, q_0, w_0, whl_0, my_jclock)
+    my_state =  dynamics.DynamicState(x_0, v_0, q_0, w_0, whl_0, my_jclock)
 
     my_env = environment.OrbitalEnvironment(hi_fi=True)
 
@@ -81,8 +81,10 @@ if __name__ == "__main__":
                                         sensitive_instruments=my_instruments)
     
 
-    my_dynamics = dynamics.Dynamics(my_satellite, my_env, my_state)
-    print(my_dynamics.vector_field(my_state, 
+    my_dynamics = dynamics.Dynamics(my_satellite, my_env)
+
+    print(my_dynamics.vector_field(my_state.vector,
+                                   my_state.clock, 
                                    cur_cmd=np.array([0, 0, 0]),
                                    whl_accl=np.array([0, 0, 0, 0])))
     

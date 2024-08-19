@@ -261,10 +261,10 @@ class JClock:
     def __eq__(self, other):
         return self.datetime == other.datetime
     
-    def tick(self) -> None:
+    def tick(self, dt) -> None:
         '''Increase the datetime by some one second'''
         # simply add a timedelta object to the datetime object
-        self.datetime = self.datetime + timedelta(seconds=1)
+        self.datetime = self.datetime + timedelta(seconds=dt)
 
     def sync(self) -> float:
         '''Sets the datetime to datetime.now() and returns the difference in seconds'''

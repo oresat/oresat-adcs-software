@@ -3,7 +3,7 @@ from numpy.random import default_rng
 from scipy import optimize
 
 from ..functions import quaternion, vector
-from . import dynamics
+from ..classes import dynamics
 from . import sensor
 
 
@@ -34,7 +34,9 @@ class DiscreteAttitudeStartrackerKalman():
         self.db = np.zeros(3)
         self.P  = np.diag([self.SENSOR_SIGMA**2, self.SENSOR_SIGMA**2, self.SENSOR_SIGMA**2,
                             self.INITIAL_BIAS**2, self.INITIAL_BIAS**2, self.INITIAL_BIAS**2])
+        # quaternion
         self.q = q_initial
+        # gyroscope bias
         self.b = np.zeros(3)
 
         # change in linear EKF with respect to noise
@@ -169,17 +171,12 @@ class DiscreteAttitudeStartrackerKalman():
         return self.q, self.b
 
 class DiscretePositionKalman():
-    '''
-    Discrete-time Extended Kalman Filter for position and velocity estimates.
+    '''Discrete-time Extended Kalman Filter for position and velocity estimates.
 
     Parameters
-    ----------
-    x : numpy.ndarray
-        Initial position estimate.
-    v : numpy.ndarray
-        Initial velocity estimate.
-    date_and_time : list
-        Initial date and time. (Y, M, D, h, m, s) format.
+        x : numpy.ndarray : Initial position estimate.
+        v : numpy.ndarray : Initial velocity estimate.
+        date_and_time : list : Initial date and time. (Y, M, D, h, m, s) format.
     '''
     def __init__(self, x, v, date_and_time):
         x_sigma = 10.0598 # m
@@ -202,20 +199,14 @@ class DiscretePositionKalman():
         self.x = np.block([self.model.state[0], self.model.state[1]])
 
     def estimate_attitude(self, B_ref, a_ref):
-        '''
-        Estimates the attitude of the satellite, given measurements from magnetometer and accelerometer.
+        '''Estimates the attitude of the satellite, given measurements from magnetometer and accelerometer.
 
         Parameters
-        ----------
-        B_ref : numpy.ndarray
-            Magnetic field (T) reading in body coordinates.
-        a_ref : numpy.ndarray
-            Acceleration (m/s^2) reading in body coordinates.
+            B_ref : numpy.ndarray : Magnetic field (T) reading in body coordinates.
+            a_ref : numpy.ndarray : Acceleration (m/s^2) reading in body coordinates.
 
         Returns
-        -------
-        numpy.ndarray or bool
-            Quaternion attitude or False if solver failed.
+            numpy.ndarray or bool : Quaternion attitude or False if solver failed.
         '''
         B_intl  = self.model.enviro.magnetic_field(self.x[:3], self.model.GCI_to_ECEF)
         a_intl  = self.model.enviro.forces(self.x[:3], self.x[3:]) / self.model.satellite.mass
@@ -224,13 +215,10 @@ class DiscretePositionKalman():
         return q
 
     def F_continuous(self):
-        '''
-        Continuous time covariance propagation matrix.
+        '''Continuous time covariance propagation matrix.
 
         Returns
-        -------
-        numpy.ndarray
-            Continuous time covariance propagation matrix.
+            numpy.ndarray : Continuous time covariance propagation matrix.
         '''
         F11      = np.zeros((3,3))
         F12      = np.eye(3)
@@ -251,21 +239,15 @@ class DiscretePositionKalman():
         return F
 
     def state_transition(self, dt):
-        '''
-        Calculates state transition matrices for discrete propagation of position, velocity, and covariance.
+        '''Calculates state transition matrices for discrete propagation of position, velocity, and covariance.
         Neglects the contribution of Earth's rotating atmosphere to velocity. For more accuracy, use RK4 integration instead.
 
         Parameters
-        ----------
-        dt : float
-            Time (s) to step forward by.
+            dt : float : Time (s) to step forward by.
 
         Returns
-        -------
-        numpy.ndarray
-            Covariance propagation matrix.
-        numpy.ndarray
-            State transition matrix.
+            numpy.ndarray : Covariance propagation matrix.
+            numpy.ndarray : State transition matrix.
         '''
         t2         = dt**2
 
@@ -283,15 +265,11 @@ class DiscretePositionKalman():
         return F_discrete, A_discrete
 
     def update(self, x_ref, v_ref):
-        '''
-        Measurement update for Kalman state.
+        '''Measurement update for Kalman state.
 
         Parameters
-        ----------
-        x_ref : numpy.ndarray
-            Measured position.
-        v_ref : numpy.ndarray
-            Measured velocity.
+            x_ref : numpy.ndarray : Measured position.
+            v_ref : numpy.ndarray : Measured velocity.
         '''
         y      = np.block([x_ref, v_ref])
         self.K = self.P.dot(np.linalg.inv(self.P + self.R))
@@ -300,44 +278,34 @@ class DiscretePositionKalman():
         self.model.state = np.array([self.x[:3], self.x[3:]])
 
     def propagate(self, dt):
-        '''
-        A priori estimate of state.
+        '''A priori estimate of state.
 
         Parameters
-        ----------
-        dt : float
-            Length of time to step forward by.
+            dt : float : Length of time to step forward by.
         '''
         F, A = self.state_transition(dt)
         self.P = F.dot(self.P.dot(F.T)) + self.Q
         self.x = A.dot(self.x)
 
     def output(self):
-        '''
-        Kalman state estimate.
+        '''Kalman state estimate.
 
         Returns
-        -------
-        numpy.ndarray
-            Position estimate.
-        numpy.ndarray
-            Velocity estimate.
+            numpy.ndarray : Position estimate.
+            numpy.ndarray : Velocity estimate.
         '''
         return self.x[:3], self.x[3:]
 
+
+
 class KalmanFilters():
-    '''
-    Wraps the two Kalman filters into one object.
+    '''Wraps the two Kalman filters into one object.
     This probably isn't the best way to do this, but come back to that later.
 
     Parameters
-    ----------
-    gyro_step_size : float
-        Time step for attitude propagation.
-    gps_step_size : float
-        Time step for position propagation.
-    truth_model : dynamic.DynamicalSystem
-        Source of measurements. Eventually this will be replaced by actual sensors.
+        gyro_step_size : float : Time step for attitude propagation.
+        gps_step_size : float : Time step for position propagation.
+        truth_model : dynamic.DynamicalSystem : Source of measurements. Eventually this will be replaced by actual sensors.
     '''
     def __init__(self, gyro_step_size, gps_step_size, truth_model):
         self.truth_model = truth_model
@@ -349,13 +317,10 @@ class KalmanFilters():
         self.AttFilter = DiscreteAttitudeStartrackerKalman(q_init)
 
     def output(self):
-        '''
-        Kalman state estimate.
+        '''Kalman state estimate.
 
         Returns
-        -------
-        numpy.ndarray
-            Array of arrays for estimated state, in usual order.
+            numpy.ndarray : Array of arrays for estimated state, in usual order.
         '''
         state = self.truth_model.measurement(noisy=True)
         x, v  = self.PosFilter.output()
@@ -369,25 +334,19 @@ class KalmanFilters():
         return state
 
     def update(self, sensor_data):
-        '''
-        Measurement update for filters. Perhaps these should be detangled.
+        '''Measurement update for filters. Perhaps these should be detangled.
 
         Parameters
-        ----------
-        sensor_data : numpy.ndarray
-            Array of arrays for measured state, in usual order.
+            sensor_data : numpy.ndarray : Array of arrays for measured state, in usual order.
         '''
         self.PosFilter.update(*sensor_data[:2])
         self.AttFilter.measurement(sensor_data[2])
 
     def propagate(self, duration):
-        '''
-        A priori estimate of state.
+        '''A priori estimate of state.
 
         Parameters
-        ----------
-        duration : float
-            Length of time to propagate filters forward by.
+            duration : float : Length of time to propagate filters forward by.
         '''
         t = self.gyro_dt
         w = self.last_w # when this is asynch, this will be an actual gyro reading
@@ -401,25 +360,26 @@ class KalmanFilters():
             self.PosFilter.model.update_transformation_matrices()
             t += self.gps_dt
 
+
+
+
+
+
+
+
+
 def triad_algorithm(r1, r2, b1, b2):
     '''Essentially the TRIAD algorithm, and technically suboptimal. For details refer to
     "Fast Quaternion Attitude Estimation from Two Vector Measurements" Markely 2002.
 
     Parameters
-    ----------
-    r1 : numpy.ndarray
-        More accurate inertial estimate.
-    r2 : numpy.ndarray
-        Less accurate inertial estimate.
-    b1 : numpy.ndarray
-        More accurate body measurement.
-    b2: numpy.ndarray
-        Less accurate body measurement.
+        r1 : numpy.ndarray : More accurate inertial estimate.
+        r2 : numpy.ndarray : Less accurate inertial estimate.
+        b1 : numpy.ndarray : More accurate body measurement.
+        b2: numpy.ndarray : Less accurate body measurement.
 
     Returns
-    -------
-    numpy.ndarray or bool
-        Quaternion attitude or False if solver failed.
+        numpy.ndarray or bool : Quaternion attitude or False if solver failed.
     '''
     # still not handling a couple degenerate cases very well...
     r3       = np.cross(r1, r2)

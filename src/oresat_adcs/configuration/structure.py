@@ -383,10 +383,10 @@ class ReactionWheelSystem():
         numpy.ndarray
             Torque of wheel system (N m).
         '''
-        print(accls)
-        print(self.wheels)
-        for i, wheel in enumerate(self.wheels):
-            print(wheel.torque(accls[i]))
+        #print(accls)
+        #print(self.wheels)
+        #for i, wheel in enumerate(self.wheels):
+            #print(wheel.torque(accls[i]))
 
         return sum([wheel.torque(accls[i]) for i, wheel in enumerate(self.wheels)])
 
@@ -523,7 +523,6 @@ class Satellite():
                                Wall(self.height/2, np.array([0, 0, 1]), self.width, self.length, absorption),
                                Wall(self.height/2, np.array([0, 0, -1]), self.width, self.length, absorption))
 
-        print(self.walls) 
         #: Estimated drag coefficient.
         self.drag_coeff      = drag_coeff
         self.mass            = mass
