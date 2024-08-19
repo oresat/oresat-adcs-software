@@ -19,12 +19,19 @@ class SatelliteState(np.ndarray):
         if obj is None: return
         self.info = getattr(obj, 'info', None)
 
+    def __add__(self, other):
+        temp = super().__add__(other)
+        temp.attach_clock(self.clock)
+        temp.update()
+        return temp
+
     def attach_clock(self, clock):
         '''Adds a clock as an attribute'''
         self.clock = clock
 
-    def update_aliases_and_refs(self):
-        '''Updates alias attributes and reference attributes'''
+    def update(self):
+        '''Updates alias attributes and reference attributes.
+        Clock must be attached first'''
         # alias variables
         self.position = self[0]
         self.velocity = self[1]
@@ -123,7 +130,7 @@ class Dynamics():
 
 
     
-    def measurement(self, noisy):
+    def measurement(self, state, noisy):
         '''Measures the present state of the system. In order:
         position, velocity, attitude, angular rate, wheel velocities, magnetic field, sun vector.
 
@@ -133,8 +140,7 @@ class Dynamics():
         Returns
             list: Contains numpy.ndarrays for measurements.
         '''
-        print("hey")
-        return [sens.measurement(noisy) for sens in self.satellite.sensors]
+        return [sens.measurement(state, noisy) for sens in self.satellite.sensors]
 
 
     def area_and_cop(self, v_ref):
@@ -332,12 +338,13 @@ class Integrator():
         '''
         # the clock hadn't been updated for these time steps
         # state should be updated via adding
+        
         k1     = self.f(state, *param)
         k2     = self.f((state + k1 * self.dt/2), *param)
         k3     = self.f((state + k2 * self.dt/2), *param)
         k4     = self.f((state+ k3 * self.dt), *param)
         change = (k1 + 2*k2 + 2*k3 + k4) / 6
-        return state.vector + change * self.dt
+        return state + change * self.dt
 
     def update(self, state, param):
         '''This takes the model one step forward and updates its clock, transformations, and sensors.
@@ -352,12 +359,12 @@ class Integrator():
         
         # Make sure transform matrix is updated correctly
         #self.model.state  = next_step
-        state.update_vector(next_step)
-        state.update_clock(self.dt)
-        state.update_other()
+        state = next_step
+        state.clock.tick(self.dt)
+        state.update()
         # commented out for testing
-        #if self.model.simulator:
-        #    self.model.sensors[3].propagate(self.dt)
+        if self.model.simulator:
+            self.model.satellite.sensors[3].propagate(self.dt)
 
     def integrate(self, duration, zero_order_hold):
         '''This is a front-facing interface for the library. It takes an integration duration and a set of fixed exogenous commands.

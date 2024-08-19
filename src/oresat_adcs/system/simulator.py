@@ -32,7 +32,7 @@ class SimulatorDaemonInterface():
         Returns
             numpy.ndarray : Array of arrays for state of satellite.
         '''
-        return self.model.measurement(noisy)
+        return self.model.measurement(self.integrator.state, noisy)
 
     def propagate(self, duration, zero_order_hold):
         '''This function is for the daemon specifically so that it only needs one function call to use the library.

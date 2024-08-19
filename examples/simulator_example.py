@@ -1,6 +1,6 @@
 
 import numpy as np
-from oresat_adcs.classes import jday, dynamics, sensor
+from oresat_adcs.classes import jday, dynamics, new_sensors
 from oresat_adcs.configuration import environment, structure
 from oresat_adcs.system import simulator
 
@@ -19,7 +19,10 @@ if __name__ == "__main__":
     dt    = 0.05 # perhaps we want to choose this upstream?
 
     my_jclock = jday.JClock(*t_0)
-    my_state =  dynamics.DynamicState(x_0, v_0, q_0, w_0, whl_0, my_jclock)
+    
+    my_state = dynamics.SatelliteState(np.array([x_0, v_0, q_0, w_0, whl_0], dtype=object))
+    my_state.attach_clock(my_jclock)
+    my_state.update()
 
     my_env = environment.OrbitalEnvironment(hi_fi=True)
 
@@ -66,17 +69,16 @@ if __name__ == "__main__":
     dimensions = np.array([0.1, 0.1, 0.2])
 
 
-    '''
-    sensors     = [sensor.GPS_pos(mean=0, std_dev=30, model=self),
-                            sensor.GPS_vel(mean=0, std_dev=2, model=self),
-                            sensor.StarTracker(mean=0, std_dev=0.75e-7, model=self),
-                            sensor.Gyro(arw_mean=0, arw_std_dev=2.79e-4, rrw_mean=0, rrw_std_dev=8.73e-7, init_bias=3.15e-5, model=self),
-                            sensor.Wheel_vel(mean=0, std_dev=0.0001, model=self),
-                            sensor.Magnetometer(mean=0, std_dev=4e-8, model=self), # from datasheet
-                            sensor.SunSensor(mean=0, std_dev=1e-6, model=self)
+    sensors = [new_sensors.GPS_pos(mean=0, std_dev=30, env=my_env),
+               new_sensors.GPS_vel(mean=0, std_dev=2, env=my_env),
+               new_sensors.StarTracker(mean=0, std_dev=0.75e-7, env=my_env, size=4),
+               new_sensors.Gyro(arw_mean=0, arw_std_dev=2.79e-4, 
+                                rrw_mean=0, rrw_std_dev=8.73e-7, 
+                                init_bias=3.15e-5, env=my_env),
+               new_sensors.Wheel_vel(mean=0, std_dev=0.0001, env=my_env, size=4),
+               new_sensors.Magnetometer(mean=0, std_dev=4e-8, env=my_env), # from datasheet
+               new_sensors.SunSensor(mean=0, std_dev=1e-6, env=my_env)
                             ]
-                            '''
-    sensors = []
     my_satellite = structure.Satellite(mass=3.0,
                                         dimensions=np.array([0.1, 0.1, 0.2]),
                                         absorption=0.84,
@@ -107,7 +109,7 @@ if __name__ == "__main__":
     for iteration in range(total_iterations):
         out = my_simulator.propagate(2, cmds)
 
-        #output += (",".join([str(component) for component in out[2]])) + "\n"
+        # output += (",".join([str(component) for component in out[2]])) + "\n"
 
         print("Iteration ", iteration, " of ", total_iterations," complete")
 
