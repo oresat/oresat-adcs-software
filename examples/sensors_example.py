@@ -20,24 +20,8 @@ if __name__ == "__main__":
     my_state.attach_clock(my_jclock)
     my_state.update()
 
-    print(my_state.position)
-    print(my_state[0])
-
-    print(my_state.GCI_to_ECEF)
-    
-    
     my_env = environment.OrbitalEnvironment(hi_fi=True)
-    
-    '''
-    sensors     = [sensor.GPS_pos(mean=0, std_dev=30, model=self),
-                            sensor.GPS_vel(mean=0, std_dev=2, model=self),
-                            sensor.StarTracker(mean=0, std_dev=0.75e-7, model=self),
-                            sensor.Gyro(arw_mean=0, arw_std_dev=2.79e-4, rrw_mean=0, rrw_std_dev=8.73e-7, init_bias=3.15e-5, model=self),
-                            sensor.Wheel_vel(mean=0, std_dev=0.0001, model=self),
-                            sensor.Magnetometer(mean=0, std_dev=4e-8, model=self), # from datasheet
-                            sensor.SunSensor(mean=0, std_dev=1e-6, model=self)
-                            ]
-                            '''
+   
 
 
     gps_pos = new_sensors.GPS_pos(mean=0, std_dev=30, env=my_env)
@@ -66,13 +50,7 @@ if __name__ == "__main__":
     print(star_tracker.measurement(my_state, noisy=False))
     print(star_tracker.measurement(my_state, noisy=True))
     print("\n")
-    
-    #hey = star_tracker.measurement(my_state, noisy=True)
-    # print(sum([thing**2 for thing in hey]))
-    
-    gyroscope = new_sensors.Gyro(arw_mean=0, arw_std_dev=2.79e-4, 
-                                 rrw_mean=0, rrw_std_dev=8.73e-7, 
-                                 init_bias=3.15e-5, env=my_env)
+   
     
     print(my_state.body_ang_vel)
     print(gyroscope.measurement(my_state, noisy=False))

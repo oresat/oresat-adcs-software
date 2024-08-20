@@ -76,6 +76,7 @@ class SensorTestMethods(unittest.TestCase):
     def test_sun_sensor(self):
         '''Tests sun sensors'''
         sun = new_sensors.SunSensor(mean=0, std_dev=1e-6, env=self.my_env)
+        # check against quaternion
         self.assertTrue((self.my_env.SRP_info(self.my_state)[2] == sun.measurement(self.my_state, noisy=False)).all())
         self.assertFalse((self.my_env.SRP_info(self.my_state)[2] == sun.measurement(self.my_state, noisy=True)).all())
         

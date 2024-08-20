@@ -301,6 +301,7 @@ class Dynamics():
         dqdt         = 0.5 * quaternion.product(state.attitude, np.array([0, state.body_ang_vel[0], state.body_ang_vel[1], state.body_ang_vel[2]]))
         dwdt         = self.satellite.inv_tot_moment.dot(T_env - T_whl - np.cross(state.body_ang_vel, H_whl + self.satellite.total_moment.dot(state.body_ang_vel)))
         dw_rw_dt     = whl_accl
+
         return np.array([dxdt, dvdt, dqdt, dwdt, dw_rw_dt], dtype=object)
 
 
@@ -346,22 +347,22 @@ class Integrator():
         change = (k1 + 2*k2 + 2*k3 + k4) / 6
         return state + change * self.dt
 
-    def update(self, state, param):
+    def update(self, param):
         '''This takes the model one step forward and updates its clock, transformations, and sensors.
 
         Parameters
             state : numpy.ndarray : Last state of system.
             param : list : Any exogenous inputs to system.
         '''
-        next_step         = self.RK4_step(state, param)
+        next_step         = self.RK4_step(self.state, param)
         if self.model.simulator:
             next_step[2]  = vector.normalize(next_step[2])
         
         # Make sure transform matrix is updated correctly
         #self.model.state  = next_step
-        state = next_step
-        state.clock.tick(self.dt)
-        state.update()
+        self.state = next_step
+        self.state.clock.tick(self.dt)
+        self.state.update()
         # commented out for testing
         if self.model.simulator:
             self.model.satellite.sensors[3].propagate(self.dt)
@@ -379,9 +380,9 @@ class Integrator():
             if self.model.simulator:
                 cur_cmd  = zero_order_hold[0]
                 accl_cmd = zero_order_hold[1]
-                self.update(self.state, [cur_cmd, accl_cmd])
+                self.update([cur_cmd, accl_cmd])
             else:
-                self.update(self.state, [])
+                self.update([])
             t += self.dt
 
 

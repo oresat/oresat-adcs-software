@@ -1,32 +1,11 @@
 
 import numpy as np
+
 from oresat_adcs.classes import jday, dynamics, new_sensors
 from oresat_adcs.configuration import environment, structure
 from oresat_adcs.system import simulator
 
-
-
-if __name__ == "__main__":
-
-
-    # Init a dynamical model without a satellite (uses default satellite)
-    x_0   = np.array([5.581498e6, -3.881737e6, 1.421855e4])
-    v_0   = np.array([2.708896e3, 3.914674e3, 5.994012e3])
-    q_0   = np.array([1, 0,0 ,0])
-    w_0   = np.array([0.08726646, 0.08726646, 0.08726646]) # 5 degrees/s / axis. worst case
-    whl_0 = np.array([300, -300, -300, 300]) * 0
-    t_0 = (2024 ,7, 7, 14, 0, 0)
-    dt    = 0.05 # perhaps we want to choose this upstream?
-
-    my_jclock = jday.JClock(*t_0)
-    
-    my_state = dynamics.SatelliteState(np.array([x_0, v_0, q_0, w_0, whl_0], dtype=object))
-    my_state.attach_clock(my_jclock)
-    my_state.update()
-
-    my_env = environment.OrbitalEnvironment(hi_fi=True)
-
-
+def make_satellite(my_env):
 
     my_instruments= [structure.SensitiveInstrument(np.array([0, 0, -1]), bounds=[15, 100], forbidden=[True, False], obj_ids=[0]),
                      structure.SensitiveInstrument(np.array([0, -1, 0]), bounds=[180, 180], forbidden=[False, False], obj_ids=[])]
@@ -92,29 +71,53 @@ if __name__ == "__main__":
                                         sensitive_instruments=my_instruments)
     
 
+    return my_satellite
+
+
+def run_simulations(simulator, commands, total_iterations):
+    output = ""
+    for iteration in range(total_iterations):
+        out = simulator.propagate(2, commands)
+
+        output += (",".join([str(component) for component in out[2]])) + "\n"
+
+        if iteration % 10 == 0:
+            print("Iteration ", iteration, " of ", total_iterations," complete")
+
+    print(output)
+
+
+
+if __name__ == "__main__":
+    # Init a dynamical model without a satellite (uses default satellite)
+    x_0   = np.array([5.581498e6, -3.881737e6, 1.421855e4])
+    v_0   = np.array([2.708896e3, 3.914674e3, 5.994012e3])
+    q_0   = np.array([1, 0,0 ,0])
+    w_0   = np.array([0.08726646, 0.08726646, 0.08726646]) # 5 degrees/s / axis. worst case
+    whl_0 = np.array([300, -300, -300, 300]) * 0
+    t_0 = (2024 ,7, 7, 14, 0, 0)
+    dt    = 0.05 # perhaps we want to choose this upstream?
+
+    my_jclock = jday.JClock(*t_0)
+    my_state = dynamics.SatelliteState(np.array([x_0, v_0, q_0, w_0, whl_0], dtype=object))
+    my_state.attach_clock(my_jclock)
+    my_state.update()
+
+    my_env = environment.OrbitalEnvironment(hi_fi=True)
+    my_satellite = make_satellite(my_env)
+
+    # Create the dynamics
     my_dynamics = dynamics.Dynamics(my_satellite, my_env)
 
     # Create the simulation
     my_simulator = simulator.SimulatorDaemonInterface(my_dynamics, my_state, dt)
 
-
     # try some simulation
     #the maximum values for MTs are 60,000 for x and y and 300,000 for z
     cmds = [np.array([0, 0, 300000]), np.array([0,0,0,0])]
 
-
     # format simulation output quaternion to be like a csv
-    output = ""
-    total_iterations = 3
-    for iteration in range(total_iterations):
-        out = my_simulator.propagate(2, cmds)
-
-        # output += (",".join([str(component) for component in out[2]])) + "\n"
-
-        print("Iteration ", iteration, " of ", total_iterations," complete")
-
-    #print(output)
-
+    run_simulations(my_simulator, cmds, 1000)
 
     print("\nDone")
 
