@@ -1,7 +1,7 @@
 
 import numpy as np
 
-from oresat_adcs.classes import jday, dynamics, sensors
+from oresat_adcs.classes import jday, dynamics, sensor
 from oresat_adcs.configuration import environment, structure
 from oresat_adcs.system import simulator
 

@@ -1,7 +1,7 @@
 
 import json
 import numpy as np
-from oresat_adcs.classes import sensors
+from oresat_adcs.classes import sensor
 from oresat_adcs.configuration import structure, environment
 
 
@@ -48,15 +48,15 @@ if __name__ == "__main__":
     dimensions = np.array([0.1, 0.1, 0.2])
 
     my_env = environment.OrbitalEnvironment(hi_fi=True) 
-    sensors = [sensors.GPS_pos(mean=0, std_dev=30, env=my_env),
-               sensors.GPS_vel(mean=0, std_dev=2, env=my_env),
-               sensors.StarTracker(mean=0, std_dev=0.75e-7, env=my_env, size=4),
-               sensors.Gyro(arw_mean=0, arw_std_dev=2.79e-4, 
+    sensor = [sensor.GPS_pos(mean=0, std_dev=30, env=my_env),
+               sensor.GPS_vel(mean=0, std_dev=2, env=my_env),
+               sensor.StarTracker(mean=0, std_dev=0.75e-7, env=my_env, size=4),
+               sensor.Gyro(arw_mean=0, arw_std_dev=2.79e-4, 
                                 rrw_mean=0, rrw_std_dev=8.73e-7, 
                                 init_bias=3.15e-5, env=my_env),
-               sensors.Wheel_vel(mean=0, std_dev=0.0001, env=my_env, size=4),
-               sensors.Magnetometer(mean=0, std_dev=4e-8, env=my_env), # from datasheet
-               sensors.SunSensor(mean=0, std_dev=1e-6, env=my_env)]
+               sensor.Wheel_vel(mean=0, std_dev=0.0001, env=my_env, size=4),
+               sensor.Magnetometer(mean=0, std_dev=4e-8, env=my_env), # from datasheet
+               sensor.SunSensor(mean=0, std_dev=1e-6, env=my_env)]
     
     my_satellite = structure.Satellite(mass=3.0,
                                         dimensions=np.array([0.1, 0.1, 0.2]),
@@ -65,7 +65,7 @@ if __name__ == "__main__":
                                         principal_moments=principal_moments,
                                         product_moments=products_of_inertia,
                                         reduced=False,
-                                        sensors=sensors,
+                                        sensors=sensor,
                                         rw_sys=my_rw_system,
                                         mt_sys=my_mt_system,
                                         sensitive_instruments=my_instruments)

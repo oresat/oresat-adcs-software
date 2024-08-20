@@ -16,13 +16,16 @@ class SatelliteState(np.ndarray):
     part of the numpy array.
     
     Parameters:
-        numpy.ndarray: an array of arrays with dtype=object'''
+        numpy.ndarray: an array of arrays with dtype=object
+        clock: a jday.jclock'''
 
-    def __new__(cls, input_array, info=None):
+    def __new__(cls, input_array, clock=None, info=None):
         obj = np.asarray(input_array).view(cls)
         
         # add attributes
         obj.info = info
+        obj.clock = clock
+        obj.update()
         return obj
 
     def __array_finalize__(self, obj):

@@ -1,7 +1,7 @@
 
 import numpy as np
 
-from oresat_adcs.classes import jday, dynamics, sensors
+from oresat_adcs.classes import jday, dynamics, sensor
 from oresat_adcs.configuration import environment, structure
 from oresat_adcs.system import simulator
 
@@ -48,15 +48,15 @@ def make_satellite(my_env):
     dimensions = np.array([0.1, 0.1, 0.2])
 
 
-    my_sensors = [sensors.GPS_pos(mean=0, std_dev=30, env=my_env),
-               sensors.GPS_vel(mean=0, std_dev=2, env=my_env),
-               sensors.StarTracker(mean=0, std_dev=0.75e-7, env=my_env, size=4),
-               sensors.Gyro(arw_mean=0, arw_std_dev=2.79e-4, 
+    my_sensors = [sensor.GPS_pos(mean=0, std_dev=30, env=my_env),
+               sensor.GPS_vel(mean=0, std_dev=2, env=my_env),
+               sensor.StarTracker(mean=0, std_dev=0.75e-7, env=my_env, size=4),
+               sensor.Gyro(arw_mean=0, arw_std_dev=2.79e-4, 
                                 rrw_mean=0, rrw_std_dev=8.73e-7, 
                                 init_bias=3.15e-5, env=my_env),
-               sensors.Wheel_vel(mean=0, std_dev=0.0001, env=my_env, size=4),
-               sensors.Magnetometer(mean=0, std_dev=4e-8, env=my_env), # from datasheet
-               sensors.SunSensor(mean=0, std_dev=1e-6, env=my_env)
+               sensor.Wheel_vel(mean=0, std_dev=0.0001, env=my_env, size=4),
+               sensor.Magnetometer(mean=0, std_dev=4e-8, env=my_env), # from datasheet
+               sensor.SunSensor(mean=0, std_dev=1e-6, env=my_env)
                             ]
     my_satellite = structure.Satellite(mass=3.0,
                                         dimensions=np.array([0.1, 0.1, 0.2]),
@@ -99,9 +99,7 @@ if __name__ == "__main__":
     dt    = 0.05 # perhaps we want to choose this upstream?
 
     my_jclock = jday.JClock(*t_0)
-    my_state = dynamics.SatelliteState(np.array([x_0, v_0, q_0, w_0, whl_0], dtype=object))
-    my_state.attach_clock(my_jclock)
-    my_state.update()
+    my_state = dynamics.SatelliteState(np.array([x_0, v_0, q_0, w_0, whl_0], dtype=object), my_jclock)
 
     my_env = environment.OrbitalEnvironment(hi_fi=True)
     my_satellite = make_satellite(my_env)

@@ -1,6 +1,6 @@
 import numpy as np
 from ..functions import vector, quaternion
-from ..classes import sensors, dynamics
+from ..classes import sensor, dynamics
 
 class SimulatorDaemonInterface():
     '''This is the interface with the Simulator Daemon.

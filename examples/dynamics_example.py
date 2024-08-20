@@ -20,8 +20,8 @@ if __name__ == "__main__":
     dt    = 0.05 # perhaps we want to choose this upstream?
 
     my_jclock = jday.JClock(*t_0)
-    my_state =  dynamics.DynamicState(x_0, v_0, q_0, w_0, whl_0, my_jclock)
-
+    my_state =  dynamics.SatelliteState(np.array([x_0, v_0, q_0, w_0, whl_0], dtype=object), clock=my_jclock)
+    
     my_env = environment.OrbitalEnvironment(hi_fi=True)
 
 

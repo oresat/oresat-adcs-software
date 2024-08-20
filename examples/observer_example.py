@@ -24,9 +24,7 @@ if __name__ == "__main__":
     # the measurements have magnetorquer and sun vector things that we don't care about,
     # but its not hurting anyone (yet)
     init_state_list = my_true_sim.output(noisy=True)
-    my_init_kalman_state = helper.dynamics.SatelliteState(np.array(init_state_list, dtype=object))
-    my_init_kalman_state.attach_clock(my_true_state.clock)
-    my_init_kalman_state.update()
+    my_init_kalman_state = helper.dynamics.SatelliteState(np.array(init_state_list, dtype=object), my_true_state.clock)
 
     # check states
     #print(my_true_state, "\n\n", my_init_kalman_state)

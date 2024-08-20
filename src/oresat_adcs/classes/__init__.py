@@ -1,2 +1,2 @@
 
-from . import controller, jday, sensors, observers, dynamics
+from . import controller, jday, sensor, observers, dynamics
