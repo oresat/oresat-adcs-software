@@ -68,7 +68,8 @@ def make_satellite(my_env):
     products_of_inertia = principal_moments*0.1
     dimensions = np.array([0.1, 0.1, 0.2])
 
-
+    # temporarily make the gps position std_dev huge
+    # originally was 30
     sensors = [new_sensors.GPS_pos(mean=0, std_dev=30, env=my_env),
                new_sensors.GPS_vel(mean=0, std_dev=2, env=my_env),
                new_sensors.StarTracker(mean=0, std_dev=0.75e-7, env=my_env, size=4),

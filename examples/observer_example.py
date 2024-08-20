@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 from oresat_adcs.classes import new_observer
 
@@ -28,13 +29,16 @@ if __name__ == "__main__":
     my_init_kalman_state.update()
 
     # check states
-    print(my_true_state, "\n\n", my_init_kalman_state)
+    #print(my_true_state, "\n\n", my_init_kalman_state)
     # pass the environement and initial state to kalman filter, it will use the state 
     # for the environment so it must have the first 5 numpy arrays in the state 
     my_position_filter = new_observer.DiscretePositionKalman(my_env, my_init_kalman_state)
 
+    hey = []
+    hey_m = []
+    hey_f = []
 
-    for _ in range(5):
+    for iteration in range(1000):
         # MEASURE
         true_list = my_true_sim.output(noisy=False)
         measurement_list = my_true_sim.output(noisy=True)
@@ -53,9 +57,52 @@ if __name__ == "__main__":
         my_position_filter.state.update()
 
         # OUTPUT
-        after_propogate = my_position_filter.output()
+        after_propagate = my_position_filter.output()
 
         # position
-        print(true_list[0], measurement_list[0], after_update[0], after_propogate[0]) 
+        #print(true_list[0], measurement_list[0], after_update[0], after_propogate[0]) 
+        hey.append(true_list[0])
+        hey_m.append(measurement_list[0])
+        hey_f.append(after_update[0])
         # Propogate the simulation
         my_true_sim.propagate(1.0, commands)
+
+
+    hey_array = np.array(hey).T
+    hey_m_array = np.array(hey_m).T 
+    hey_f_array = np.array(hey_f).T 
+
+    #fig = plt.figure()
+    #ax = plt.axes(projection='3d')
+    #ax.plot3D(*hey_array, marker='.')
+    #ax.plot3D(*hey_m_array, marker='.')
+    #ax.plot3D(*hey_f_array, marker='.')
+
+    #ax.set_title("Simulated GPS Position")
+    #plt.show()
+
+    # measurement error
+    error_m = hey_m_array - hey_array
+    # filter error
+    error_f = hey_f_array - hey_array
+
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+    ax.plot3D(*error_m, label='measurement error', marker=".")
+    ax.plot3D(*error_f, label='filter error', marker=".")
+
+    ax.legend()
+    
+    ax.set_title("Simulated GPS position error")
+    plt.show()
+
+
+    # do error magnitude over time
+    error_m_mag = [np.linalg.norm(vect) for vect in error_m.T]
+    error_f_mag = [np.linalg.norm(vect) for vect in error_f.T]
+
+    fig = plt.figure()
+    ax = plt.axes()
+    ax.plot(range(len(error_m_mag)), error_m_mag, marker='.')
+    ax.plot(range(len(error_f_mag)), error_f_mag, marker='.')
+    plt.show()
