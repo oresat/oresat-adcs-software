@@ -6,7 +6,16 @@ from ..configuration import environment, structure
 
 
 class SatelliteState(np.ndarray):
+    '''Adds attributes to numpy arrays representing states to
+    improve readability.
     
+    Note: updating a reference attribute `state.position = np.array([1, 0, 0])` 
+    will NOT update the state, just the reference variable. The actual state is 
+    part of the numpy array.
+    
+    Parameters:
+        numpy.ndarray: an array of arrays with dtype=object'''
+
     def __new__(cls, input_array, info=None):
         obj = np.asarray(input_array).view(cls)
         
