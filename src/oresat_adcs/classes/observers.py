@@ -1,11 +1,11 @@
 import numpy as np
 from numpy.random import default_rng
-from scipy import optimize
 
 from ..functions import quaternion, vector
-from ..classes import dynamics
-from . import sensor
+from . import dynamics
 
+# attitude estimation may change locations
+from ..functions import attitude_estimation
 
 class DiscreteAttitudeStartrackerKalman():
     '''
@@ -170,6 +170,13 @@ class DiscreteAttitudeStartrackerKalman():
         '''
         return self.q, self.b
 
+
+
+
+
+
+
+
 class DiscretePositionKalman():
     '''Discrete-time Extended Kalman Filter for position and velocity estimates.
 
@@ -178,13 +185,17 @@ class DiscretePositionKalman():
         v : numpy.ndarray : Initial velocity estimate.
         date_and_time : list : Initial date and time. (Y, M, D, h, m, s) format.
     '''
-    def __init__(self, x, v, date_and_time):
+    def __init__(self, env, state):
+
+
         x_sigma = 10.0598 # m
         v_sigma = 0.52038 # m/s
         a_sigma = 0.018166 # m/s^2
+
         # system noise covariance
         a_var = a_sigma**2
         self.Q = np.diag([0, 0, 0, a_var, a_var, a_var])
+
         # measurement noise covariance
         x_var = x_sigma**2
         v_var = v_sigma**2
@@ -195,11 +206,21 @@ class DiscretePositionKalman():
         self.a = 1.28e-6   # s^-2, mu/r^3 for circular orbit
         self.b = 1.618e-10 # s^-1, drag coeff assuming constant speed and density
 
-        self.model = dynamics.ReducedDynamicalSystem(x, v, date_and_time)
-        self.x = np.block([self.model.state[0], self.model.state[1]])
+        self.environment = env
+        self.state = state
+
+        # self.model = dynamics.ReducedDynamicalSystem(x, v, date_and_time)
+        # self.x = np.block([self.model.state[0], self.model.state[1]])
+        self.x = np.block([self.state.position, self.state.velocity])
+
 
     def estimate_attitude(self, B_ref, a_ref):
         '''Estimates the attitude of the satellite, given measurements from magnetometer and accelerometer.
+        Note, the TRIAD algorithm uses two independent vectors, measured via sensors on the satellite.
+        This are normally the magnetic field and either: the sun vector or nadir vector.
+
+        If you don't have a sun sensor or earth sensor, then you should probably have a star tracker.
+        And honestly, this should be a part of the attitude kalman filter, not the position/velocity one.
 
         Parameters
             B_ref : numpy.ndarray : Magnetic field (T) reading in body coordinates.
@@ -208,11 +229,13 @@ class DiscretePositionKalman():
         Returns
             numpy.ndarray or bool : Quaternion attitude or False if solver failed.
         '''
-        B_intl  = self.model.enviro.magnetic_field(self.x[:3], self.model.GCI_to_ECEF)
-        a_intl  = self.model.enviro.forces(self.x[:3], self.x[3:]) / self.model.satellite.mass
-        q       = triad_algorithm(vector.normalize(B_intl), vector.normalize(a_intl), vector.normalize(B_ref), vector.normalize(a_ref))
-        #q       = flae([0.6, 0.4], [B_intl, a_intl], [B_ref, a_ref])
-        return q
+        #B_intl  = self.model.enviro.magnetic_field(self.x[:3], self.model.GCI_to_ECEF)
+        #a_intl  = self.model.enviro.forces(self.x[:3], self.x[3:]) / self.model.satellite.mass
+        #q       = attitude_estimation.triad_algorithm(vector.normalize(B_intl), vector.normalize(a_intl), vector.normalize(B_ref), vector.normalize(a_ref))
+        #q       = attitude_estimation.flae([0.6, 0.4], [B_intl, a_intl], [B_ref, a_ref])
+        #return q
+
+        pass
 
     def F_continuous(self):
         '''Continuous time covariance propagation matrix.
@@ -222,7 +245,7 @@ class DiscretePositionKalman():
         '''
         F11      = np.zeros((3,3))
         F12      = np.eye(3)
-        mu = -self.model.enviro.MU
+        mu = -self.environment.MU
         r = np.linalg.norm(self.x[:3])
         r3term = -1/r**3
         r5term = 3/r**5
@@ -237,6 +260,7 @@ class DiscretePositionKalman():
         F        = np.block([[F11, F12],
                              [F21, F22]])
         return F
+
 
     def state_transition(self, dt):
         '''Calculates state transition matrices for discrete propagation of position, velocity, and covariance.
@@ -264,6 +288,7 @@ class DiscretePositionKalman():
 
         return F_discrete, A_discrete
 
+
     def update(self, x_ref, v_ref):
         '''Measurement update for Kalman state.
 
@@ -275,7 +300,12 @@ class DiscretePositionKalman():
         self.K = self.P.dot(np.linalg.inv(self.P + self.R))
         self.P = (np.eye(6) - self.K).dot(self.P)
         self.x = self.x + self.K.dot(y - self.x)
-        self.model.state = np.array([self.x[:3], self.x[3:]])
+
+        # save the updated state to pass to the environmen
+        self.state[0] = self.x[:3]
+        self.state[1] = self.x[3:]
+        self.state.update()
+
 
     def propagate(self, dt):
         '''A priori estimate of state.
@@ -286,6 +316,7 @@ class DiscretePositionKalman():
         F, A = self.state_transition(dt)
         self.P = F.dot(self.P.dot(F.T)) + self.Q
         self.x = A.dot(self.x)
+        
 
     def output(self):
         '''Kalman state estimate.
@@ -295,6 +326,13 @@ class DiscretePositionKalman():
             numpy.ndarray : Velocity estimate.
         '''
         return self.x[:3], self.x[3:]
+
+
+
+
+
+
+
 
 
 
@@ -362,127 +400,3 @@ class KalmanFilters():
 
 
 
-
-
-
-
-
-
-def triad_algorithm(r1, r2, b1, b2):
-    '''Essentially the TRIAD algorithm, and technically suboptimal. For details refer to
-    "Fast Quaternion Attitude Estimation from Two Vector Measurements" Markely 2002.
-
-    Parameters
-        r1 : numpy.ndarray : More accurate inertial estimate.
-        r2 : numpy.ndarray : Less accurate inertial estimate.
-        b1 : numpy.ndarray : More accurate body measurement.
-        b2: numpy.ndarray : Less accurate body measurement.
-
-    Returns
-        numpy.ndarray or bool : Quaternion attitude or False if solver failed.
-    '''
-    # still not handling a couple degenerate cases very well...
-    r3       = np.cross(r1, r2)
-    b3       = np.cross(b1, b2)
-    if r3 is np.zeros(3) or b3 is np.zeros(3):
-        return False
-    if b1 is -r1:
-        return False
-
-    dot_term = 1 + np.dot(b1, r1)
-    mu       = dot_term * np.dot(b3, r3) - np.dot(b1, r3) * np.dot(r1, b3)
-    sum_term = b1 + r1
-    nu       = np.dot(sum_term, np.cross(b3, r3))
-    rho      = np.sqrt(mu**2 + nu**2)
-    if mu >= 0:
-        rhoplusmu = rho + mu
-        rhomudot  = rhoplusmu * dot_term
-        mult   = 0.5 * 1 / np.sqrt(rho * rhomudot)
-        v      = rhoplusmu * np.cross(b1, r1) + nu * sum_term
-        q_part = np.array([rhomudot, *v])
-        q      = mult * q_part
-    else:
-        rhominmu = rho - mu
-        mult   = 0.5 * 1 / np.sqrt(rho * rhominmu * dot_term)
-        v      = nu * np.cross(b1, r1) + rhominmu * sum_term
-        q_part = np.array([nu * dot_term, *v])
-        q      = mult * q_part
-    return q
-
-def flae(a, r, b):
-    # could precompute constants
-    # not actually any faster, i've been lied to
-    def sum_across(a, r, b, n, i, j):
-        return sum([a[k] * r[k][i] * b[k][j] for k in range(n)])
-
-    def f(x, t1, t2, t3):
-        return x**4 + t1 * x**2 + t2 * x + t3
-
-    def f_p(x, t1, t2, t3):
-        return 4 * x**3 + 2 * t1 * x + t2
-
-    r_hat  = [vector.normalize(ri) for ri in r]
-    b_hat  = [vector.normalize(bi) for bi in b]
-    n      = len(a)
-
-    Hx = np.array([sum_across(a, r_hat, b_hat, n, 0, j) for j in range(3)])
-    Hy = np.array([sum_across(a, r_hat, b_hat, n, 1, j) for j in range(3)])
-    Hz = np.array([sum_across(a, r_hat, b_hat, n, 2, j) for j in range(3)])
-
-    W  = np.array([[Hx[0] + Hy[1] + Hz[2], -Hy[2] + Hz[1],        -Hz[0] + Hx[2],        -Hx[1] + Hy[0]],
-                   [-Hy[2] + Hz[1],         Hx[0] - Hy[1] - Hz[2], Hx[1] + Hy[0],         Hx[2] + Hz[0]],
-                   [-Hz[0] + Hx[2],         Hx[1] + Hy[0],         Hy[1] - Hx[0] - Hz[2], Hy[2] + Hz[1]],
-                   [-Hx[1] + Hy[0],         Hx[2] + Hz[0],         Hy[2] + Hz[1],         Hz[2] - Hy[1] - Hx[0]]])
-
-    tau1 = -2 * (np.dot(Hx, Hx) + np.dot(Hy, Hy) + np.dot(Hz, Hz))
-    tau2 = 8 * np.dot(Hx, np.cross(Hz, Hy))
-    #tau2 = 8 * (Hx[2]*Hy[1]*Hz[0] - Hx[1]*Hy[2]*Hz[0] - Hx[2]*Hy[0]*Hz[1] + Hx[0]*Hy[2]*Hz[1] + Hx[1]*Hy[0]*Hz[2] - Hx[0]*Hy[1]*Hz[2])
-    tau3 = np.linalg.det(W)
-
-    lam = optimize.newton(f, 1, fprime=f_p, args=(tau1, tau2, tau3), maxiter=4, rtol=0.00001)
-
-    # tried and failed to get analytic method working
-    '''tau1_sq = tau1**2
-    tau1and3 = tau1_sq + 12 * tau3
-    T0 = 2 * tau1**3 + tau2 * 27 * tau2 - 72 * tau1 * tau3
-    print(T0**2, 4 * tau1and3**3)
-    T1 = (T0 + np.sqrt(T0**2 - 4 * tau1and3**3))**0.3333333
-    T2 = np.sqrt(2**0.666666 * T1 - 4 * tau1 + 2**1.3333333 * tau1and3 / T1)
-
-    mult = 1 / (2 * np.sqrt(6))
-    term1 = -T2**2
-    term2 = -12 * tau1
-    term3 = 12 * np.sqrt(6) * tau2 / T2
-
-    lam = []
-    lam.append(mult * (T2 - np.sqrt(term1 + term2 - term3)))
-    lam.append(mult * (T2 + np.sqrt(term1 + term2 - term3)))
-    lam.append(-mult * (T2 + np.sqrt(term1 + term2 + term3)))
-    lam.append(-mult * (T2 - np.sqrt(term1 + term2 + term3)))
-
-    dist = [abs(l - 1) for l in lam]
-    i = np.argmin(dist)
-    N = W - np.eye(4) * lam[i]'''
-
-    N = W - np.eye(4) * lam
-
-    pivot = N[0][0]
-    N[0] /= pivot
-    N[1] -= N[1][0]*N[0]
-    N[2] -= N[2][0]*N[0]
-    N[3] -= N[3][0]*N[0]
-
-    pivot = N[1][1]
-    N[1] /= pivot
-    N[0] -= N[0][1]*N[1]
-    N[2] -= N[2][1]*N[1]
-    N[3] -= N[3][1]*N[1]
-
-    pivot = N[2][2]
-    N[2] /= pivot
-    N[0] -= N[0][2]*N[2]
-    N[1] -= N[1][2]*N[2]
-    N[3] -= N[3][2]*N[2]
-
-    v = np.array([N[j][3] for j in range(3)])
-    return vector.normalize(np.array([*v, -1]))

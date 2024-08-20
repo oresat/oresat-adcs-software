@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from oresat_adcs.classes import new_observer
+from oresat_adcs.classes import observers
 
 from utility import helper
 
@@ -30,9 +30,10 @@ if __name__ == "__main__":
 
     # check states
     #print(my_true_state, "\n\n", my_init_kalman_state)
+
     # pass the environement and initial state to kalman filter, it will use the state 
     # for the environment so it must have the first 5 numpy arrays in the state 
-    my_position_filter = new_observer.DiscretePositionKalman(my_env, my_init_kalman_state)
+    my_position_filter = observers.DiscretePositionKalman(my_env, my_init_kalman_state)
 
     hey = []
     hey_m = []

@@ -1,12 +1,12 @@
 import numpy as np
-from ..classes import controller, observer
+from ..classes import controller, observers
 from ..configuration.state_machine import State
 
 # this entire file is a pile of kludge, just trying to get something working
 
 class ManagerDaemonInterface():
     def __init__(self, dummy_model):
-        self.filter = observer.DummyFilter(dummy_model)
+        self.filter = observers.DummyFilter(dummy_model)
         self.mag_controller = controller.MagnetorquerController()
         self.rw_controller  = controller.ReactionWheelsController(self.filter.model.satellite, .7, 0.785)
         self.mag_cmd, self.rw_cmd = np.zeros(3), np.zeros(4)

@@ -1,5 +1,5 @@
 import numpy as np
-from ..classes import controller, observer
+from ..classes import controller, observers
 from ..configuration.state_machine import State
 
 class ManagerDaemonInterface():
@@ -17,7 +17,7 @@ class ManagerDaemonInterface():
         Placeholder model for SITL testing, standing in for actual sensors.
     '''
     def __init__(self, gyro_step_size, gps_step_size, truth_model):
-        self.filter               = observer.KalmanFilters(gyro_step_size, gps_step_size, truth_model)
+        self.filter               = observers.KalmanFilters(gyro_step_size, gps_step_size, truth_model)
         self.mag_controller       = controller.MagnetorquerController(self.filter.PosFilter.model, bang_bang=False)
         self.rw_controller        = controller.ReactionWheelsController(self.filter.PosFilter.model, 0.707, 0.1)
         self.mag_cmd, self.rw_cmd = np.zeros(3), np.zeros(4)
