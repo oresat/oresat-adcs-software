@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from oresat_adcs.classes import jday, dynamics, new_sensors
+from oresat_adcs.classes import jday, dynamics, sensors
 from oresat_adcs.configuration import environment
 
 class SensorTestMethods(unittest.TestCase):
@@ -22,25 +22,25 @@ class SensorTestMethods(unittest.TestCase):
 
     def test_gps_pos(self):
         '''Tests gps position''' 
-        gps_pos = new_sensors.GPS_pos(mean=0, std_dev=30, env=self.my_env)
+        gps_pos = sensors.GPS_pos(mean=0, std_dev=30, env=self.my_env)
         self.assertTrue((self.my_state.position == gps_pos.measurement(self.my_state, noisy=False)).all())
         self.assertFalse((self.my_state.position == gps_pos.measurement(self.my_state, noisy=True)).all())
         
     def test_gps_vel(self):
         '''Tests gps velocity''' 
-        gps_vel = new_sensors.GPS_vel(mean=0, std_dev=2, env=self.my_env)
+        gps_vel = sensors.GPS_vel(mean=0, std_dev=2, env=self.my_env)
         self.assertTrue((self.my_state.velocity == gps_vel.measurement(self.my_state, noisy=False)).all())
         self.assertFalse((self.my_state.velocity == gps_vel.measurement(self.my_state, noisy=True)).all())
 
     def test_star_tracker(self):
         '''Tests star tracker''' 
-        star_tracker = new_sensors.StarTracker(mean=0, std_dev=0.75e-7, env=self.my_env, size=4)
+        star_tracker = sensors.StarTracker(mean=0, std_dev=0.75e-7, env=self.my_env, size=4)
         self.assertTrue((self.my_state.attitude == star_tracker.measurement(self.my_state, noisy=False)).all())
         self.assertFalse((self.my_state.attitude == star_tracker.measurement(self.my_state, noisy=True)).all())
         
     def test_gyroscope(self):
         '''Tests gyroscope''' 
-        gyroscope = new_sensors.Gyro(arw_mean=0, arw_std_dev=2.79e-4, 
+        gyroscope = sensors.Gyro(arw_mean=0, arw_std_dev=2.79e-4, 
                                  rrw_mean=0, rrw_std_dev=8.73e-7, 
                                  init_bias=3.15e-5, env=self.my_env)
         self.assertTrue((self.my_state.body_ang_vel == gyroscope.measurement(self.my_state, noisy=False)).all())
@@ -48,7 +48,7 @@ class SensorTestMethods(unittest.TestCase):
         
     def test_gyroscope_propogation(self):
         '''Tests gyroscope bias propogation''' 
-        gyroscope = new_sensors.Gyro(arw_mean=0, arw_std_dev=2.79e-4, 
+        gyroscope = sensors.Gyro(arw_mean=0, arw_std_dev=2.79e-4, 
                                  rrw_mean=0, rrw_std_dev=8.73e-7, 
                                  init_bias=3.15e-5, env=self.my_env)
         self.assertTrue((self.my_state.body_ang_vel == gyroscope.measurement(self.my_state, noisy=False)).all())
@@ -60,14 +60,14 @@ class SensorTestMethods(unittest.TestCase):
        
     def test_wheel_vel(self):
         '''Tests wheel velocity sensros''' 
-        wheel_vel_sensors = new_sensors.Wheel_vel(mean=0, std_dev=0.0001, env=self.my_env, size=4)
+        wheel_vel_sensors = sensors.Wheel_vel(mean=0, std_dev=0.0001, env=self.my_env, size=4)
         self.assertTrue((self.my_state.wheel_vel == wheel_vel_sensors.measurement(self.my_state, noisy=False)).all())
         self.assertFalse((self.my_state.wheel_vel == wheel_vel_sensors.measurement(self.my_state, noisy=True)).all())
         
      
     def test_magnetometer(self):
         '''Tests magnetometer'''   
-        mag = new_sensors.Magnetometer(mean=0, std_dev=4e-8, env=self.my_env) # from datasheet
+        mag = sensors.Magnetometer(mean=0, std_dev=4e-8, env=self.my_env) # from datasheet
         # check against quaternion
         self.assertTrue((self.my_env.magnetic_field(self.my_state) == mag.measurement(self.my_state, noisy=False)).all())
         self.assertFalse((self.my_env.magnetic_field(self.my_state) == mag.measurement(self.my_state, noisy=True)).all())
@@ -75,7 +75,7 @@ class SensorTestMethods(unittest.TestCase):
 
     def test_sun_sensor(self):
         '''Tests sun sensors'''
-        sun = new_sensors.SunSensor(mean=0, std_dev=1e-6, env=self.my_env)
+        sun = sensors.SunSensor(mean=0, std_dev=1e-6, env=self.my_env)
         # check against quaternion
         self.assertTrue((self.my_env.SRP_info(self.my_state)[2] == sun.measurement(self.my_state, noisy=False)).all())
         self.assertFalse((self.my_env.SRP_info(self.my_state)[2] == sun.measurement(self.my_state, noisy=True)).all())

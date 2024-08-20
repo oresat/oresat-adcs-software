@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from oresat_adcs.classes import jday, dynamics, new_sensors
+from oresat_adcs.classes import jday, dynamics, sensors
 from oresat_adcs.configuration import environment
 
 class SensorTestMethods(unittest.TestCase):
@@ -23,7 +23,7 @@ class SensorTestMethods(unittest.TestCase):
         my_env = environment.OrbitalEnvironment(hi_fi=True)
         
         
-        gps_pos = new_sensors.GPS_pos(mean=0, std_dev=30, env=my_env)
+        gps_pos = sensors.GPS_pos(mean=0, std_dev=30, env=my_env)
         self.assertEqual(self.my_state.position, gps_pos.measurement(my_state, noisy=False))
         self.assertNotEqual(self.my_state.position, gps_pos.measurement(my_state, noisy=True))
 

@@ -1,8 +1,10 @@
 import numpy as np
 import json
 from ..functions import frame, quaternion, vector
-from . import jday, sensor
-from ..configuration import environment, structure
+
+# technically not needed
+# from . import jday, sensors
+# from ..configuration import environment, structure
 
 
 class SatelliteState(np.ndarray):

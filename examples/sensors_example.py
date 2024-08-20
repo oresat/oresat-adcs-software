@@ -1,6 +1,6 @@
 import numpy as np
 
-from oresat_adcs.classes import jday, dynamics, new_sensors
+from oresat_adcs.classes import jday, dynamics, sensors
 from oresat_adcs.configuration import environment
 
 if __name__ == "__main__":
@@ -24,15 +24,15 @@ if __name__ == "__main__":
    
 
 
-    gps_pos = new_sensors.GPS_pos(mean=0, std_dev=30, env=my_env)
-    gps_vel = new_sensors.GPS_vel(mean=0, std_dev=2, env=my_env)
-    star_tracker = new_sensors.StarTracker(mean=0, std_dev=0.75e-7, env=my_env, size=4)
-    gyroscope = new_sensors.Gyro(arw_mean=0, arw_std_dev=2.79e-4, 
+    gps_pos = sensors.GPS_pos(mean=0, std_dev=30, env=my_env)
+    gps_vel = sensors.GPS_vel(mean=0, std_dev=2, env=my_env)
+    star_tracker = sensors.StarTracker(mean=0, std_dev=0.75e-7, env=my_env, size=4)
+    gyroscope = sensors.Gyro(arw_mean=0, arw_std_dev=2.79e-4, 
                                  rrw_mean=0, rrw_std_dev=8.73e-7, 
                                  init_bias=3.15e-5, env=my_env)
-    wheel_vel_sensors = new_sensors.Wheel_vel(mean=0, std_dev=0.0001, env=my_env, size=4)
-    mag = new_sensors.Magnetometer(mean=0, std_dev=4e-8, env=my_env) # from datasheet
-    sun = new_sensors.SunSensor(mean=0, std_dev=1e-6, env=my_env)
+    wheel_vel_sensors = sensors.Wheel_vel(mean=0, std_dev=0.0001, env=my_env, size=4)
+    mag = sensors.Magnetometer(mean=0, std_dev=4e-8, env=my_env) # from datasheet
+    sun = sensors.SunSensor(mean=0, std_dev=1e-6, env=my_env)
 
 
     print(my_state.position)
