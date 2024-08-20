@@ -1,43 +1,51 @@
 
 import numpy as np
-from oresat_adcs.classes import dynamics
-from oresat_adcs.classes import jday
+import copy
+
+class example_array(np.ndarray):
+    
+    def __new__(cls, input_array, info=None):
+        obj = np.asarray(input_array).view(cls)
+        
+        # add attributes
+        obj.info = info
+        return obj
+
+    def __array_finalize__(self, obj):
+        # see InfoArray.__array_finalize__ for comments
+        if obj is None: return
+        self.info = getattr(obj, 'info', None)
+
+    def update(self):
+        '''Updates alias attributes and reference attributes.
+        Clock must be attached first. Setting position and velocity will not update state'''
+        # alias variables
+        # try copy to make an alias
+        self.position = self[0]
+        self.velocity = self[1]
+        pass
+
+
+
+
+
 
 if __name__ == "__main__":
 
-    x_0   = np.array([5.581498e6, -3.881737e6, 1.421855e4])
-    v_0   = np.array([2.708896e3, 3.914674e3, 5.994012e3])
-    q_0   = np.array([1, 0,0 ,0])
-    w_0   = np.array([0.08726646, 0.08726646, 0.08726646]) # 5 degrees/s / axis. worst case
-    whl_0 = np.array([300, -300, -300, 300]) * 0
-    t_0 = (2024 ,7, 7, 14, 0, 0)
-    
-    
-    my_jclock = jday.JClock(*t_0)
+    pos = np.array([1, 2, 3])
+    vel = np.array([9, 8, 7])
 
-    my_state_vector = np.array([x_0, v_0, q_0, w_0, whl_0], dtype=object)
+    state = example_array(np.array([pos, vel], dtype=object))
+    state.update()
 
-    my_state = dynamics.SatelliteState(my_state_vector)
-    # print("\n".join(dir(my_state)))
-    
-    
-    my_state.attach_clock(my_jclock)
-    my_state.update_aliases_and_refs()
-    # print("--------")
-    # print("\n".join(dir(my_state)))
-    # print(my_state.GCI_to_ECEF)
+    print(state.position, state.velocity)
 
-    '''
-    mod_state = np.array([[1, 0, 0], 
-                          [1, 0, 0], 
-                          [0, 1, 0, 0], 
-                          [0.01, 0.01, 0.01], 
-                          [1, 1, 1, 1]], 
-                         dtype=object)
-    '''
-    mod_state = np.array([[1, 0, 0], 
-                          [1, 0, 0], 
-                          [0, 1, 0, 0]], 
-                         dtype=object)
-    print(my_state + mod_state)
-    pass
+    # try doing some modifications
+    blah = np.block([state[0], state[1]])
+
+    print(blah)
+    blah = blah + np.array([111, 0, 0, 0, 0, 0])
+    print(blah)
+    state.position = blah[:3]
+
+    print(state)

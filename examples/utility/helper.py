@@ -5,6 +5,27 @@ from oresat_adcs.classes import jday, dynamics, new_sensors
 from oresat_adcs.configuration import environment, structure
 from oresat_adcs.system import simulator
 
+
+
+def make_state():
+   # Init a dynamical model without a satellite (uses default satellite)
+    x_0   = np.array([5.581498e6, -3.881737e6, 1.421855e4])
+    v_0   = np.array([2.708896e3, 3.914674e3, 5.994012e3])
+    q_0   = np.array([1, 0, 0 ,0])
+    w_0   = np.array([0.08726646, 0.08726646, 0.08726646]) # 5 degrees/s / axis. worst case
+    whl_0 = np.array([300, -300, -300, 300]) * 0
+    t_0 = (2024 ,7, 7, 14, 0, 0)
+    dt    = 0.05 # perhaps we want to choose this upstream?
+
+    my_jclock = jday.JClock(*t_0)
+    my_state = dynamics.SatelliteState(np.array([x_0, v_0, q_0, w_0, whl_0], dtype=object))
+    my_state.attach_clock(my_jclock)
+    my_state.update()
+
+    return my_state
+
+
+
 def make_satellite(my_env):
 
     my_instruments= [structure.SensitiveInstrument(np.array([0, 0, -1]), bounds=[15, 100], forbidden=[True, False], obj_ids=[0]),
@@ -89,20 +110,6 @@ def run_simulations(simulator, commands, total_iterations):
 
 
 if __name__ == "__main__":
-    # Init a dynamical model without a satellite (uses default satellite)
-    x_0   = np.array([5.581498e6, -3.881737e6, 1.421855e4])
-    v_0   = np.array([2.708896e3, 3.914674e3, 5.994012e3])
-    q_0   = np.array([1, 0, 0 ,0])
-    w_0   = np.array([0.08726646, 0.08726646, 0.08726646]) # 5 degrees/s / axis. worst case
-    whl_0 = np.array([300, -300, -300, 300]) * 0
-    t_0 = (2024 ,7, 7, 14, 0, 0)
-    dt    = 0.05 # perhaps we want to choose this upstream?
-
-    my_jclock = jday.JClock(*t_0)
-    my_state = dynamics.SatelliteState(np.array([x_0, v_0, q_0, w_0, whl_0], dtype=object))
-    my_state.attach_clock(my_jclock)
-    my_state.update()
-
     my_env = environment.OrbitalEnvironment(hi_fi=True)
     my_satellite = make_satellite(my_env)
 
@@ -110,6 +117,8 @@ if __name__ == "__main__":
     my_dynamics = dynamics.Dynamics(my_satellite, my_env)
 
     # Create the simulation
+    dt = 0.5
+    my_state = make_state()
     my_simulator = simulator.SimulatorDaemonInterface(my_dynamics, my_state, dt)
 
     # try some simulation
