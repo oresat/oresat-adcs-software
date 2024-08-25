@@ -23,6 +23,7 @@ dev = [
 	"build",
 	"pandas",
 	"matplotlib",
+	"requests",
 	"pgi"
 ]
 
