@@ -23,7 +23,10 @@ dev = [
 	"build",
 	"pandas",
 	"matplotlib",
-	"requests",
 	"pgi"
 ]
-
+analysis = [
+	"pyephem",
+	"requests",
+	"sgp4"
+]
