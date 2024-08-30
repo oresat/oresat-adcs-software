@@ -10,7 +10,6 @@ if __name__ == "__main__":
     # USE PYEPHEM
     sat_ephem = ephem.readtle("ORESAT0.5 (ORESAT0.5)", tle1, tle2)
 
-
     new_csv_data = []
     filename = "Beacon Data CSV 2024-08-29 10_00 - Beacons.csv"
     with open("Beacon Data CSV 2024-08-29 10_00 - Beacons.csv", "r") as fd:
@@ -24,9 +23,12 @@ if __name__ == "__main__":
             new_csv_data.append([content])
 
 
-    save_filename = "Eclipsed " + filename
+    save_filename = "IsEclipsed " + filename
     with open(save_filename, "w", newline='') as fd:
         writer = csv.writer(fd)
         writer.writerows(new_csv_data)
+
+    for line in new_csv_data:
+        print(line)
 
     
