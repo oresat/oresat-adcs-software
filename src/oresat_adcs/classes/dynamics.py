@@ -17,6 +17,11 @@ class SatelliteState(np.ndarray):
     
     Parameters:
         numpy.ndarray: an array of arrays with dtype=object
+            position, meters
+            velocity, meters per second
+            quaterion, 4d list
+            euler rates, check units
+            wheel_velocities, check units
         clock: a jday.jclock'''
 
     def __new__(cls, input_array, clock=None, info=None):
