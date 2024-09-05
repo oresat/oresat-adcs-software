@@ -1,5 +1,5 @@
 import numpy as np
-
+from sgp4.api import Satrec
 
 import os
 
@@ -19,7 +19,7 @@ fileName = os.path.basename(os.path.splitext(__file__)[0])
 
 
 
-def basilisk_run_dipole(init_position, init_velocity, simulation_time_s, num_data_points):
+def basilisk_run_dipole(init_position, init_velocity, sim_time, sim_time_step, num_data_points):
     """
     At the end of the python script you can specify the following example parameters.
 
@@ -36,7 +36,7 @@ def basilisk_run_dipole(init_position, init_velocity, simulation_time_s, num_dat
     dynProcess = scSim.CreateNewProcess(simProcessName) # create the simulation process
 
     ### SET SIMULATION TIME
-    simulationTimeStep = macros.sec2nano(1.)
+    simulationTimeStep = macros.sec2nano(sim_time_step)
     dynProcess.addTask(scSim.CreateNewTask(simTaskName, simulationTimeStep))
 
     # SETUP THE SIMULATION TASKS/OBJECTS
@@ -68,9 +68,9 @@ def basilisk_run_dipole(init_position, init_velocity, simulation_time_s, num_dat
     magModule2.addSpacecraftToModel(scObject.scStateOutMsg)
 
     # set the 2nd magnetic field through custom dipole settings
-    magModule2.g10 = -30926.00 / 1e9 * 0.5  # Tesla
-    magModule2.g11 =  -2318.00 / 1e9 * 0.5  # Tesla
-    magModule2.h11 =   5817.00 / 1e9 * 0.5  # Tesla
+    magModule2.g10 = -29404.8 / 1e9  # Tesla
+    magModule2.g11 =  -1450.9 / 1e9  # Tesla
+    magModule2.h11 =   4652.5 / 1e9  # Tesla
     magModule2.planetRadius = 6371.2 * 1000  # meters
     # REMOVED MAG FIELD LIMITS
 
@@ -83,7 +83,7 @@ def basilisk_run_dipole(init_position, init_velocity, simulation_time_s, num_dat
 
 
     # SIMULATION TIME
-    simulationTime = macros.sec2nano(simulation_time_s)
+    simulationTime = macros.sec2nano(sim_time)
 
     # Setup data logging before the simulation is initialized
     samplingTime = unitTestSupport.samplingTime(simulationTime, simulationTimeStep, num_data_points)
@@ -146,7 +146,7 @@ from Basilisk.utilities import (SimulationBaseClass, macros, orbitalMotion,
 from Basilisk.utilities import vizSupport
 
 
-def basilisk_run_WMM(init_position, init_velocity, simulation_time_s, num_data_points, init_epoch):
+def basilisk_run_WMM(init_position, init_velocity, sim_time, sim_time_step, num_data_points, init_epoch):
     """
     At the end of the python script you can specify the following example parameters.
 
@@ -164,7 +164,7 @@ def basilisk_run_WMM(init_position, init_velocity, simulation_time_s, num_data_p
     dynProcess = scSim.CreateNewProcess(simProcessName)
     
     # SET SIMULATION TIME
-    simulationTimeStep = macros.sec2nano(1.)
+    simulationTimeStep = macros.sec2nano(sim_time_step)
     dynProcess.addTask(scSim.CreateNewTask(simTaskName, simulationTimeStep))
 
     # initialize spacecraft object and set properties
@@ -207,7 +207,7 @@ def basilisk_run_WMM(init_position, init_velocity, simulation_time_s, num_data_p
     scObject.hub.v_CN_NInit = init_velocity  # m/s - v_BN_N
 
  
-    simulationTime = macros.sec2nano(simulation_time_s)
+    simulationTime = macros.sec2nano(sim_time)
 
     # connect messages
     magModule.epochInMsg.subscribeTo(epochMsg)
@@ -261,8 +261,10 @@ def dummy_array(x_0, v_0):
     return np.array([x_0, v_0, np.array([1, 0, 0, 0]), np.array([0, 0, 0]), np.array([0, 0, 0, 0])], dtype=object)
 
 if __name__ == "__main__":
-    tle1 = ""
-    tle2 = ""
+    tle1 = "1 98867U          24238.20000000  .00000000  00000-0  20199-3 0    06"
+    tle2 = "2 98867  97.4404 314.0487 0008202 330.6740  42.2938 15.18964090    01"
+    sat_sgp4 = Satrec.twoline2rv(tle1, tle2)
+
     my_env = environment.OrbitalEnvironment(hi_fi=True)
 
     # units in meters and meters per second
@@ -271,24 +273,57 @@ if __name__ == "__main__":
     t_0 = (2024, 9, 4, 12, 0, 0)
 
     my_jclock = jday.JClock(*t_0)
+    julian_float = my_jclock.julian_date()
+    e, r, v = sat_sgp4.sgp4(julian_float, 0.0)
+    x_0 = [thing*1000 for thing in r]
+    v_0 = [thing*1000 for thing in v]
 
-    my_array = dummy_array(x_0, v_0)
-    my_state = dynamics.SatelliteState(my_array, my_jclock) 
+    adcs_mag = []
+    adcs_pos = []
+    for _ in range(1001):
 
-    # check that it is updated
-    my_state.update()
+        julian_float = my_jclock.julian_date()
+        e, r, v = sat_sgp4.sgp4(julian_float, 0.0)
+        r = [thing*1000 for thing in r]
+        v = [thing*1000 for thing in v]
 
-    print(my_env.magnetic_field(my_state))
+        adcs_pos.append(r)
+        my_array = dummy_array(r, v)
+        my_state = dynamics.SatelliteState(my_array, my_jclock) 
+        my_state.update()
 
-    pos, mag = basilisk_run_dipole(x_0, v_0, simulation_time_s = 5, num_data_points = 5)
+        thing = my_env.magnetic_field(my_state)
+        adcs_mag.append(thing)
 
-    print(mag)
+        my_jclock.tick(1)
+
+    adcs_pos = np.array(adcs_pos)
+    adcs_mag = np.array(adcs_mag)
 
 
+    pos_dipole, mag_dipole = basilisk_run_dipole(x_0, v_0, sim_time=1000., sim_time_step=1., num_data_points=1000)
+    data_dipole = mag_dipole.T
 
-    
-    t_0 = (2024, 9, 4, 12, 0, 0)
 
-    other_pos, other_mag = basilisk_run_WMM(x_0, v_0, simulation_time_s = 5, num_data_points = 5, init_epoch = '2024 September 4, 12:0:0.0 (UTC)')
+    pos_WMM, mag_WMM = basilisk_run_WMM(x_0, v_0, sim_time=1000., sim_time_step=1., num_data_points = 1000, init_epoch = '2024 September 4, 12:0:0.0 (UTC)')
 
-    print(other_mag)
+    adcs_WWM_mag_error = adcs_mag - mag_WMM
+
+    data_WMM = mag_WMM.T
+    # Orbit, I think
+    #fig = plt.figure()
+    #ax = plt.axes(projection='3d')
+    #ax.plot3D(0, 0, 0, marker='o', label='reference')
+    #ax.plot3D(*adcs_pos.T, marker='+', label='ADCS Model')
+    #ax.plot3D(*pos_WMM.T, marker='x', label='WMM')
+    #ax.legend()
+
+    # Magnetic field
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+    ax.plot3D(0, 0, 0, marker='o', label='reference')
+    ax.plot3D(*adcs_mag.T, marker='.', label='ADCS Model')
+    ax.plot3D(*data_WMM, marker='.', label='WMM')
+    ax.plot3D(*data_dipole, marker='x', label='IGRF, 2020')
+    ax.legend()
+    plt.show()
