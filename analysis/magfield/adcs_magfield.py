@@ -300,14 +300,15 @@ if __name__ == "__main__":
     adcs_pos = np.array(adcs_pos)
     adcs_mag = np.array(adcs_mag)
 
+    adcs_mag = adcs_mag.dot(1e6)
+
 
     pos_dipole, mag_dipole = basilisk_run_dipole(x_0, v_0, sim_time=1000., sim_time_step=1., num_data_points=1000)
-    data_dipole = mag_dipole.T
+    mag_dipole = mag_dipole.dot(1e6)
 
 
     pos_WMM, mag_WMM = basilisk_run_WMM(x_0, v_0, sim_time=1000., sim_time_step=1., num_data_points = 1000, init_epoch = '2024 September 4, 12:0:0.0 (UTC)')
-
-    adcs_WWM_mag_error = adcs_mag - mag_WMM
+    mag_WMM = mag_WMM.dot(1e6)
 
     data_WMM = mag_WMM.T
     # Orbit, I think
@@ -322,8 +323,29 @@ if __name__ == "__main__":
     fig = plt.figure()
     ax = plt.axes(projection='3d')
     ax.plot3D(0, 0, 0, marker='o', label='reference')
+    ax.plot3D(*mag_dipole.T, marker='x', label='IGRF, 2020')
     ax.plot3D(*adcs_mag.T, marker='.', label='ADCS Model')
-    ax.plot3D(*data_WMM, marker='.', label='WMM')
-    ax.plot3D(*data_dipole, marker='x', label='IGRF, 2020')
+    ax.plot3D(*mag_WMM.T, marker='.', label='WMM')
+    ax.set_xlabel(r"x-axis ($\mu$T)")
+    ax.set_ylabel(r"y-axis ($\mu$T)")
+    ax.set_zlabel(r"z-axis ($\mu$T)")
+    ax.set_title("Magnetic Field for example OreSat0.5 half-orbit")
     ax.legend()
+
+
+    # error analysis, assuming WMM is the truth
+    adcs_WMM_mag_error = adcs_mag - mag_WMM
+    dipole_WMM_mag_error = mag_dipole - mag_WMM
+
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+    ax.plot3D(0, 0, 0, marker='o', label='reference')
+    ax.plot3D(*dipole_WMM_mag_error.T, marker='.', label='IGRF 2020 error')
+    ax.plot3D(*adcs_WMM_mag_error.T, marker='.', label='ADCS error')
+    ax.set_xlabel(r"x-axis ($\mu$T)")
+    ax.set_ylabel(r"y-axis ($\mu$T)")
+    ax.set_zlabel(r"z-axis ($\mu$T)")
+    ax.set_title("Magnetic Field Error from WMM for example OreSat0.5 half-orbit")
+    ax.legend()
+
     plt.show()
