@@ -1,3 +1,8 @@
+# SATNOGS API KEY
+# If you name your api key something else
+# and forget to ignore it, that is your fault
+analysis/satnogs-api-key.txt
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -188,3 +193,4 @@ dkms.conf
 
 # Auto-generated 42 simulation data
 *.42
+
