@@ -295,7 +295,7 @@ if __name__ == "__main__":
         thing = my_env.magnetic_field(my_state)
         adcs_mag.append(thing)
 
-        my_jclock.tick(1)
+        my_jclock.tick(6)
 
     adcs_pos = np.array(adcs_pos)
     adcs_mag = np.array(adcs_mag)
@@ -303,11 +303,11 @@ if __name__ == "__main__":
     adcs_mag = adcs_mag.dot(1e6)
 
 
-    pos_dipole, mag_dipole = basilisk_run_dipole(x_0, v_0, sim_time=1000., sim_time_step=1., num_data_points=1000)
+    pos_dipole, mag_dipole = basilisk_run_dipole(x_0, v_0, sim_time=6000., sim_time_step=6., num_data_points=1000)
     mag_dipole = mag_dipole.dot(1e6)
 
 
-    pos_WMM, mag_WMM = basilisk_run_WMM(x_0, v_0, sim_time=1000., sim_time_step=1., num_data_points = 1000, init_epoch = '2024 September 4, 12:0:0.0 (UTC)')
+    pos_WMM, mag_WMM = basilisk_run_WMM(x_0, v_0, sim_time=6000., sim_time_step=6., num_data_points = 1000, init_epoch = '2024 September 4, 12:0:0.0 (UTC)')
     mag_WMM = mag_WMM.dot(1e6)
 
     data_WMM = mag_WMM.T
@@ -329,7 +329,7 @@ if __name__ == "__main__":
     ax.set_xlabel(r"x-axis ($\mu$T)")
     ax.set_ylabel(r"y-axis ($\mu$T)")
     ax.set_zlabel(r"z-axis ($\mu$T)")
-    ax.set_title("Magnetic Field for example OreSat0.5 half-orbit")
+    ax.set_title("Magnetic Field for example OreSat0.5 TLE")
     ax.legend()
 
 
@@ -345,7 +345,25 @@ if __name__ == "__main__":
     ax.set_xlabel(r"x-axis ($\mu$T)")
     ax.set_ylabel(r"y-axis ($\mu$T)")
     ax.set_zlabel(r"z-axis ($\mu$T)")
-    ax.set_title("Magnetic Field Error from WMM for example OreSat0.5 half-orbit")
+    ax.set_title("Magnetic Field Error from WMM for example OreSat0.5 TLE")
     ax.legend()
+
+
+    # Angle errors
+    adcs_WMM_mag_angle = np.array([180*(np.arccos(
+        (adcs_mag[ii]).dot(mag_WMM[ii]) / (np.linalg.norm(adcs_mag[ii]) * np.linalg.norm(mag_WMM[ii]))))/3.141592 
+                                   for ii in range(1001)])
+    igrf_WMM_mag_angle = np.array([180*(np.arccos(
+        (mag_dipole[ii]).dot(mag_WMM[ii]) / (np.linalg.norm(mag_dipole[ii]) * np.linalg.norm(mag_WMM[ii]))))/3.141592 
+                                   for ii in range(1001)])
+    
+    fig = plt.figure()
+    ax = plt.axes()
+    ax.plot(igrf_WMM_mag_angle, label='IGRF 2020 error')
+    ax.plot(adcs_WMM_mag_angle, label='ADCS error')
+    ax.set_title("Magnetic Field Pointing angle error from WMM for example OreSat0.5 TLE")
+    ax.legend(loc='best')
+    ax.set_xlabel("Time Step Num (2s intervals)")
+    ax.set_ylabel("Angle Error (deg)")
 
     plt.show()
