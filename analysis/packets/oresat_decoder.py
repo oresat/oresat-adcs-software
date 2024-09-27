@@ -1,9 +1,7 @@
 
-
 import zlib
 import canopen
 import json
-
 from oresat_configs import OreSatConfig, OreSatId
 
 
@@ -23,31 +21,16 @@ DATA_TYPE_SIZE = {
 
 beacon_def = OreSatConfig(OreSatId.ORESAT0_5).beacon_def
 
-data = []
-
-if __name__ == "__main__":
-    
-    with open('ref_raw.json', 'r') as fd:
-        ref_raw = json.load(fd)
 
 
-    i = 0
-    for packet in ref_raw:
-        i += 1
-        # based on https://github.com/oresat/oresat-random-scripts/blob/master/satnogs_fetch.py
 
-        # packets were in json format saved in strings
-        ref_dict = json.loads(packet)
-        print(ref_dict)
-        
-        frame = ref_dict['frame']
-
+def decode_frame(frame):
         msg = bytes.fromhex(frame)
         crc32_calc = zlib.crc32(msg[16:-4], 0).to_bytes(4, "little")
 
         if crc32_calc != msg[-4:]:
-            print("invalid crc32\n")
-            continue
+            #print("invalid crc32\n")
+            return False
 
 
         row = ''
@@ -66,7 +49,41 @@ if __name__ == "__main__":
             offset += size
         row += f'{int.from_bytes(msg[-4:], "little")}\n'
 
-        print(row)
+        return row
 
-        if i > 2:
-            break
+
+
+
+def decode_responses(ref_raw):
+    '''
+    Args:
+        ref_raw: list of satnogs telemetry responses (strings of json responses)
+    '''
+
+    #with open(input_file_name, 'r') as fd:
+    #    ref_raw = json.load(fd)
+
+
+    telemetry = dict()
+    for packet in ref_raw:
+        # based on https://github.com/oresat/oresat-random-scripts/blob/master/satnogs_fetch.py
+
+        # packets were in json format saved in strings
+        ref_dict = json.loads(packet)
+        #print(ref_dict)
+        
+        frame = ref_dict['frame']
+        
+        row = decode_frame(frame)
+        
+        if type(row) is str:
+            # print(ref_dict['timestamp'], row)
+            telemetry[ref_dict['timestamp']] = row
+        else:
+            #print("\tIncorrect crc32")
+            pass
+
+    return telemetry
+
+
+

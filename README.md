@@ -30,6 +30,7 @@ Each module in the `functions` subpackage hold a collection of functions to use
 - `vector`: For vector operations
 - `quaternion`: For quaternion operations
 - `frame`: For coordinate transformations
+- `attitude_estimation`: For attitude estimation algorithms
 
 
 ##### `oresat_adcs.configuration`
