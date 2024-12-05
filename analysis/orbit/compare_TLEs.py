@@ -29,8 +29,8 @@ if __name__ == "__main__":
         r = [thing*1000 for thing in r]
         v = [thing*1000 for thing in v]
 
-        #print("position:", r)
-        #print("velocity:", v)
+        print("position:", r)
+        print("velocity:", v)
 
         # CHECK SGP4 for latitude and longitude
         GCI_to_ECEF = frame.inertial_to_ecef(my_clock)

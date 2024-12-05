@@ -140,6 +140,15 @@ def run(show_plots, step_time, stop_time, init_pos, init_vel, init_att, init_ang
     netData = pmLog.currentNetPower
 
 
+    temp_data = []
+    for ii in range(len(timeAxis)):
+        temp_data.append([float(timeAxis[ii]), [float(magd) for magd in magData[ii]], float(eclipseData[ii])])
+    with open('output.txt','w') as fd:
+        for line in temp_data:
+            fd.write(str(line) + "\n")
+
+
+
     time_ns = satLog.times()
 
     #   Plot the power states
