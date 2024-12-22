@@ -1,6 +1,7 @@
 
 import inspect
 import os
+import json
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -17,6 +18,8 @@ from Basilisk.simulation import simpleBattery
 from Basilisk.simulation import simpleSolarPanel
 from Basilisk.simulation import eclipse
 from Basilisk.simulation import spacecraft
+from Basilisk.simulation import coarseSunSensor
+
 from Basilisk.utilities import macros
 from Basilisk.utilities import orbitalMotion
 from Basilisk.utilities import simIncludeGravBody
@@ -87,26 +90,73 @@ def run(show_plots, step_time, stop_time, init_pos, init_vel, init_att, init_ang
 
     # Create a solar panel
     # Set the panel normal vector in the body frame, the area,
-    solarPanel = basilisk_wrapper.get_solar_panel("solarPanel", scObjectMsg, eclipseMsg, sunMsg, [[1,0,0], 0.2*0.3, 0.20]) 
-    spLog = solarPanel.nodePowerOutMsg.recorder()
-    scenarioSim.AddModelToTask(taskName, solarPanel)
-    scenarioSim.AddModelToTask(taskName, spLog)
+    #solarPanel = basilisk_wrapper.get_solar_panel("solarPanel", scObjectMsg, eclipseMsg, sunMsg, [[1,0,0], 1, 1]) 
+    #spLog = solarPanel.nodePowerOutMsg.recorder()
+    #scenarioSim.AddModelToTask(taskName, solarPanel)
+    #scenarioSim.AddModelToTask(taskName, spLog)
 
+    # create multiple solar panels
+    directions = {"x+": [1, 0, 0],
+                  "x-": [-1, 0, 0],
+                  "y+": [0, 1, 0],
+                  "y-": [0, -1, 0],
+                  "z+": [0, 0, 1],
+                  "z-": [0, 0, -1]}
+
+
+    # create solar panels
+    solar_panels = dict()
+    panel_logs = dict()
+    for direction, vector in directions.items():
+        solar_panels[direction] = basilisk_wrapper.get_solar_panel("solarPanel_"+direction, scObjectMsg, eclipseMsg, sunMsg, [vector, 1, 1]) 
+        panel_logs[direction] = solar_panels[direction].nodePowerOutMsg.recorder()
+        scenarioSim.AddModelToTask(taskName, solar_panels[direction])
+        scenarioSim.AddModelToTask(taskName, panel_logs[direction])
+        
+
+    # coarse solar sensor
+    sun_sensors = dict()
+    sun_logs = dict()
+    for direction,vector in directions.items():
+        # later, see if we can do a constallation
+        sun_sensors[direction] = coarseSunSensor.CoarseSunSensor()
+        sun_sensors[direction].ModelTag = "sunSensor_"+direction
+        # field of view from normal is 90 degrees
+        sun_sensors[direction].fov = 90. * macros.D2R
+        sun_sensors[direction].nHat_B = np.array(vector)
+        sun_sensors[direction].sunInMsg.subscribeTo(sunMsg)
+        sun_sensors[direction].stateInMsg.subscribeTo(scObjectMsg)
+        sun_sensors[direction].sunEclipseInMsg.subscribeTo(eclipseMsg)
+        sun_logs[direction] = sun_sensors[direction].cssDataOutMsg.recorder()
+        scenarioSim.AddModelToTask(taskName, sun_sensors[direction])
+        scenarioSim.AddModelToTask(taskName, sun_logs[direction])
+
+    #CSS_test = coarseSunSensor.CoarseSunSensor()
+    #CSS_test.ModelTag = "CSS_Test_sensor"
+
+    # set up sun vector
+    #CSS_test.fov = 90. * macros.D2R
+    #CSS_test.nHat_B = np.array([1, 0, 0])
+    #CSS_test.sunInMsg.subscribeTo(sunMsg)
+    #CSS_test.stateInMsg.subscribeTo(scObjectMsg)
+    #scenarioSim.AddModelToTask(taskName, CSS_test)
+    #CSS_test_log = CSS_test.cssDataOutMsg.recorder()
+    #scenarioSim.AddModelToTask(taskName, CSS_test_log)
 
     #   Create a simple power sink
-    powerSink = basilisk_wrapper.get_power_sink("powerSink2", -3)
-    psLog = powerSink.nodePowerOutMsg.recorder()
-    scenarioSim.AddModelToTask(taskName, powerSink)
-    scenarioSim.AddModelToTask(taskName, psLog)
+    #powerSink = basilisk_wrapper.get_power_sink("powerSink2", -3)
+    #psLog = powerSink.nodePowerOutMsg.recorder()
+    #scenarioSim.AddModelToTask(taskName, powerSink)
+    #scenarioSim.AddModelToTask(taskName, psLog)
 
 
     # Create a simpleBattery and attach the sources/sinks to it
-    powerMonitor = basilisk_wrapper.get_power_monitor("powerMonitor", capacity=(10.0*3600.0), init_charge=(10.0*3600.0))
-    powerMonitor.addPowerNodeToModel(solarPanel.nodePowerOutMsg)
-    powerMonitor.addPowerNodeToModel(powerSink.nodePowerOutMsg)
-    pmLog = powerMonitor.batPowerOutMsg.recorder()
-    scenarioSim.AddModelToTask(taskName, powerMonitor)
-    scenarioSim.AddModelToTask(taskName, pmLog)
+    #powerMonitor = basilisk_wrapper.get_power_monitor("powerMonitor", capacity=(10.0*3600.0), init_charge=(10.0*3600.0))
+    #powerMonitor.addPowerNodeToModel(solarPanel.nodePowerOutMsg)
+    #powerMonitor.addPowerNodeToModel(powerSink.nodePowerOutMsg)
+    #pmLog = powerMonitor.batPowerOutMsg.recorder()
+    #scenarioSim.AddModelToTask(taskName, powerMonitor)
+    #scenarioSim.AddModelToTask(taskName, pmLog)
 
 
 
@@ -133,16 +183,39 @@ def run(show_plots, step_time, stop_time, init_pos, init_vel, init_att, init_ang
     magData = magLog.magField_N
 
     # Solar
+   # print(dir(sunLog))
+   # print(dir(eclipseLog))
     eclipseData = eclipseLog.shadowFactor
-    supplyData = spLog.netPower
-    sinkData = psLog.netPower
-    storageData = pmLog.storageLevel
-    netData = pmLog.currentNetPower
+    #supplyData = spLog.netPower
+    panelData = { direction:[float(power) for power in powerLog.netPower] for direction,powerLog in panel_logs.items() }
+    #sinkData = psLog.netPower
+    #storageData = pmLog.storageLevel
+    #netData = pmLog.currentNetPower
+
+    #print(CSS_test_log.OutputData)
+    #sunData = CSS_test_log.OutputData
+    sunData = { direction:[float(reading) for reading in sunLog.OutputData] for direction,sunLog in sun_logs.items() }
 
 
-    temp_data = []
+    panel_data = list()
     for ii in range(len(timeAxis)):
-        temp_data.append([float(timeAxis[ii]), [float(magd) for magd in magData[ii]], float(eclipseData[ii])])
+        panel_data.append([direction[ii] for direction in panelData.values()])
+    with open('panel.txt', 'w') as fd:
+        for line in panel_data:
+            fd.write(str(line) + "\n")
+
+    sun_data = [["sun_exposure", "x+", "x-", "y+", "y-", "z+", "z-"]]
+    for ii in range(len(timeAxis)):
+        sun_data.append([float(eclipseData[ii])] + [direction[ii] for direction in sunData.values()])
+    with open('sun.csv', 'w') as fd:
+        for line in sun_data:
+            fd.write(",".join([str(thing) for thing in line]) + "\n")
+
+
+
+    temp_data = [["time", "mag_x", "mag_y", "mag_z", "is_eclipsed"]]
+    for ii in range(len(timeAxis)):
+        temp_data.append([float(timeAxis[ii])] + [float(magd) for magd in magData[ii]] + [float(eclipseData[ii])])
     with open('output.txt','w') as fd:
         for line in temp_data:
             fd.write(str(line) + "\n")
@@ -153,7 +226,6 @@ def run(show_plots, step_time, stop_time, init_pos, init_vel, init_att, init_ang
 
     #   Plot the power states
     figureList = {}
-
 
 
     if show_plots:
@@ -171,16 +243,16 @@ def run(show_plots, step_time, stop_time, init_pos, init_vel, init_att, init_ang
 #
 if __name__ == "__main__":
     
-    timeInitString = '2025 MAY 04 07:47:48.965 (UTC)'
-    init_position = [-4963946.392216118, 4601467.815050239, -1311445.5818653065]
-    init_velocity = [1731.502687329283, -238.55435888532116, -7398.92444558897] 
+    timeInitString = '2024 DEC 21 23:57:00.000 (UTC)'
+    init_position = [2204478.478478075, 6521207.613663136, -199008.2069751579]
+    init_velocity = [1002.5835456934169, -110.58217266418544, 7542.886276905129]
     init_MRP_attitude = [[0.1], [0.2], [-0.3]]  # sigma_BN_B
-    init_ang_velocity = [[0.001], [-0.001], [0.001]]
+    init_ang_velocity = [[0.01], [-0.01], [0.01]]
 
     run(
         False,  # show_plots
         step_time = 10.0,
-        stop_time = 1000.0,
+        stop_time = 24.0*60.0*60.0,
         init_pos = init_position,
         init_vel = init_velocity,
         init_att = init_MRP_attitude,
