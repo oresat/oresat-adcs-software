@@ -19,6 +19,7 @@ def make_satellite(my_env):
                 structure.Magnetorquer("Square", np.array([0, 0, 1]), 0.2887)]
     my_mt_system = structure.MagnetorquerSystem(torquers)
 
+
     # make reaction wheel system
     inclination = np.pi / 3
     azimuth = np.pi / 4
@@ -79,7 +80,7 @@ def run_simulations(simulator, commands, total_iterations):
     for iteration in range(total_iterations):
         out = simulator.propagate(2, commands)
 
-        output += (",".join([str(component) for component in out[1]])) + "\n"
+        output += (",".join([str(component) for component in out[0]])) + "\n"
 
         if iteration % 10 == 0:
             print("Iteration ", iteration, " of ", total_iterations," complete")
