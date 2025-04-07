@@ -79,7 +79,7 @@ def run_simulations(simulator, commands, total_iterations):
     for iteration in range(total_iterations):
         out = simulator.propagate(2, commands)
 
-        output += (",".join([str(component) for component in out[2]])) + "\n"
+        output += (",".join([str(component) for component in out[0]])) + "\n"
 
         if iteration % 10 == 0:
             print("Iteration ", iteration, " of ", total_iterations," complete")
@@ -115,7 +115,7 @@ if __name__ == "__main__":
     cmds = [np.array([0, 0, 300000]), np.array([0,0,0,0])]
 
     # format simulation output quaternion to be like a csv
-    run_simulations(my_simulator, cmds, 1000)
+    run_simulations(my_simulator, cmds, 100)
 
     print("\nDone")
 
