@@ -40,7 +40,7 @@ def basilisk_run_dipole(init_position, init_velocity, sim_time, sim_time_step, n
     dynProcess.addTask(scSim.CreateNewTask(simTaskName, simulationTimeStep))
 
     # SETUP THE SIMULATION TASKS/OBJECTS
-    scObject = spacecraft.Spacecraft()
+    scObject = spacecraft.createNewSpacecraft(scSim, simProcessName, dynamicsTaskName, scObjectName)
     scObject.ModelTag = "bsk-Sat"
     scSim.AddModelToTask(simTaskName, scObject) # add spacecraft object to the simulation process
 
@@ -84,7 +84,7 @@ def basilisk_run_dipole(init_position, init_velocity, sim_time, sim_time_step, n
 
     # SIMULATION TIME
     simulationTime = macros.sec2nano(sim_time)
-
+    
     # Setup data logging before the simulation is initialized
     samplingTime = unitTestSupport.samplingTime(simulationTime, simulationTimeStep, num_data_points)
     dataLog = scObject.scStateOutMsg.recorder(samplingTime)
@@ -113,11 +113,14 @@ def basilisk_run_dipole(init_position, init_velocity, sim_time, sim_time_step, n
     #
     posData = dataLog.r_BN_N
     magData2 = mag2Log.magField_N
+   
 
+ 
+    omega = dataLog.omega_BN_B
     np.set_printoptions(precision=16)
 
 
-    return posData, magData2
+    return posData, magData2, omega
 
 
 
@@ -185,7 +188,7 @@ def basilisk_run_WMM(init_position, init_velocity, sim_time, sim_time_step, num_
     # create the magnetic field
     magModule = magneticFieldWMM.MagneticFieldWMM()
     magModule.ModelTag = "WMM"
-    magModule.dataPath = bskPath + '/supportData/MagneticField/'
+    magModule.dataPath = bskPath + '/supportData/MagneticField/' 
 
 
     # set epoch date/time message
@@ -280,6 +283,7 @@ if __name__ == "__main__":
 
     adcs_mag = []
     adcs_pos = []
+    adcs_omega = []
     for _ in range(1001):
 
         julian_float = my_jclock.julian_date()
@@ -295,15 +299,19 @@ if __name__ == "__main__":
         thing = my_env.magnetic_field(my_state)
         adcs_mag.append(thing)
 
+        currAngV = my_state.body_ang_vel
+        adcs_omega.append(currAngV)
+
         my_jclock.tick(6)
 
     adcs_pos = np.array(adcs_pos)
     adcs_mag = np.array(adcs_mag)
+    adcs_omega = np.array(adcs_omega)
 
     adcs_mag = adcs_mag.dot(1e6)
 
 
-    pos_dipole, mag_dipole = basilisk_run_dipole(x_0, v_0, sim_time=6000., sim_time_step=6., num_data_points=1000)
+    pos_dipole, mag_dipole, omega_dipole = basilisk_run_dipole(x_0, v_0, sim_time=6000., sim_time_step=6., num_data_points=1000)
     mag_dipole = mag_dipole.dot(1e6)
 
 
@@ -366,4 +374,22 @@ if __name__ == "__main__":
     ax.set_xlabel("Time Step Num (2s intervals)")
     ax.set_ylabel("Angle Error (deg)")
 
+   # Angular velocity
+
+    fig = plt.figure()
+    ax = plt.axes()
+    ax.set_title("Verify  angular velocity =  zero: For IGRF model")
+    ax.set_xlabel("Time Step Num (2s intervals)")
+    ax.set_ylabel("Angular Velocity (rad/s)")
+    ax.plot(range(1001), omega_dipole, marker = '.', label = 'IGRF 2020 Omega')
+   
+    
+    fig = plt.figure()
+    ax = plt.axes()
+    ax.set_title("Verify angular velocity = zero: ADCS Omega")
+    ax.set_xlabel("Time Step Num (2s intervals)")
+    ax.set_ylabel("Angular Velocity (rad/s)")
+    ax.plot(range(1001), adcs_omega ,marker = 'x', label = 'ADCS Omega')
     plt.show()
+
+
