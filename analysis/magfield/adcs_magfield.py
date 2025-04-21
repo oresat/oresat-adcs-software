@@ -286,6 +286,7 @@ if __name__ == "__main__":
     adcs_mag = []
     adcs_pos = []
     adcs_omega = []
+    adcs_attitude = []
     for _ in range(1001):
 
         julian_float = my_jclock.julian_date()
@@ -304,12 +305,15 @@ if __name__ == "__main__":
         currAngV = my_state.body_ang_vel
         adcs_omega.append(currAngV)
 
+        currAtt = my_state.attitude
+        adcs_attitude.append(currAtt);
+        
         my_jclock.tick(6)
 
     adcs_pos = np.array(adcs_pos)
     adcs_mag = np.array(adcs_mag)
     adcs_omega = np.array(adcs_omega)
-
+    adcs_attitude = np.array(adcs_attitude)
     adcs_mag = adcs_mag.dot(1e6)
 
 
@@ -394,14 +398,22 @@ if __name__ == "__main__":
     ax.plot(range(1001), adcs_omega ,marker = 'x', label = 'ADCS Omega')
 
 
-    # Plot MRPs to detect tumbling 
+    # Plot MRPs for IGRF 2020 to detect tumbling 
     plt.figure()
-    plt.title("MRP (sigma_BN) over time")
+    plt.title("IGRF 2020: MRP (sigma_BN) over time")
     plt.plot(times_dipole, sigma_BN[:, 0], label='σ₁')
     plt.plot(times_dipole, sigma_BN[:, 1], label='σ₂')
     plt.plot(times_dipole, sigma_BN[:, 2], label='σ₃')
     plt.xlabel("Time (s)")
     plt.ylabel("MRP components")
     plt.legend()
+    plt.grid(True)
+
+    # Plot Quaternions for ADCS to detect tumbling
+    plt.figure()
+    plt.title("ADCS: Quaternions over time")
+    plt.plot(range(1001), adcs_attitude)
+    plt.xlabel("Time 2s Interval")
+    plt.ylabel("Quaternion components")
     plt.grid(True)
     plt.show()
