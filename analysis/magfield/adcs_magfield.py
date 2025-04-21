@@ -40,8 +40,10 @@ def basilisk_run_dipole(init_position, init_velocity, sim_time, sim_time_step, n
     dynProcess.addTask(scSim.CreateNewTask(simTaskName, simulationTimeStep))
 
     # SETUP THE SIMULATION TASKS/OBJECTS
-    scObject = spacecraft.createNewSpacecraft(scSim, simProcessName, dynamicsTaskName, scObjectName)
+    scObject = spacecraft.Spacecraft() 
     scObject.ModelTag = "bsk-Sat"
+
+
     scSim.AddModelToTask(simTaskName, scObject) # add spacecraft object to the simulation process
 
     # GRAVITY MODEL
@@ -113,14 +115,14 @@ def basilisk_run_dipole(init_position, init_velocity, sim_time, sim_time_step, n
     #
     posData = dataLog.r_BN_N
     magData2 = mag2Log.magField_N
-   
-
+    sigma_BN = dataLog.sigma_BN   
+    timeArr = dataLog.times() * 1e-9
  
     omega = dataLog.omega_BN_B
     np.set_printoptions(precision=16)
 
 
-    return posData, magData2, omega
+    return posData, magData2, omega, timeArr, sigma_BN
 
 
 
@@ -311,7 +313,7 @@ if __name__ == "__main__":
     adcs_mag = adcs_mag.dot(1e6)
 
 
-    pos_dipole, mag_dipole, omega_dipole = basilisk_run_dipole(x_0, v_0, sim_time=6000., sim_time_step=6., num_data_points=1000)
+    pos_dipole, mag_dipole, omega_dipole, times_dipole, sigma_BN = basilisk_run_dipole(x_0, v_0, sim_time=6000., sim_time_step=6., num_data_points=1000)
     mag_dipole = mag_dipole.dot(1e6)
 
 
@@ -390,6 +392,16 @@ if __name__ == "__main__":
     ax.set_xlabel("Time Step Num (2s intervals)")
     ax.set_ylabel("Angular Velocity (rad/s)")
     ax.plot(range(1001), adcs_omega ,marker = 'x', label = 'ADCS Omega')
+
+
+    # Plot MRPs to detect tumbling 
+    plt.figure()
+    plt.title("MRP (sigma_BN) over time")
+    plt.plot(times_dipole, sigma_BN[:, 0], label='σ₁')
+    plt.plot(times_dipole, sigma_BN[:, 1], label='σ₂')
+    plt.plot(times_dipole, sigma_BN[:, 2], label='σ₃')
+    plt.xlabel("Time (s)")
+    plt.ylabel("MRP components")
+    plt.legend()
+    plt.grid(True)
     plt.show()
-
-
