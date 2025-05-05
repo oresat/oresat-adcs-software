@@ -441,4 +441,17 @@ if __name__ == "__main__":
     plt.xlabel("Time 2s Interval")
     plt.ylabel("Quaternion components")
     plt.grid(True)
+
+    # Position
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+    ax.plot3D(0, 0, 0, marker='o', label='reference')
+    ax.plot3D(*pos_dipole.T, marker='x', label='IGRF, 2020')
+    ax.plot3D(*adcs_pos.T, marker='.', label='ADCS Model')
+    ax.plot3D(*pos_WMM.T, marker='.', label='WMM')
+    ax.set_xlabel(r"x-axis ($\mu$T)")
+    ax.set_ylabel(r"y-axis ($\mu$T)")
+    ax.set_zlabel(r"z-axis ($\mu$T)")
+    ax.set_title("Position for example OreSat0.5 TLE")
+    ax.legend()
     plt.show()
