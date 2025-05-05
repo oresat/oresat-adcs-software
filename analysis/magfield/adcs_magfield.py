@@ -273,9 +273,14 @@ if __name__ == "__main__":
     my_env = environment.OrbitalEnvironment(hi_fi=True)
 
     # units in meters and meters per second
-    x_0 =[5459160.934523222, -4052774.5387697653, 1098818.5050856567]
-    v_0 = [-1563.678108182039, -81.69307509455707, 7447.743282587973]
-    t_0 = (2024, 9, 4, 12, 0, 0)
+    #  x_0 =[5459160.934523222, -4052774.5387697653, 1098818.5050856567]
+    #  v_0 = [-1563.678108182039, -81.69307509455707, 7447.743282587973]
+    #  t_0 = (2024, 9, 4, 12, 0, 0)
+       
+    x_0 = [-9929411.358381217, -8157153.683941175, -33763255.066269584]
+    v_0 =  [-3002.2066900653954, -894.3822386242264, 1089.0350502098918]
+    t_0 = (2025,5,5,18,20,13)
+
 
     my_jclock = jday.JClock(*t_0)
     julian_float = my_jclock.julian_date()
@@ -284,6 +289,8 @@ if __name__ == "__main__":
     v_0 = [thing*1000 for thing in v]
 
     adcs_mag = []
+    adcs_mag2 = []
+    adcs_mag3 = []
     adcs_pos = []
     adcs_omega = []
     adcs_attitude = []
@@ -301,6 +308,10 @@ if __name__ == "__main__":
 
         thing = my_env.magnetic_field(my_state)
         adcs_mag.append(thing)
+        thing2 = my_env.magnetic_field_inertial_up_to_n(my_state,1)
+        adcs_mag2.append(thing2)
+        thing3 = my_env.magnetic_field_inertial_up_to_n(my_state,3)
+        adcs_mag3.append(thing3)
 
         currAngV = my_state.body_ang_vel
         adcs_omega.append(currAngV)
@@ -312,10 +323,13 @@ if __name__ == "__main__":
 
     adcs_pos = np.array(adcs_pos)
     adcs_mag = np.array(adcs_mag)
+    adcs_mag2 = np.array(adcs_mag2)
+    adcs_mag3 = np.array(adcs_mag3)
     adcs_omega = np.array(adcs_omega)
     adcs_attitude = np.array(adcs_attitude)
     adcs_mag = adcs_mag.dot(1e6)
-
+    adcs_mag2 = adcs_mag2.dot(1e6)
+    adcs_mag3 = adcs_mag3.dot(1e6)
 
     pos_dipole, mag_dipole, omega_dipole, times_dipole, sigma_BN = basilisk_run_dipole(x_0, v_0, sim_time=6000., sim_time_step=6., num_data_points=1000)
     mag_dipole = mag_dipole.dot(1e6)
@@ -350,12 +364,14 @@ if __name__ == "__main__":
     # error analysis, assuming WMM is the truth
     adcs_WMM_mag_error = adcs_mag - mag_WMM
     dipole_WMM_mag_error = mag_dipole - mag_WMM
+    adcs_WMM_mag_error2 = adcs_mag2 - mag_WMM
 
     fig = plt.figure()
     ax = plt.axes(projection='3d')
     ax.plot3D(0, 0, 0, marker='o', label='reference')
     ax.plot3D(*dipole_WMM_mag_error.T, marker='.', label='IGRF 2020 error')
-    ax.plot3D(*adcs_WMM_mag_error.T, marker='.', label='ADCS error')
+    ax.plot3D(*adcs_WMM_mag_error.T, marker='.', label='ADCS 1st Deg error')
+    ax.plot3D(*adcs_WMM_mag_error2.T, marker='.',label='ADCS 2nd Deg error')
     ax.set_xlabel(r"x-axis ($\mu$T)")
     ax.set_ylabel(r"y-axis ($\mu$T)")
     ax.set_zlabel(r"z-axis ($\mu$T)")
@@ -371,10 +387,19 @@ if __name__ == "__main__":
         (mag_dipole[ii]).dot(mag_WMM[ii]) / (np.linalg.norm(mag_dipole[ii]) * np.linalg.norm(mag_WMM[ii]))))/3.141592 
                                    for ii in range(1001)])
     
+    adcs_WMM_mag_angle2 = np.array([180*(np.arccos(
+        (adcs_mag2[ii]).dot(mag_WMM[ii]) / (np.linalg.norm(adcs_mag2[ii]) * np.linalg.norm(mag_WMM[ii]))))/3.141592 
+                                   for ii in range(1001)])
+    
+    adcs_WMM_mag_angle3 = np.array([180*(np.arccos(
+        (adcs_mag3[ii]).dot(mag_WMM[ii]) / (np.linalg.norm(adcs_mag3[ii]) * np.linalg.norm(mag_WMM[ii]))))/3.141592 
+                                   for ii in range(1001)])
     fig = plt.figure()
     ax = plt.axes()
     ax.plot(igrf_WMM_mag_angle, label='IGRF 2020 error')
-    ax.plot(adcs_WMM_mag_angle, label='ADCS error')
+    ax.plot(adcs_WMM_mag_angle, label='ADCS 1st DEG error')
+    ax.plot(adcs_WMM_mag_angle2, label='ADCS 2nd DEG error')
+    ax.plot(adcs_WMM_mag_angle3, label='ADCS 3rd DEG error')
     ax.set_title("Magnetic Field Pointing angle error from WMM for example OreSat0.5 TLE")
     ax.legend(loc='best')
     ax.set_xlabel("Time Step Num (2s intervals)")

@@ -11,6 +11,7 @@ from oresat_adcs.functions import frame
 
 if __name__ == "__main__":
     now = datetime.utcnow()
+    print(now)
     my_clock = jday.JClock(now.year, now.month, now.day, now.hour, now.minute, now.second)
 
     TLE_A = ['1 52017U 22026K   24242.00664388  .00309760  00000-0  20745-2 0  9991',

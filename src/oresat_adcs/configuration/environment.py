@@ -1,6 +1,6 @@
 import numpy as np
 from ..functions import frame, quaternion, vector
-
+from scipy.special import lpmv
 
 
 class Environment():
@@ -219,11 +219,40 @@ class OrbitalEnvironment():
         self.MU = self.G_NEWTON * self.EARTH_MASS #: Gravitational parameter of satellite w.r.t. Earth.
         self.m     = self.MAG_REF_RADIUS**3 * 1E-09 * np.array([self.G_1_1, self.H_1_1, self.G_1_0]) # magnetic dipole in ECEF
         self.SRP_coeff = 1362 * self.AU**2 / 299792458 # Newtons, eq D.56
+        
+        # self.g_coeffs and self.h_coeffs are from an attempt at 2nd degree IGRF implementation
+        # IGRF-13  2020 coefficients (nT)
+       
+        self.a = 6371.2e3 
 
+        self.g_coeffs = {
+            (1, 0): -29404.8,
+            (1, 1): -1450.9,
+            (2, 0): -2499.6,
+            (2, 1): 2982.0,
+            (2, 2): 1677.0,
+        }
+
+        self.h_coeffs = {
+            (1, 1): 4652.5,
+            (2, 1): -2991.6,
+            (2, 2): -734.6,
+        }
+    # the lines below were for the 3rd degree attempt
+        self.g_coeffs.update({
+            (3, 0): 1363.2,
+            (3, 1): -2381.2,
+            (3, 2): 1236.2,
+            (3, 3): 525.7
+       })
+        self.h_coeffs.update({
+            (3, 1): -82.1,
+            (3, 2): 241.9 ,
+            (3, 3): -543.4
+       })
 
     def relative_vel(self, state):
         '''Relative velocity of satellite, with respect to the atmosphere at this location,
-        assuming atmosphere rotates with earth with respect to inertial frame.
 
         Parameters:
             x (numpy.ndarray): Position of satellite in inertial frame.
@@ -375,3 +404,157 @@ class OrbitalEnvironment():
         B      = state.GCI_to_ECEF.T.dot(R)
         return B
 
+    def compute_dPnm(self, m, n, cos_theta, theta):
+        """
+        Compute derivative of associated Legendre function w.r.t theta.
+        """
+        Pnm = lpmv(m, n, cos_theta)
+        if abs(np.sin(theta)) < 1e-10:
+            return 0.0  # avoid divide by zero at poles
+
+        return (n * np.cos(theta) * Pnm - (n + m) * lpmv(m, n - 1, cos_theta)) / np.sin(theta)    
+
+    def magnetic_field_inertial(self,state):
+        """
+        Compute magnetic field up to degree 2 in inertial frame.
+        r_inertial: position vector (m), inertial frame
+        Returns: magnetic field vector (T), inertial frame
+       """
+        r_inertial = state.position 
+
+        r_vec = np.array( r_inertial)
+        r = np.linalg.norm(r_vec)
+        theta = np.arccos(r_vec[2] / r)  # colatitude (rad)
+        phi = np.arctan2(r_vec[1], r_vec[0])  # longitude (rad)
+
+        # Initialize spherical components
+        Br = 0.0
+        Btheta = 0.0
+        Bphi = 0.0
+
+        # Loop over degrees n = 1, 2
+        for n in [1, 2]:
+            for m in range(0, n + 1):
+                g = self.g_coeffs.get((n, m), 0.0)
+                h = self.h_coeffs.get((n, m), 0.0)
+
+                Pnm = lpmv(m, n, np.cos(theta))  # Associated Legendre
+                dPnm = self.compute_dPnm(m, n, np.cos(theta), theta)  # YOU NEED TO DEFINE THIS DERIVATIVE
+
+                factor = (self.a / r) ** (n + 2)
+                cos_mphi = np.cos(m * phi)
+                sin_mphi = np.sin(m * phi)
+
+                Br += factor * (n + 1) * (g * cos_mphi + h * sin_mphi) * Pnm
+                Btheta -= factor * (g * cos_mphi + h * sin_mphi) * dPnm
+                if m != 0:
+                    Bphi -= factor * m * (g * sin_mphi - h * cos_mphi) * Pnm
+
+        # Convert from nT to Tesla
+        Br *= 1e-9
+        Btheta *= 1e-9
+        Bphi *= 1e-9
+
+        # Convert spherical (Br, Btheta, Bphi) to Cartesian (Bx, By, Bz)
+        Bx = (np.sin(theta) * np.cos(phi) * Br +
+              np.cos(theta) * np.cos(phi) * Btheta -
+              np.sin(phi) * Bphi)
+        By = (np.sin(theta) * np.sin(phi) * Br +
+              np.cos(theta) * np.sin(phi) * Btheta +
+              np.cos(phi) * Bphi)
+        Bz = (np.cos(theta) * Br - np.sin(theta) * Btheta)
+
+        return np.array([Bx, By, Bz])
+
+
+    def magnetic_field_inertial_deg3(self,state):
+        """
+        Compute magnetic field up to degree 2 in inertial frame.
+        r_inertial: position vector (m), inertial frame
+        Returns: magnetic field vector (T), inertial frame
+       """
+        r_inertial = state.position 
+
+        r_vec = np.array( r_inertial)
+        r = np.linalg.norm(r_vec)
+        theta = np.arccos(r_vec[2] / r)  # colatitude (rad)
+        phi = np.arctan2(r_vec[1], r_vec[0])  # longitude (rad)
+
+        # Initialize spherical components
+        Br = 0.0
+        Btheta = 0.0
+        Bphi = 0.0
+
+        # Loop over degrees n = 1, 2
+        for n in [3]:
+            for m in range(0, n + 1):
+                g = self.g_coeffs.get((n, m), 0.0)
+                h = self.h_coeffs.get((n, m), 0.0)
+
+                Pnm = lpmv(m, n, np.cos(theta))  # Associated Legendre
+                dPnm = self.compute_dPnm(m, n, np.cos(theta), theta)  # YOU NEED TO DEFINE THIS DERIVATIVE
+
+                factor = (self.a / r) ** (n + 2)
+                cos_mphi = np.cos(m * phi)
+                sin_mphi = np.sin(m * phi)
+
+                Br += factor * (n + 1) * (g * cos_mphi + h * sin_mphi) * Pnm
+                Btheta -= factor * (g * cos_mphi + h * sin_mphi) * dPnm
+                if m != 0:
+                    Bphi -= factor * m * (g * sin_mphi - h * cos_mphi) * Pnm
+
+        # Convert from nT to Tesla
+        Br *= 1e-9
+        Btheta *= 1e-9
+        Bphi *= 1e-9
+
+        # Convert spherical (Br, Btheta, Bphi) to Cartesian (Bx, By, Bz)
+        Bx = (np.sin(theta) * np.cos(phi) * Br +
+              np.cos(theta) * np.cos(phi) * Btheta -
+              np.sin(phi) * Bphi)
+        By = (np.sin(theta) * np.sin(phi) * Br +
+              np.cos(theta) * np.sin(phi) * Btheta +
+              np.cos(phi) * Bphi)
+        Bz = (np.cos(theta) * Br - np.sin(theta) * Btheta)
+
+        return np.array([Bx, By, Bz])
+
+    def magnetic_field_inertial_up_to_n(self, state, max_degree):
+        r_vec = np.array(state.position)
+        r = np.linalg.norm(r_vec)
+        theta = np.arccos(r_vec[2] / r)
+        phi = np.arctan2(r_vec[1], r_vec[0])
+
+        Br, Btheta, Bphi = 0.0, 0.0, 0.0
+
+        for n in range(1, max_degree + 1):
+            for m in range(0, n + 1):
+                g = self.g_coeffs.get((n, m), 0.0)
+                h = self.h_coeffs.get((n, m), 0.0)
+
+                Pnm = lpmv(m, n, np.cos(theta))
+                dPnm = self.compute_dPnm(m, n, np.cos(theta), theta)
+
+                factor = (self.a / r) ** (n + 2)
+                cos_mphi = np.cos(m * phi)
+                sin_mphi = np.sin(m * phi)
+
+                Br += factor * (n + 1) * (g * cos_mphi + h * sin_mphi) * Pnm
+                Btheta -= factor * (g * cos_mphi + h * sin_mphi) * dPnm
+                if m != 0:
+                    Bphi -= factor * m * (g * sin_mphi - h * cos_mphi) * Pnm
+
+        Br *= 1e-9
+        Btheta *= 1e-9
+        Bphi *= 1e-9
+
+        Bx = (np.sin(theta) * np.cos(phi) * Br +
+              np.cos(theta) * np.cos(phi) * Btheta -
+              np.sin(phi) * Bphi)
+        By = (np.sin(theta) * np.sin(phi) * Br +
+             np.cos(theta) * np.sin(phi) * Btheta +
+             np.cos(phi) * Bphi)
+        Bz = (np.cos(theta) * Br - np.sin(theta) * Btheta)
+
+        return np.array([Bx, By, Bz])
+         
