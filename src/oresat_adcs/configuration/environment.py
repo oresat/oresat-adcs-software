@@ -431,7 +431,7 @@ class OrbitalEnvironment():
         Br = 0.0
         Btheta = 0.0
         Bphi = 0.0
-
+        
         # Loop over degrees n = 1, 2
         for n in [1, 2]:
             for m in range(0, n + 1):
@@ -525,29 +525,45 @@ class OrbitalEnvironment():
         theta = np.arccos(r_vec[2] / r)
         phi = np.arctan2(r_vec[1], r_vec[0])
 
+        # looking at B(the geomagnetic field) at a certain time(so Bt is ommitted)
         Br, Btheta, Bphi = 0.0, 0.0, 0.0
 
         for n in range(1, max_degree + 1):
             for m in range(0, n + 1):
+                # gets constants g and m
                 g = self.g_coeffs.get((n, m), 0.0)
                 h = self.h_coeffs.get((n, m), 0.0)
-
+                
+                # does Legendre functions math for the Pnm(cos(theta)) in V()
                 Pnm = lpmv(m, n, np.cos(theta))
                 dPnm = self.compute_dPnm(m, n, np.cos(theta), theta)
 
+                # Factor is the a(a/r)^(n+1) in the spherical harmonic expansion V()
                 factor = (self.a / r) ** (n + 2)
+                 
+                # below is that cosmphi and sinmphi cals for V()
                 cos_mphi = np.cos(m * phi)
                 sin_mphi = np.sin(m * phi)
 
+ 
+                #  derivative for V() wrt r. this is why we have += (n+1)
+                #  rather than -= ___ 
                 Br += factor * (n + 1) * (g * cos_mphi + h * sin_mphi) * Pnm
+
+                #  derivative for V() wrt theta. Pnm(cos) is the only factor
+                # theta. this is why we use dPnm
                 Btheta -= factor * (g * cos_mphi + h * sin_mphi) * dPnm
+
+                # derivative for V() wrt phi. cos and sin are only phi terms, they are                 #  flip flopped to satisfy derivation
                 if m != 0:
                     Bphi -= factor * m * (g * sin_mphi - h * cos_mphi) * Pnm
 
+        # convert from tesla to nano tesla
         Br *= 1e-9
         Btheta *= 1e-9
         Bphi *= 1e-9
 
+        # convert from spherical(r, phi, theta into euler coords)
         Bx = (np.sin(theta) * np.cos(phi) * Br +
               np.cos(theta) * np.cos(phi) * Btheta -
               np.sin(phi) * Bphi)
