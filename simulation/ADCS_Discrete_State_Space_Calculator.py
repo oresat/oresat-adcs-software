@@ -44,15 +44,15 @@ def add_integrators(A, B, C):
 
 def get_gain_matrix(Ts, max_error, max_rate, use_integrator = False):
     #Moments of Inertia (kg m^2)
-    Jxx = 0.01537002
-    Jxy = 0.00001166
-    Jxz = 0.00022389
-    Jyx = 0.00001166
-    Jyy = 0.01449756
-    Jyz = 0.0000318
-    Jzx = 0.00022389
-    Jzy = 0.0000318
-    Jzz = 0.00576094
+    Jxx = 0.01650237
+    Jxy = 0.00000711
+    Jxz = 0.00004547
+    Jyx = 7.115e-6
+    Jyy = 0.015962
+    Jyz = 0.00003107
+    Jzx = 0.00004547
+    Jzy = 0.00003107
+    Jzz = 0.00651814
     J = np.array([[Jxx, Jxy, Jxz],[Jyx, Jyy, Jyz], [Jzx, Jzy, Jzz]])
     
     #----------------- LQR matrices--------------------------------------------
@@ -62,7 +62,7 @@ def get_gain_matrix(Ts, max_error, max_rate, use_integrator = False):
     max_error = max_error # q_vec error, previously used 0.05 or .2
     max_velocity = max_rate # ω_sat, previously used 0.02 or .075
     max_integrator = 0.1 # integrator term in Q matrix, integrator state, accumulated error (shouldnt exceed Q values for quaternion error)
-    max_input = 0.75 # max torque (N·m) previously used 0.5
+    max_input = 0.04 # max torque (N·m) previously used 0.5
     
     # max_error = .75 # q_vec error, previously used 0.05 or .2
     # max_velocity = 0.05 # ω_sat, previously used 0.02 or .075
@@ -100,7 +100,7 @@ def get_gain_matrix(Ts, max_error, max_rate, use_integrator = False):
     
     for i, eig in enumerate(eigvals):
         print(f"Eigenvalue {i}: {eig}  | Magnitude: {abs(eig)}")
-        if eig > 1:
+        if abs(eig) > 1:
             print("WARNING: EIGENVALUE OUTSIDE OF UNIT CIRCLE")
     
     return K
@@ -108,7 +108,7 @@ def get_gain_matrix(Ts, max_error, max_rate, use_integrator = False):
     
 if __name__ == "__main__":
     useInt = False
-    K = get_gain_matrix(0.1, 0.05, 0.05, useInt)
+    K = get_gain_matrix(0.1, 0.1, 0.05, useInt)
     if useInt:
         print("LQR gain matrix K_int:", K)
     else:

@@ -30,16 +30,18 @@ class FlightSoftware(sysModel.SysModel):
         omega_target_rpm = np.array([0.0, 0.0, 0.0])
         self.omega_target = omega_target_rpm * 2*np.pi/60 # convert to rad/s
         
-        self.maxTorque = 0.04 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
+        self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxSpeed = 10000 * macros.RPM # [rad]
-        self.output_states = True # output state messages or not for debugging
+        self.output_states = False # output state messages or not for debugging
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
-        self.fast_gain = get_gain_matrix(update_time, 0.2, 0.05, use_integrator)
-        self.slow_gain = get_gain_matrix(update_time, .5, 0.001, use_integrator)
+        self.fast_gain = get_gain_matrix(update_time, 0.1, 0.05, use_integrator)
+        self.slow_gain = get_gain_matrix(update_time, .05, 0.001, use_integrator)
         self.K = self.fast_gain
         self.mode = "slew"
+        
+        self.error = [] # used for tracking and graphing error
             
         print(f"Maximum reaction wheel speed {self.maxSpeed} rad/s")
         print(f"Maximum reaction wheel torque {self.maxTorque} Nm")
@@ -70,21 +72,35 @@ class FlightSoftware(sysModel.SysModel):
         
         axis = [0,1,0]
         q_init = quat.axis_angle_to_quaternion(axis, 90)
-        # if (currentTimeNanos * macros.NANO2SEC >= 400):
-            # q_rot = quat.axis_angle_to_quaternion(axis, -90)
-            # self.q_target = q_init
         
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
+        self.error.append(q_error)
+        
+        q_rot = quat.axis_angle_to_quaternion(axis, 90)
+        q_interim = quat.quat_mult(q_rot, q_init)
+        rot2 = quat.axis_angle_to_quaternion(axis, 90)
+        t2 = quat.quat_mult(rot2, q_interim)
+        # print(q_error)
+        # print(q_init)
+        # print(q_interim)
+        # print(quat.quat_mult(rot2, q_interim))
+        
+        if (currentTimeNanos * macros.NANO2SEC >= 200):
+        # if (quat.error_angle(q_error) < 0.1):
+            self.q_target = t2
+            # print("looking here", quat.quat_error(self.q_target, q))
+        if (currentTimeNanos * macros.NANO2SEC >= 300):
+            self.q_target = q_init
         
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
             
-            # desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
+            desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
             # desired_torque = self.sliding_bangbang_quat(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller
             # desired_torque = self.pid_controller(q_error, omega)
-            desired_torque = self.variable_gain_quat(q_error, omega, currentTimeNanos)
+            # desired_torque = self.variable_gain_quat(q_error, omega, currentTimeNanos)
             
             wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
-            # if (currentTimeNanos * macros.NANO2SEC > 50 and currentTimeNanos * macros.NANO2SEC < 100):
+            # if (currentTimeNanos * macros.NANO2SEC > 50 and currentTimeNanos * macros.NANO2SEC < 100): # turn off wheels at specified time and turn back on at second time
             #     wheel_torque = [0,0,0,0]
             self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
         
@@ -98,7 +114,7 @@ class FlightSoftware(sysModel.SysModel):
             # print(f"Target quaternion: {self.q_target}")
             print("Error quaternion:", [float(val) for val in q_error], quat.error_angle(q_error))
             # print("Error angle [deg]:", quat.error_angle(q_error))
-            # print(f"Star Tracker Quaternion: {q}")
+            print(f"Star Tracker Quaternion: {q}")
             print(f"IMU Angular Velocity [rad/s]: {omega}")
             # print(f"IMU Angular Velocity [RPM]: {omega_rpm}")
             # print(f"RW speeds [rad/s]: {[wheelSpeeds[i] for i in range(4)]}")
@@ -152,48 +168,48 @@ class FlightSoftware(sysModel.SysModel):
                 self.mode = "slew"
                 print(f"Mode switched to slew with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
     
-    def pid_controller(self, q_error, omega):
-        Kp = np.asarray([5e-3, 5e-3, 5e-3])
-        Kd = np.asarray([5e-3, 5e-3, 5e-3])
-        return Kp*q_error[:3]-Kd*np.asarray(omega)
-    
     def quaternion_controller(self, q_error, omega):
         omega_error = omega - self.omega_target
         x = np.concatenate((q_error[:3], omega_error)) # assemble state vector
         return -self.K @ x # invert sign for control
+    
+    # def pid_controller(self, q_error, omega):
+    #     Kp = np.asarray([5e-3, 5e-3, 5e-3])
+    #     Kd = np.asarray([5e-3, 5e-3, 5e-3])
+    #     return Kp*q_error[:3]-Kd*np.asarray(omega)
         
-    def bang_bang_controller(self, q_error, omega):
-        axis = quat.quat_to_angle(q_error) # determine axis of rotation
-        rate = 0.1 # [rad/s]
-        omega_target = axis*rate
-        omega_error = omega_target - omega
-        axis_torque = self.satInertia @ omega_error/self.updateTime # tau = I*omega/dt
-        return axis_torque
+    # def bang_bang_controller(self, q_error, omega):
+    #     axis = quat.quat_to_angle(q_error) # determine axis of rotation
+    #     rate = 0.1 # [rad/s]
+    #     omega_target = axis*rate
+    #     omega_error = omega_target - omega
+    #     axis_torque = self.satInertia @ omega_error/self.updateTime # tau = I*omega/dt
+    #     return axis_torque
     
-    def sliding_bangbang_quat(self, q_error, omega, currentTimeNanos):            
-        error_angle_degrees = quat.error_angle(q_error) # get minimum error angle (in degrees)
-        self.mode_check(error_angle_degrees, currentTimeNanos) # switch modes based on current error
+    # def sliding_bangbang_quat(self, q_error, omega, currentTimeNanos):
+    #     error_angle_degrees = quat.error_angle(q_error) # get minimum error angle (in degrees)
+    #     self.mode_check(error_angle_degrees, currentTimeNanos) # switch modes based on current error
 
-        if self.mode == "precise":
-            return self.quaternion_controller(q_error, omega)
-        elif self.mode == "slew":
-            return self.bang_bang_controller(q_error, omega)
-        else:
-            print("MANUAL ERROR: Undefined controller mode", flush = True)
+    #     if self.mode == "precise":
+    #         return self.quaternion_controller(q_error, omega)
+    #     elif self.mode == "slew":
+    #         return self.bang_bang_controller(q_error, omega)
+    #     else:
+    #         print("MANUAL ERROR: Undefined controller mode", flush = True)
             
-    def gain_check(self, error_angle_degrees, currentTimeNanos):
-        if (error_angle_degrees < 5 and self.mode == "slew"): # switch to precision guidance mode
-            self.K = self.slow_gain
-            self.mode = "precise"
-            print(f"Gain switched to precise gain matrix with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
-            print(f"Gain matrix K: {self.K}", flush = True)
-        elif (error_angle_degrees > 10 and self.mode == "precise"): # switch to slew mode 
-            self.K = self.fast_gain
-            self.mode = "slew"
-            print(f"Mode switched slew gain matrix with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
-            print(f"Gain matrix K: {self.K}", flush = True)
+    # def gain_check(self, error_angle_degrees, currentTimeNanos):
+    #     if (error_angle_degrees < 5 and self.mode == "slew"): # switch to precision guidance mode
+    #         self.K = self.slow_gain
+    #         self.mode = "precise"
+    #         print(f"Gain switched to precise gain matrix with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
+    #         print(f"Gain matrix K: {self.K}", flush = True)
+    #     elif (error_angle_degrees > 10 and self.mode == "precise"): # switch to slew mode 
+    #         self.K = self.fast_gain
+    #         self.mode = "slew"
+    #         print(f"Mode switched slew gain matrix with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
+    #         print(f"Gain matrix K: {self.K}", flush = True)
     
-    def variable_gain_quat(self, q_error, omega, currentTimeNanos):
-        error_angle_degrees = quat.error_angle(q_error) # get minimum error angle (in degrees)
-        self.gain_check(error_angle_degrees, currentTimeNanos) # switch modes based on current error
-        return self.quaternion_controller(q_error, omega)
+    # def variable_gain_quat(self, q_error, omega, currentTimeNanos):
+    #     error_angle_degrees = quat.error_angle(q_error) # get minimum error angle (in degrees)
+    #     self.gain_check(error_angle_degrees, currentTimeNanos) # switch modes based on current error
+    #     return self.quaternion_controller(q_error, omega)

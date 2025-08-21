@@ -25,7 +25,6 @@ def quat_mult(q_rot, q_init):
         s1*x2 + x1*s2 + y1*z2 - z1*y2,
         s1*y2 - x1*z2 + y1*s2 + z1*x2,
         s1*z2 + x1*y2 - y1*x2 + z1*s2,
-# %%
         s1*s2 - x1*x2 - y1*y2 - z1*z2 # CHECK THIS. MOVED THIS LINE FROM FIRST TO LAST POSITION FOR REORDERING TO NASA/JPL NOTATION
 
     ]

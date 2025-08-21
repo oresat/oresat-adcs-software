@@ -18,18 +18,45 @@ def getLineColor(idx, maxNum):
     scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=colorMap)
     return scalarMap.to_rgba(values[idx + 1])
 
-def plot_rw_speeds(timeData, dataOmegaRW, numRW):
-    """Plot the RW spin rates."""
-    plt.figure(4)
+# def plot_rw_speeds(timeData, dataOmegaRW, numRW):
+#     """Plot the RW spin rates."""
+#     plt.figure(4)
+#     for idx in range(numRW):
+#         plt.plot(timeData, dataOmegaRW[:, idx] / macros.RPM,
+#                  color=getLineColor(idx, numRW),
+#                  label=r'$\Omega_{' + str(idx) + '}$')
+#     plt.grid(True)
+#     # plt.legend()
+#     plt.legend(loc='upper left')
+#     plt.xlabel('Time')
+#     plt.ylabel('RW Speed (RPM) ')
+
+def plot_rw_speeds(timeData, dataOmegaRW, numRW, errorArray=None):
+    """Plot the RW spin rates with optional error curve on right axis."""
+    fig, ax1 = plt.subplots(figsize=(8,5))
+
+    # --- Reaction wheel speeds ---
     for idx in range(numRW):
-        plt.plot(timeData, dataOmegaRW[:, idx] / macros.RPM,
+        ax1.plot(timeData, dataOmegaRW[:, idx] / macros.RPM,
                  color=getLineColor(idx, numRW),
                  label=r'$\Omega_{' + str(idx) + '}$')
-    plt.grid(True)
-    # plt.legend()
-    plt.legend(loc='upper left')
-    plt.xlabel('Time')
-    plt.ylabel('RW Speed (RPM) ')
+    ax1.set_xlabel('Time [s]')
+    ax1.set_ylabel('RW Speed (RPM)')
+    ax1.grid(True)
+
+    # --- Optional error line ---
+    if errorArray is not None:
+        ax2 = ax1.twinx()  # create second y-axis
+        ax2.plot(timeData, errorArray, 'r--', label='Error')
+        ax2.set_ylabel('Error')
+        # Add legend for error separately
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+    else:
+        plt.legend()
+    plt.title("Reaction Wheel Speeds and Error")
+    plt.show()
 
 def get_nadir_pointing_quaternion(r_BN_N, body_axis=np.array([0, 0, 1])):
     """
@@ -86,6 +113,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     # simulation variables
     omega_init_rpm = np.array([0.0, 0.0, 0.0])  # intial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
+    # omega_init_rad = np.array([3.9479893375181184e-05, -2.6694436384127718e-11, -2.247383471180911e-11])
     dynamics_update_time = dynamics_update_time # seconds
     fsw_update_time = fsw_update_time # temporarily REALLY small to make the system respond as intended
     
@@ -108,6 +136,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     scObject.hub.IHubPntBc_B = J # assign OreSat inertia matrix
     scObject.hub.omega_BN_BInit = omega_init_rad
     sim.AddModelToTask("dynamicsTask", scObject) # add spacecraft to the dynamics simulation
+    print(dir(scObject.hub))
 
     # create gravitational bodies (earth in this case, but might add moon later as well)
     gravFactory = simIncludeGravBody.gravBodyFactory()
@@ -137,9 +166,12 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     starTrackerSensor.ModelTag = "starTracker"
     
     # Define dcm_CB for star tracker orientation (body-to-case, star tracker on +x side)
-    dcm_CB = np.array([[0.0, 0.0, -1.0], # x_B -> y_C
-                       [0.0, 1.0, 0.0],  # y_B -> z_C
+    dcm_CB = np.array([[0.0, 0.0, -1.0], # x_B -> -y_C
+                       [0.0, 1.0, 0.0],  # y_B -> y_C
                        [1.0, 0.0, 0.0]]) # z_B -> x_C
+    # dcm_CB = np.array([[1.0, 0.0, 0.0], # x_B -> x_C
+    #                    [0.0, 0.0, 1.0],  # y_B -> z_C
+    #                    [0.0, -1.0, 0.0]]) # z_B -> x_C
     starTrackerSensor.dcm_CB = dcm_CB
     
     starTrackerSensor.scStateInMsg.subscribeTo(scObject.scStateOutMsg)
@@ -201,7 +233,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     rwStateEffector.rwMotorCmdInMsg.subscribeTo(fsw.rwMotorTorqueOutMsg) # subscribe reaction wheel input to flight software control output
     
-    q_init = [0.0,         0.70710678, 0.0,         0.70710678] # same orientation as initial state
+    q_init = quat.axis_angle_to_quaternion([0,1,0], 90) # same orientation as initial state
     # fsw.q_target = get_nadir_pointing_quaternion(rN)
     # # fsw.q_target = [0.0, 0.6,  0.0,          0.8]
     # fsw.q_target = [0.61850101, -0.60304099,  0.0,          0.50378375]
@@ -209,11 +241,11 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     # # fsw.q_target = [0.0,        0.31224989991991997, 0.0,       0.95]
     # # fsw.q_target = [0.5, 0.5, 0.5, 0.5]
     
-    axis = [1,0,0]
+    axis = [0,1,0]
     q_rot = quat.axis_angle_to_quaternion(axis, 90)
     fsw.q_target = quat.quat_mult(q_rot, q_init)
     
-    # q_last = [0.012641604302424394, -0.04314003187568922, 0.18756891531952943, 0.9812222120887198]
+    # q_last = [0.019739947837826483, -1.3350097999298427e-08, -1.1241915620630039e-08, 0.9998051482460769]
     # fsw.q_target = quat.quat_mult(q_last, q_init)
     
     rwSpeedLog = rwStateEffector.rwSpeedOutMsg.recorder()
@@ -249,6 +281,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     sim.InitializeSimulation() # initialize simulation
     sim.ConfigureStopTime(macros.sec2nano(simTime)) # configure a simulation stop time
     start = time.time()
+    
     sim.ExecuteSimulation() # execute simulation
     end = time.time()
     
@@ -256,7 +289,13 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     print(f"Vizard visualization saved to: {fileName}")
     
     plot_times = rwSpeedLog.times() * 1e-9
-    plot_rw_speeds(plot_times, rwSpeedLog.wheelSpeeds, numRW)
+    
+    error_angles = [quat.error_angle(quaternion) for quaternion in fsw.error[:-1]]
+    error_expanded = np.repeat(error_angles, 10, axis=0)  # stretch all but last to match with times
+    error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
+    # error_expanded = None
+    plot_rw_speeds(plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
+    print(fsw.q_target)
     
 if __name__ == "__main__":
     # Jxx = 0.01537002
@@ -288,7 +327,7 @@ if __name__ == "__main__":
     # mass = 2.85087233 # satellite mass [kg]
     mass = 3.05353136
     
-    sim_time = 800 # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
+    sim_time = 0.1  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
     dynamics_update_time = 0.01
     fsw_update_time = 0.1
     # viz_filename = f"{fsw_update_time:.2f}".replace('.', 'p') + "s_fsw_update_time"
