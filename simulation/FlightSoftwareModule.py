@@ -186,13 +186,14 @@ class FlightSoftware(sysModel.SysModel):
     
     # def rate_controller(self, omega):
     #     put rate here. Torque times time to figure out how to stop it perfectly. Or just look at 
+    
     # def pid_controller(self, q_error, omega):
     #     Kp = np.asarray([5e-3, 5e-3, 5e-3])
     #     Kd = np.asarray([5e-3, 5e-3, 5e-3])
     #     return Kp*q_error[:3]-Kd*np.asarray(omega)
         
     # def bang_bang_controller(self, q_error, omega):
-    #     axis = quat.quat_to_angle(q_error) # determine axis of rotation
+    #     axis = quat.quat_to_axis(q_error) # determine axis of rotation
     #     rate = 0.1 # [rad/s]
     #     omega_target = axis*rate
     #     omega_error = omega_target - omega

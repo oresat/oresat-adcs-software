@@ -46,18 +46,10 @@ def get_gain_matrix(J, Ts, max_error, max_rate, use_integrator = False):
     #Moments of Inertia (kg m^2)
     
     #----------------- LQR matrices--------------------------------------------
-    # max_error = .2 #q_vec error, previously used 0.05
-    # max_velocity = 0.075 # ω_sat, previously used 0.02
-    
     max_error = max_error # q_vec error, previously used 0.05 or .2
     max_velocity = max_rate # ω_sat, previously used 0.02 or .075
     max_integrator = 0.1 # integrator term in Q matrix, integrator state, accumulated error (shouldnt exceed Q values for quaternion error)
     max_input = 0.04 # max torque (N·m) previously used 0.5
-    
-    # max_error = .75 # q_vec error, previously used 0.05 or .2
-    # max_velocity = 0.05 # ω_sat, previously used 0.02 or .075
-    # max_integrator = 0.1 # integrator term in Q matrix, integrator state, accumulated error (shouldnt exceed Q values for quaternion error)
-    # max_input = 0.75 # max torque (N·m) previously used 0.5
     
     Q = np.diag([1/max_error**2, 1/max_error**2, 1/max_error**2, 1/max_velocity**2, 1/max_velocity**2, 1/max_velocity**2, 1/max_integrator**2, 1/max_integrator**2, 1/max_integrator**2])
     R = np.diag([1/max_input**2, 1/max_input**2, 1/max_input**2])

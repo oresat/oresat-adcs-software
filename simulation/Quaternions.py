@@ -49,7 +49,6 @@ def axis_angle_to_quaternion(axis, angle_deg):
 def quat_to_angle(q_error):
     q = q_error / np.linalg.norm(q_error)
     w = q[3]
-    # angle = 2 * np.arccos(w)
     sin_half_angle = np.sqrt(1 - w**2)
     if sin_half_angle < 1e-6:
         axis = np.array([1.0, 0.0, 0.0])  # default axis

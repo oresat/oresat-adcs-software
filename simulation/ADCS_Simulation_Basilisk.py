@@ -18,19 +18,6 @@ def getLineColor(idx, maxNum):
     scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=colorMap)
     return scalarMap.to_rgba(values[idx + 1])
 
-# def plot_rw_speeds(timeData, dataOmegaRW, numRW):
-#     """Plot the RW spin rates."""
-#     plt.figure(4)
-#     for idx in range(numRW):
-#         plt.plot(timeData, dataOmegaRW[:, idx] / macros.RPM,
-#                  color=getLineColor(idx, numRW),
-#                  label=r'$\Omega_{' + str(idx) + '}$')
-#     plt.grid(True)
-#     # plt.legend()
-#     plt.legend(loc='upper left')
-#     plt.xlabel('Time')
-#     plt.ylabel('RW Speed (RPM) ')
-
 def plot_rw_speeds(timeData, dataOmegaRW, numRW, errorArray=None):
     """Plot the RW spin rates with optional error curve on right axis."""
     fig, ax1 = plt.subplots(figsize=(8,5))
@@ -234,24 +221,14 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     rwStateEffector.rwMotorCmdInMsg.subscribeTo(fsw.rwMotorTorqueOutMsg) # subscribe reaction wheel input to flight software control output
     
     q_init = quat.axis_angle_to_quaternion([0,1,0], 90) # same orientation as initial state
-    # fsw.q_target = get_nadir_pointing_quaternion(rN)
-    # # fsw.q_target = [0.0, 0.6,  0.0,          0.8]
-    # fsw.q_target = [0.61850101, -0.60304099,  0.0,          0.50378375]
-    # fsw.q_target = [0.0,        0.4358898943540673, 0.0,         0.9]
-    # # fsw.q_target = [0.0,        0.31224989991991997, 0.0,       0.95]
-    # # fsw.q_target = [0.5, 0.5, 0.5, 0.5]
     
     axis = [0,1,0]
     q_rot = quat.axis_angle_to_quaternion(axis, 10)
     fsw.q_target = quat.quat_mult(q_rot, q_init)
     
-    # q_last = [0.019739947837826483, -1.3350097999298427e-08, -1.1241915620630039e-08, 0.9998051482460769]
-    # fsw.q_target = quat.quat_mult(q_last, q_init)
-    
     rwSpeedLog = rwStateEffector.rwSpeedOutMsg.recorder()
     sim.AddModelToTask("dynamicsTask", rwSpeedLog)
     # print("Is RW input message linked?", rwStateEffector.rwMotorCmdInMsg.isLinked(), "\n")
-
 
     # add simulation recording
     stateRec = scObject.scStateOutMsg.recorder(macros.sec2nano(dynamics_update_time)) # create recorder of dynamics
@@ -298,16 +275,6 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     print(fsw.q_target, quat.error_angle(fsw.q_target))
     
 if __name__ == "__main__":
-    # Jxx = 0.01537002
-    # Jxy = 0.00001166
-    # Jxz = 0.00022389
-    # Jyx = 0.00001166
-    # Jyy = 0.01449756
-    # Jyz = 0.0000318
-    # Jzx = 0.00022389
-    # Jzy = 0.0000318
-    # Jzz = 0.00576094
-    
     Jxx = 0.01650237
     Jxy = 0.00000711
     Jxz = 0.00004547
@@ -321,12 +288,16 @@ if __name__ == "__main__":
     J = np.array([[Jxx, Jxy, Jxz], # satellite inertia matrix
                   [Jyx, Jyy, Jyz], 
                   [Jzx, Jzy, Jzz]])
+    # J = np.array([[Jxx, -Jxy, -Jxz], # satellite inertia matrix with negative signs in front of off diagonal entries to account for OnShape convention (not sure yet if this is needed)
+    #               [-Jyx, Jyy, -Jyz], 
+    #               [-Jzx, -Jzy, Jzz]])
     # J = np.array([[Jxx, 0, 0], # satellite inertia matrix
     #               [0, Jyy, 0], 
     #               [0, 0, Jzz]])
     J = np.array([[Jxx, 0, 0], # satellite inertia matrix
                   [0, Jxx, 0], 
                   [0, 0, Jxx]])
+    
     # mass = 2.85087233 # satellite mass [kg]
     mass = 3.05353136
     
@@ -337,7 +308,3 @@ if __name__ == "__main__":
     viz_filename = None
     
     sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename) # call and run simulation
-    
-    # J = np.array([[Jxx, -Jxy, -Jxz], # satellite inertia matrix with negative signs in front of off diagonal entries to account for OnShape convention (not sure yet if this is needed)
-    #               [-Jyx, Jyy, -Jyz], 
-    #               [-Jzx, -Jzy, Jzz]])
