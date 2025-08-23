@@ -46,7 +46,7 @@ def axis_angle_to_quaternion(axis, angle_deg):
     q = q/np.linalg.norm(q) # normalize quaternion to account for numerical errors
     return q
 
-def quat_to_angle(q_error):
+def quat_to_axis(q_error): # returns axis of rotation
     q = q_error / np.linalg.norm(q_error)
     w = q[3]
     sin_half_angle = np.sqrt(1 - w**2)
