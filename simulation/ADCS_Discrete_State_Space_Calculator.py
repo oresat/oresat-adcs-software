@@ -42,18 +42,8 @@ def add_integrators(A, B, C):
 
     return A_aug, B_aug
 
-def get_gain_matrix(Ts, max_error, max_rate, use_integrator = False):
+def get_gain_matrix(J, Ts, max_error, max_rate, use_integrator = False):
     #Moments of Inertia (kg m^2)
-    Jxx = 0.01650237
-    Jxy = 0.00000711
-    Jxz = 0.00004547
-    Jyx = 7.115e-6
-    Jyy = 0.015962
-    Jyz = 0.00003107
-    Jzx = 0.00004547
-    Jzy = 0.00003107
-    Jzz = 0.00651814
-    J = np.array([[Jxx, Jxy, Jxz],[Jyx, Jyy, Jyz], [Jzx, Jzy, Jzz]])
     
     #----------------- LQR matrices--------------------------------------------
     # max_error = .2 #q_vec error, previously used 0.05
@@ -107,8 +97,22 @@ def get_gain_matrix(Ts, max_error, max_rate, use_integrator = False):
     
     
 if __name__ == "__main__":
+    Jxx = 0.01650237
+    Jxy = 0.00000711
+    Jxz = 0.00004547
+    Jyx = 7.115e-6
+    Jyy = 0.015962
+    Jyz = 0.00003107
+    Jzx = 0.00004547
+    Jzy = 0.00003107
+    Jzz = 0.00651814
+    
+    J = np.array([[Jxx, Jxy, Jxz], # satellite inertia matrix
+                  [Jyx, Jyy, Jyz], 
+                  [Jzx, Jzy, Jzz]])
+    
     useInt = False
-    K = get_gain_matrix(0.1, 0.1, 0.05, useInt)
+    K = get_gain_matrix(J, 0.1, 0.1, 0.05, useInt)
     if useInt:
         print("LQR gain matrix K_int:", K)
     else:

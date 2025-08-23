@@ -242,7 +242,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     # # fsw.q_target = [0.5, 0.5, 0.5, 0.5]
     
     axis = [0,1,0]
-    q_rot = quat.axis_angle_to_quaternion(axis, 90)
+    q_rot = quat.axis_angle_to_quaternion(axis, 10)
     fsw.q_target = quat.quat_mult(q_rot, q_init)
     
     # q_last = [0.019739947837826483, -1.3350097999298427e-08, -1.1241915620630039e-08, 0.9998051482460769]
@@ -295,7 +295,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
     # error_expanded = None
     plot_rw_speeds(plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
-    print(fsw.q_target)
+    print(fsw.q_target, quat.error_angle(fsw.q_target))
     
 if __name__ == "__main__":
     # Jxx = 0.01537002
@@ -324,10 +324,13 @@ if __name__ == "__main__":
     # J = np.array([[Jxx, 0, 0], # satellite inertia matrix
     #               [0, Jyy, 0], 
     #               [0, 0, Jzz]])
+    J = np.array([[Jxx, 0, 0], # satellite inertia matrix
+                  [0, Jxx, 0], 
+                  [0, 0, Jxx]])
     # mass = 2.85087233 # satellite mass [kg]
     mass = 3.05353136
     
-    sim_time = 0.1  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
+    sim_time = 20  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
     dynamics_update_time = 0.01
     fsw_update_time = 0.1
     # viz_filename = f"{fsw_update_time:.2f}".replace('.', 'p') + "s_fsw_update_time"

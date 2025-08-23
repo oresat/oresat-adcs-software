@@ -4,6 +4,7 @@ from array import array # C-style arrays for defining motor torques
 import numpy as np
 from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
 import Quaternions as quat # quaternion operations
+from sys import exit
 
 class FlightSoftware(sysModel.SysModel):
     def __init__(self, G_matrix, update_time, rw_Inertia, satInertia):
@@ -36,8 +37,8 @@ class FlightSoftware(sysModel.SysModel):
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
-        self.fast_gain = get_gain_matrix(update_time, 0.1, 0.05, use_integrator)
-        self.slow_gain = get_gain_matrix(update_time, .05, 0.001, use_integrator)
+        self.fast_gain = get_gain_matrix(satInertia, update_time, 0.1, 0.05, use_integrator)
+        self.slow_gain = get_gain_matrix(satInertia, update_time, .05, 0.001, use_integrator)
         self.K = self.fast_gain
         self.mode = "slew"
         
@@ -48,11 +49,19 @@ class FlightSoftware(sysModel.SysModel):
         print(f"Gain matrix K: {self.K}")
         
         print(f"Targeting angle change of ")
+        
+        self.target_num = 1
+        self.exit = False
+        self.val_array = []
+        self.array_counter = 0
 
     def Reset(self, currentTimeNanos):
         print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
         
     def UpdateState(self, currentTimeNanos):
+        if self.exit == True: # causes kernel crash. Necessary to properly find divergence.
+            exit()
+        
         # gather system states
         if self.starTrackerMsgIn.isWritten():
             self.starTrackerMsg = self.starTrackerMsgIn()
@@ -76,21 +85,14 @@ class FlightSoftware(sysModel.SysModel):
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
         self.error.append(q_error)
         
-        q_rot = quat.axis_angle_to_quaternion(axis, 90)
-        q_interim = quat.quat_mult(q_rot, q_init)
-        rot2 = quat.axis_angle_to_quaternion(axis, 90)
-        t2 = quat.quat_mult(rot2, q_interim)
-        # print(q_error)
-        # print(q_init)
-        # print(q_interim)
-        # print(quat.quat_mult(rot2, q_interim))
-        
-        if (currentTimeNanos * macros.NANO2SEC >= 200):
-        # if (quat.error_angle(q_error) < 0.1):
+        q_rot = quat.axis_angle_to_quaternion(axis, 180)
+        t2 = quat.quat_mult(q_rot, q_init)
+        print(quat.error_angle(q_error), omega)
+        if (quat.error_angle(q_error) == 0 and omega == [0,0,0]):
             self.q_target = t2
-            # print("looking here", quat.quat_error(self.q_target, q))
-        if (currentTimeNanos * macros.NANO2SEC >= 300):
-            self.q_target = q_init
+            
+        # if (currentTimeNanos * macros.NANO2SEC >= 300):
+        #     self.q_target = q_init
         
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
             
@@ -106,7 +108,16 @@ class FlightSoftware(sysModel.SysModel):
         
             # tau_body_applied = self.G @ self.torque_vals[:4]
             # print("||tau_cmd_body - tau_body_applied||:", np.linalg.norm(desired_torque - tau_body_applied))
-            
+        
+        # if (self.target_num == 1):
+            # print(type(q_error), type(omega), type(desired_torque))
+            # self.val_array.append([q_error, omega, desired_torque])
+        # else:
+        #     if (desired_torque != self.val_array[2]):
+        #         print("ERROR FOUND", flush =True)
+        #         print(desired_torque, self.val_array[2], flush =True)
+        #         self.exit = True
+                
         if self.output_states:
         # if (self.output_states and currentTimeNanos * macros.NANO2SEC > 700):
         # if self.output_states and currentTimeNanos * macros.NANO2SEC % 2 == 0: # print at interval, otherwise output floods console window
@@ -173,6 +184,8 @@ class FlightSoftware(sysModel.SysModel):
         x = np.concatenate((q_error[:3], omega_error)) # assemble state vector
         return -self.K @ x # invert sign for control
     
+    # def rate_controller(self, omega):
+    #     put rate here. Torque times time to figure out how to stop it perfectly. Or just look at 
     # def pid_controller(self, q_error, omega):
     #     Kp = np.asarray([5e-3, 5e-3, 5e-3])
     #     Kd = np.asarray([5e-3, 5e-3, 5e-3])
