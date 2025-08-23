@@ -19,8 +19,8 @@ def normalize(q):
     return q / np.linalg.norm(q)
 
 def quat_mult(q_rot, q_init):
-    x1, y1, z1, s1 = normalize(hemi(q_rot))    # sanitize inputs by normalizing and checking signs (hemisphere)
-    x2, y2, z2, s2 = normalize(hemi(q_init))   # sanitize inputs by normalizing and checking signs (hemisphere)
+    x1, y1, z1, s1 = normalize(q_rot)    # sanitize inputs by normalizing and checking signs (hemisphere) USING HEMI HERE BUT NOT THE q_new hemi RESULTS IN REALLY WEIRD GRAPH WITH SIM TIME OF 1500 SECONDS AND GAINS OF .5, 0.05
+    x2, y2, z2, s2 = normalize(q_init)   # sanitize inputs by normalizing and checking signs (hemisphere)
     q_new = [
         s1*x2 + x1*s2 + y1*z2 - z1*y2,
         s1*y2 - x1*z2 + y1*s2 + z1*x2,
@@ -28,7 +28,7 @@ def quat_mult(q_rot, q_init):
         s1*s2 - x1*x2 - y1*y2 - z1*z2 # CHECK THIS. MOVED THIS LINE FROM FIRST TO LAST POSITION FOR REORDERING TO NASA/JPL NOTATION
 
     ]
-    q_new = hemi(q_new) # if scalar part negative negate entire quaternion
+    q_new = hemi(q_new) # if scalar part negative negate entire quaternion THIS SEEMS TO BE THE ONLY RELEVANT USE OF HEMI. NOT USING RESULTS IN REALLY WEIRD GRAPH WITH SIM TIME OF 1500 SECONDS AND GAINS OF .5, 0.05
     return normalize(q_new)
 
 def quat_error(q_target, q_current):

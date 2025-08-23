@@ -37,7 +37,7 @@ class FlightSoftware(sysModel.SysModel):
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
-        self.fast_gain = get_gain_matrix(satInertia, update_time, 0.1, 0.05, use_integrator)
+        self.fast_gain = get_gain_matrix(satInertia, update_time, .5, 0.05, use_integrator)
         self.slow_gain = get_gain_matrix(satInertia, update_time, .05, 0.001, use_integrator)
         self.K = self.fast_gain
         self.mode = "slew"
@@ -68,7 +68,7 @@ class FlightSoftware(sysModel.SysModel):
             q = self.starTrackerMsg.qInrtl2Case  # [qs, q1, q2, q3]
             q = quat.to_scalar_last(q) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
             q = quat.normalize(q) # normalize
-            q = quat.hemi(q)  # if scalar part negative negate entire quaternion
+            # q = quat.hemi(q)  # if scalar part negative negate entire quaternion
                         
         if self.imuMsgIn.isWritten():
             self.imuMsg = self.imuMsgIn()
@@ -87,7 +87,7 @@ class FlightSoftware(sysModel.SysModel):
         
         q_rot = quat.axis_angle_to_quaternion(axis, 180)
         t2 = quat.quat_mult(q_rot, q_init)
-        print(quat.error_angle(q_error), omega)
+        # print(f"Time: {currentTimeNanos * macros.NANO2SEC:.1f}, {quat.error_angle(q_error):.15f}, {wheelSpeeds[:4]}")
         if (quat.error_angle(q_error) == 0 and omega == [0,0,0]):
             self.q_target = t2
             
