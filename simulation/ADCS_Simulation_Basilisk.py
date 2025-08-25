@@ -223,7 +223,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     q_init = quat.axis_angle_to_quaternion([0,1,0], 90) # same orientation as initial state
     
     axis = [0,1,0]
-    q_rot = quat.axis_angle_to_quaternion(axis, 180)
+    q_rot = quat.axis_angle_to_quaternion(axis, 90)
     fsw.q_target = quat.quat_mult(q_rot, q_init)
     
     rwSpeedLog = rwStateEffector.rwSpeedOutMsg.recorder()
@@ -272,7 +272,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
     # error_expanded = None
     plot_rw_speeds(plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
-    print(fsw.q_target, quat.error_angle(fsw.q_target))
+    print(f"Final target was: {fsw.q_target}, angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
     
 if __name__ == "__main__":
     Jxx = 0.01650237
@@ -301,7 +301,7 @@ if __name__ == "__main__":
     # mass = 2.85087233 # satellite mass [kg]
     mass = 3.05353136
     
-    sim_time = 1500  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
+    sim_time = 50  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
     dynamics_update_time = 0.01
     fsw_update_time = 0.1
     # viz_filename = f"{fsw_update_time:.2f}".replace('.', 'p') + "s_fsw_update_time"

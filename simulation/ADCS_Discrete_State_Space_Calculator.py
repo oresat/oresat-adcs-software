@@ -55,7 +55,7 @@ def get_gain_matrix(J, Ts, max_error, max_rate, use_integrator = False):
     R = np.diag([1/max_input**2, 1/max_input**2, 1/max_input**2])
     #--------------------------------------------------------------------------
     
-    A = -0.5*np.eye(6, 6, 3) # A matrix: maps ω into q_dot, ω_dot is driven by control input (J^{-1} u)
+    A = 0.5*np.eye(6, 6, 3) # A matrix: maps ω into q_dot, ω_dot is driven by control input (J^{-1} u)
     B = np.block([[np.zeros((3,3))], [np.linalg.inv(J)]])
     C = np.identity(6) # sensors for all inputs
     C_aug = np.eye(3, 6) # integrator only cares about attitude error, only integrate quaternion values (top half of C matrix)

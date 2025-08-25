@@ -37,7 +37,7 @@ class FlightSoftware(sysModel.SysModel):
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
-        self.fast_gain = get_gain_matrix(satInertia, update_time, .5, 0.05, use_integrator)
+        self.fast_gain = get_gain_matrix(satInertia, update_time, .1, 0.05, use_integrator)
         self.slow_gain = get_gain_matrix(satInertia, update_time, .05, 0.001, use_integrator)
         self.K = self.fast_gain
         self.mode = "slew"
@@ -49,14 +49,25 @@ class FlightSoftware(sysModel.SysModel):
         print(f"Gain matrix K: {self.K}")
         
         print(f"Targeting angle change of ")
-        
+
         self.target_num = 1
         self.exit = False
         self.val_array = []
         self.array_counter = 0
+        self.sign_flipped = 0
 
     def Reset(self, currentTimeNanos):
         print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
+    
+    def check_hemi(self, q):
+        q = np.asarray(q, dtype=float)
+        # return q if q[3] >= 0 else -q # if scalar part negative negate entire quaternion
+        if (q[3] >= 0):
+            self.sign_flipped = 0
+            return q
+        else:
+            self.sign_flipped = 1 
+            return -q # if scalar part negative negate entire quaternion
         
     def UpdateState(self, currentTimeNanos):
         if self.exit == True: # causes kernel crash. Necessary to properly find divergence.
@@ -68,6 +79,7 @@ class FlightSoftware(sysModel.SysModel):
             q = self.starTrackerMsg.qInrtl2Case  # [qs, q1, q2, q3]
             q = quat.to_scalar_last(q) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
             q = quat.normalize(q) # normalize
+            # q = self.check_hemi(q)
             # q = quat.hemi(q)  # if scalar part negative negate entire quaternion
                         
         if self.imuMsgIn.isWritten():
@@ -79,10 +91,14 @@ class FlightSoftware(sysModel.SysModel):
             self.rwSpeedMsg = self.rwSpeedMsgIn()
             wheelSpeeds = self.rwSpeedMsg.wheelSpeeds
         
+        # self.q_target = self.check_hemi(self.q_target)
+        
         axis = [0,1,0]
         q_init = quat.axis_angle_to_quaternion(axis, 90)
         
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
+        q_error = self.check_hemi(q_error)
+        # q_error = quat.hemi(q_error)
         self.error.append(q_error)
         
         q_rot = quat.axis_angle_to_quaternion(axis, 180)
@@ -91,7 +107,7 @@ class FlightSoftware(sysModel.SysModel):
         if (quat.error_angle(q_error) == 0 and omega == [0,0,0]):
             self.q_target = t2
             
-        # if (currentTimeNanos * macros.NANO2SEC >= 300):
+        # if (currentTimeNanos * macros.NANO2SEC >= 300): # return to intial orientation at given time
         #     self.q_target = q_init
         
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
@@ -109,15 +125,6 @@ class FlightSoftware(sysModel.SysModel):
             # tau_body_applied = self.G @ self.torque_vals[:4]
             # print("||tau_cmd_body - tau_body_applied||:", np.linalg.norm(desired_torque - tau_body_applied))
         
-        # if (self.target_num == 1):
-            # print(type(q_error), type(omega), type(desired_torque))
-            # self.val_array.append([q_error, omega, desired_torque])
-        # else:
-        #     if (desired_torque != self.val_array[2]):
-        #         print("ERROR FOUND", flush =True)
-        #         print(desired_torque, self.val_array[2], flush =True)
-        #         self.exit = True
-                
         if self.output_states:
         # if (self.output_states and currentTimeNanos * macros.NANO2SEC > 700):
         # if self.output_states and currentTimeNanos * macros.NANO2SEC % 2 == 0: # print at interval, otherwise output floods console window
@@ -180,8 +187,9 @@ class FlightSoftware(sysModel.SysModel):
                 print(f"Mode switched to slew with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
     
     def quaternion_controller(self, q_error, omega):
+        q_component = q_error[:3]*(-1)**self.sign_flipped
         omega_error = omega - self.omega_target
-        x = np.concatenate((q_error[:3], omega_error)) # assemble state vector
+        x = np.concatenate((q_component, omega_error)) # assemble state vector
         return -self.K @ x # invert sign for control
     
     # def rate_controller(self, omega):

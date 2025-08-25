@@ -28,7 +28,7 @@ def quat_mult(q_rot, q_init):
         s1*s2 - x1*x2 - y1*y2 - z1*z2 # CHECK THIS. MOVED THIS LINE FROM FIRST TO LAST POSITION FOR REORDERING TO NASA/JPL NOTATION
 
     ]
-    q_new = hemi(q_new) # if scalar part negative negate entire quaternion THIS SEEMS TO BE THE ONLY RELEVANT USE OF HEMI. NOT USING RESULTS IN REALLY WEIRD GRAPH WITH SIM TIME OF 1500 SECONDS AND GAINS OF .5, 0.05
+    # q_new = hemi(q_new) # if scalar part negative negate entire quaternion THIS SEEMS TO BE THE ONLY RELEVANT USE OF HEMI. NOT USING RESULTS IN REALLY WEIRD GRAPH WITH SIM TIME OF 1500 SECONDS AND GAINS OF .5, 0.05
     return normalize(q_new)
 
 def quat_error(q_target, q_current):
