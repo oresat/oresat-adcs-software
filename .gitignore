@@ -188,3 +188,4 @@ dkms.conf
 
 # Auto-generated 42 simulation data
 *.42
+simulation/_VizFiles/adcs_simulation_basilisk_UnityViz.bin
