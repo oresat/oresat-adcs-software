@@ -51,7 +51,6 @@ class FlightSoftware(sysModel.SysModel):
         print(f"Targeting angle change of ")
 
         self.target_num = 1
-        self.exit = False
         self.val_array = []
         self.array_counter = 0
         self.sign_flipped = 0
@@ -66,12 +65,11 @@ class FlightSoftware(sysModel.SysModel):
             self.sign_flipped = 0
             return q
         else:
+            # print("FLIPPED SIGN", flush = True)
             self.sign_flipped = 1 
-            return -q # if scalar part negative negate entire quaternion
+            return q # if scalar part negative negate entire quaternion
         
     def UpdateState(self, currentTimeNanos):
-        if self.exit == True: # causes kernel crash. Necessary to properly find divergence.
-            exit()
         
         # gather system states
         if self.starTrackerMsgIn.isWritten():
@@ -79,8 +77,6 @@ class FlightSoftware(sysModel.SysModel):
             q = self.starTrackerMsg.qInrtl2Case  # [qs, q1, q2, q3]
             q = quat.to_scalar_last(q) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
             q = quat.normalize(q) # normalize
-            # q = self.check_hemi(q)
-            # q = quat.hemi(q)  # if scalar part negative negate entire quaternion
                         
         if self.imuMsgIn.isWritten():
             self.imuMsg = self.imuMsgIn()
@@ -97,9 +93,11 @@ class FlightSoftware(sysModel.SysModel):
         q_init = quat.axis_angle_to_quaternion(axis, 90)
         
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
-        q_error = self.check_hemi(q_error)
+        # print("before:", q_error)
         # q_error = quat.hemi(q_error)
-        self.error.append(q_error)
+        q_error = self.check_hemi(q_error)
+        # print("after:", q_error, "\n")
+        self.error.append(q_error) # required for plotting after conclusion of sim
         
         q_rot = quat.axis_angle_to_quaternion(axis, 180)
         t2 = quat.quat_mult(q_rot, q_init)
@@ -107,12 +105,10 @@ class FlightSoftware(sysModel.SysModel):
         if (quat.error_angle(q_error) == 0 and omega == [0,0,0]):
             self.q_target = t2
             
-        # if (currentTimeNanos * macros.NANO2SEC >= 300): # return to intial orientation at given time
-        #     self.q_target = q_init
-        
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
             
             desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
+            
             # desired_torque = self.sliding_bangbang_quat(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller
             # desired_torque = self.pid_controller(q_error, omega)
             # desired_torque = self.variable_gain_quat(q_error, omega, currentTimeNanos)
@@ -121,9 +117,6 @@ class FlightSoftware(sysModel.SysModel):
             # if (currentTimeNanos * macros.NANO2SEC > 50 and currentTimeNanos * macros.NANO2SEC < 100): # turn off wheels at specified time and turn back on at second time
             #     wheel_torque = [0,0,0,0]
             self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
-        
-            # tau_body_applied = self.G @ self.torque_vals[:4]
-            # print("||tau_cmd_body - tau_body_applied||:", np.linalg.norm(desired_torque - tau_body_applied))
         
         if self.output_states:
         # if (self.output_states and currentTimeNanos * macros.NANO2SEC > 700):
@@ -187,9 +180,8 @@ class FlightSoftware(sysModel.SysModel):
                 print(f"Mode switched to slew with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
     
     def quaternion_controller(self, q_error, omega):
-        q_component = q_error[:3]*(-1)**self.sign_flipped
         omega_error = omega - self.omega_target
-        x = np.concatenate((q_component, omega_error)) # assemble state vector
+        x = np.concatenate((q_error[:3], omega_error)) # assemble state vector
         return -self.K @ x # invert sign for control
     
     # def rate_controller(self, omega):
