@@ -301,7 +301,7 @@ if __name__ == "__main__":
     # mass = 2.85087233 
     mass = 3.05353136 # satellite mass [kg]
     
-    sim_time = 800  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
+    sim_time = 1000  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
     dynamics_update_time = 0.01
     fsw_update_time = 0.1
     # viz_filename = f"{fsw_update_time:.2f}".replace('.', 'p') + "s_fsw_update_time"
