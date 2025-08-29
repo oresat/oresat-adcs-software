@@ -46,7 +46,7 @@ class FlightSoftware(sysModel.SysModel):
             
         print(f"Maximum reaction wheel speed {self.maxSpeed} rad/s")
         print(f"Maximum reaction wheel torque {self.maxTorque} Nm")
-        print(f"Gain matrix K: {self.K}")
+        print(f"Gain matrix K:\n{self.K}")
         
         print(f"Targeting angle change of ")
 
@@ -76,26 +76,15 @@ class FlightSoftware(sysModel.SysModel):
             self.rwSpeedMsg = self.rwSpeedMsgIn()
             wheelSpeeds = self.rwSpeedMsg.wheelSpeeds
         
-        axis = [0,1,0]
-        q_init = quat.axis_angle_to_quaternion(axis, 90)
-        
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
         q_error = quat.hemi(q_error)
         self.error.append(q_error) # required for plotting after conclusion of sim
         
-        q_rot = quat.axis_angle_to_quaternion(axis, 180)
-        t2 = quat.quat_mult(q_rot, q_init)
-        if (quat.error_angle(q_error) == 0 and omega == [0,0,0]):
-            self.q_target = t2
-            
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
             desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
             wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
             self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
             
-        if(currentTimeNanos * macros.NANO2SEC >= 100 and currentTimeNanos * macros.NANO2SEC < 400):
-            self.zero_wheel_speeds(wheelSpeeds, currentTimeNanos)
-         
     def command_wheel_torques(self, currentTimeNanos, wheel_torque, wheelSpeeds): # send commanded torque values to reaction wheels
         self.check_torque_vals(wheel_torque, wheelSpeeds) # ensure none of the torque values exceed max torque or accelerate wheel past max RPM in either direction and write to self.torque_vals
         self.rwMotorTorquePayload.motorTorque = self.torque_vals

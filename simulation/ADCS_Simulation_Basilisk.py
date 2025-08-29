@@ -190,7 +190,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     varRWModel = messaging.BalancedWheels # define wheel type as balanced (jitter is also an option)
     RWFactory = simIncludeRW.rwFactory() # create reaction wheel generator
-    for i in range(4):
+    for i in range(len(G[0])): # create number of reaction wheels equal to wheels defined in G matrix
         axis = G[:,i]
         RWFactory.create(
             "custom",              # unique name
@@ -301,7 +301,7 @@ if __name__ == "__main__":
     # mass = 2.85087233 
     mass = 3.05353136 # satellite mass [kg]
     
-    sim_time = 1000  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
+    sim_time = 1700  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
     dynamics_update_time = 0.01
     fsw_update_time = 0.1
     # viz_filename = f"{fsw_update_time:.2f}".replace('.', 'p') + "s_fsw_update_time"
