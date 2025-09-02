@@ -37,19 +37,15 @@ class FlightSoftware(sysModel.SysModel):
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
-        self.fast_gain = get_gain_matrix(satInertia, update_time, .1, 0.05, use_integrator)
+        self.fast_gain = get_gain_matrix(satInertia, update_time, .05, 0.03, use_integrator)
         self.slow_gain = get_gain_matrix(satInertia, update_time, .05, 0.001, use_integrator)
         self.K = self.fast_gain
         self.mode = "slew"
         
         self.error = [] # used for tracking and graphing error
             
-        print(f"Maximum reaction wheel speed {self.maxSpeed} rad/s")
-        print(f"Maximum reaction wheel torque {self.maxTorque} Nm")
-        print(f"Gain matrix K:\n{self.K}")
+        print(f"\nGain matrix K:\n{self.K}\n")
         
-        print(f"Targeting angle change of ")
-
         self.target_num = 1
         self.val_array = []
         self.array_counter = 0
@@ -75,13 +71,14 @@ class FlightSoftware(sysModel.SysModel):
         if self.rwSpeedMsgIn.isWritten():
             self.rwSpeedMsg = self.rwSpeedMsgIn()
             wheelSpeeds = self.rwSpeedMsg.wheelSpeeds
-        
+            
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
         q_error = quat.hemi(q_error)
         self.error.append(q_error) # required for plotting after conclusion of sim
-        
+
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
             desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
+            
             wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
             self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
             
@@ -106,13 +103,6 @@ class FlightSoftware(sysModel.SysModel):
                 self.torque_vals[i] = max(-self.maxTorque, min(required_torque, self.maxTorque))
             else:  # Otherwise clamp to max torque bounds
                 self.torque_vals[i] = max(-self.maxTorque, min(wheel_torque[i], self.maxTorque))
-    
-    def zero_wheel_speeds(self, rwSpeeds, currentTimeNanos): # zero out all reaction wheel speeds
-        for i, rwSpeed in enumerate(rwSpeeds[:4]):
-            required_torque = -self.rwInertia*rwSpeed/self.updateTime
-            self.torque_vals[i] = max(-self.maxTorque, min(required_torque, self.maxTorque))
-        self.rwMotorTorquePayload.motorTorque = self.torque_vals
-        self.rwMotorTorqueOutMsg.write(self.rwMotorTorquePayload, currentTimeNanos, self.moduleID)
     
     def quaternion_controller(self, q_error, omega):
         omega_error = omega - self.omega_target

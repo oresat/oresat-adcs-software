@@ -20,7 +20,7 @@ def getLineColor(idx, maxNum):
 
 def plot_rw_speeds(timeData, dataOmegaRW, numRW, errorArray=None):
     """Plot the RW spin rates with optional error curve on right axis."""
-    fig, ax1 = plt.subplots(figsize=(8,5))
+    fig, ax1 = plt.subplots(figsize=(8,4))
 
     # --- Reaction wheel speeds ---
     for idx in range(numRW):
@@ -35,14 +35,14 @@ def plot_rw_speeds(timeData, dataOmegaRW, numRW, errorArray=None):
     if errorArray is not None:
         ax2 = ax1.twinx()  # create second y-axis
         ax2.plot(timeData, errorArray, 'r--', label='Error')
-        ax2.set_ylabel('Error')
+        ax2.set_ylabel('Error (deg)')
         # Add legend for error separately
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
     else:
         plt.legend()
-    plt.title("Reaction Wheel Speeds and Error")
+    plt.title("Reaction Wheel Speeds and Orientation Error")
     plt.show()
 
 def get_nadir_pointing_quaternion(r_BN_N, body_axis=np.array([0, 0, 1])):
@@ -83,7 +83,7 @@ def get_nadir_pointing_quaternion(r_BN_N, body_axis=np.array([0, 0, 1])):
     q = rot.as_quat()  # returns [x, y, z, w] (scalar-last)
     return q
 
-def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filename):
+def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle):
     """
     Gets all satellite states (attitude quaternion, omega)
     
@@ -98,9 +98,6 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     """
     
     # simulation variables
-    omega_init_rpm = np.array([0.0, 0.0, 0.0])  # intial spin velocties [RPM]
-    omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
-    # omega_init_rad = np.array([3.9479893375181184e-05, -2.6694436384127718e-11, -2.247383471180911e-11])
     dynamics_update_time = dynamics_update_time # seconds
     fsw_update_time = fsw_update_time # temporarily REALLY small to make the system respond as intended
     
@@ -121,9 +118,10 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     scObject.ModelTag = "OreSat" # name object
     scObject.hub.mHub = mass  # [kg], not sure this is required given inertial space, but should be realistic
     scObject.hub.IHubPntBc_B = J # assign OreSat inertia matrix
+    initial_MRP = np.array(init_rot_axis) * np.tan(init_rot_angle*macros.D2R/4.0) # MRP set to customize initial inertial attitude
+    scObject.hub.sigma_BNInit = initial_MRP
     scObject.hub.omega_BN_BInit = omega_init_rad
     sim.AddModelToTask("dynamicsTask", scObject) # add spacecraft to the dynamics simulation
-    print(dir(scObject.hub))
 
     # create gravitational bodies (earth in this case, but might add moon later as well)
     gravFactory = simIncludeGravBody.gravBodyFactory()
@@ -134,7 +132,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     # create orbit properties using classical orbit elements. Assuming perfectly circular orbit for now.
     oe = orbitalMotion.ClassicElements()
-    oe.a = (460+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
+    oe.a = (46000+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
     oe.e = 0 # eccentricity
     oe.i = 80 * macros.D2R # inclination [rad]
     oe.Omega = 40.0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
@@ -179,13 +177,14 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     # Define 4 reaction wheel unit vectors in a pyramid configuration (60 deg tilt from z-axis) 
     z = np.cos(60*np.pi/180) # wheel angle from z axis
     xy = np.cos(52.238756*np.pi/180) # wheel angle from x/y axis, sign varies by quadrant
-                #  +x+y  +x-y  -x-y  -x+y  (motor locations)
+
+                #  +x+y  +x-y  -x-y  -x+y  (motor orientations)
     G = np.array(([[xy,   xy,  -xy,  -xy],
                    [xy,  -xy,  -xy,   xy],
                    [-z,   -z,   -z,  -z]])) # Wheel moment/orientation matrix
     
     wheelInertia = 4.2946e-6      # [kg*m^2], moment of inertia about spin axis
-    maxSpeed = 10000.0 # ridiculous speed so our controller does the work. 100k effectively removes limit, and allows fsw to limit manually.
+    maxSpeed = 100000.0 # ridiculous speed so our controller does the work. 100k effectively removes limit, and allows fsw to limit manually.
     maxTorque = 100000.0 # only used when useMaxTorque = True. 100k effectively removes limit, and allows fsw to limit manually.
     
     varRWModel = messaging.BalancedWheels # define wheel type as balanced (jitter is also an option)
@@ -220,10 +219,11 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     rwStateEffector.rwMotorCmdInMsg.subscribeTo(fsw.rwMotorTorqueOutMsg) # subscribe reaction wheel input to flight software control output
     
-    q_init = quat.axis_angle_to_quaternion([0,1,0], 90) # same orientation as initial state
+    st_q_init = quat.axis_angle_to_quaternion([0,1,0], 90) # star tracker is mounted on the +x face of the satellite
+    sat_q_init = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle) # account for any rotations of the satellite it self at sim initialization
+    q_init = quat.quat_mult(st_q_init, sat_q_init)
     
-    axis = [0,1,0]
-    q_rot = quat.axis_angle_to_quaternion(axis, 90)
+    q_rot = quat.axis_angle_to_quaternion(sat_rot_axis, sat_rot_angle)
     fsw.q_target = quat.quat_mult(q_rot, q_init)
     
     rwSpeedLog = rwStateEffector.rwSpeedOutMsg.recorder()
@@ -272,39 +272,40 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
     # error_expanded = None
     plot_rw_speeds(plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
-    print(f"Final target was: {fsw.q_target}, angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
+    print(f"\nFinal target was: {fsw.q_target}, angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
+    print(f"Final error {quat.error_angle(fsw.error[-1]):.3f} degrees")
     
 if __name__ == "__main__":
     Jxx = 0.01650237
     Jxy = 0.00000711
     Jxz = 0.00004547
-    Jyx = 7.115e-6
+    Jyx = Jxy
     Jyy = 0.015962
     Jyz = 0.00003107
-    Jzx = 0.00004547
-    Jzy = 0.00003107
+    Jzx = Jxz
+    Jzy = Jyz
     Jzz = 0.00651814
     
     J = np.array([[Jxx, Jxy, Jxz], # satellite inertia matrix
                   [Jyx, Jyy, Jyz], 
                   [Jzx, Jzy, Jzz]])
-    # J = np.array([[Jxx, -Jxy, -Jxz], # satellite inertia matrix with negative signs in front of off diagonal entries to account for OnShape convention (not sure yet if this is needed)
-    #               [-Jyx, Jyy, -Jyz], 
-    #               [-Jzx, -Jzy, Jzz]])
-    # J = np.array([[Jxx, 0, 0], # satellite inertia matrix
-    #               [0, Jyy, 0], 
-    #               [0, 0, Jzz]])
-    # J = np.array([[Jxx, 0, 0], # satellite inertia matrix
-    #               [0, Jxx, 0], 
-    #               [0, 0, Jxx]])
-    
-    # mass = 2.85087233 
     mass = 3.05353136 # satellite mass [kg]
-    
-    sim_time = 1700  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
-    dynamics_update_time = 0.01
-    fsw_update_time = 0.1
+                  
     # viz_filename = f"{fsw_update_time:.2f}".replace('.', 'p') + "s_fsw_update_time"
     viz_filename = None
     
-    sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename) # call and run simulation
+    sim_time = 50  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
+    dynamics_update_time = 0.01
+    fsw_update_time = 0.1
+    
+    # initial satellite states
+    init_rot_axis = [0, 1, 0] # this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
+    init_rot_angle = 90
+    omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
+    omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
+    
+    # command rotations
+    sat_rot_axis = [0, 1, 0]
+    sat_rot_angle = 90
+    
+    sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle) # call and run simulation
