@@ -132,7 +132,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     # create orbit properties using classical orbit elements. Assuming perfectly circular orbit for now.
     oe = orbitalMotion.ClassicElements()
-    oe.a = (46000+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
+    oe.a = (460+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
     oe.e = 0 # eccentricity
     oe.i = 80 * macros.D2R # inclination [rad]
     oe.Omega = 40.0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
@@ -294,13 +294,13 @@ if __name__ == "__main__":
     # viz_filename = f"{fsw_update_time:.2f}".replace('.', 'p') + "s_fsw_update_time"
     viz_filename = None
     
-    sim_time = 50  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
+    sim_time = 1500  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
     dynamics_update_time = 0.01
     fsw_update_time = 0.1
     
     # initial satellite states
     init_rot_axis = [0, 1, 0] # this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
-    init_rot_angle = 90
+    init_rot_angle = 0
     omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
