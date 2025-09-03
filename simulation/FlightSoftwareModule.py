@@ -91,6 +91,7 @@ class FlightSoftware(sysModel.SysModel):
         
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
             desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
+            desired_torque = self.sliding_bangbang_quat(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller
             
             wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
             self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
@@ -121,3 +122,30 @@ class FlightSoftware(sysModel.SysModel):
         omega_error = omega - self.omega_target
         x = np.concatenate((q_error[:3], omega_error)) # assemble state vector
         return -self.K @ x # invert sign for control
+    
+    def mode_check(self, error_angle_degrees, currentTimeNanos): # check which control mode to use for sliding-mode controllers. 10 degree buffer zone to prevent hysteresis
+            if (error_angle_degrees < 40 and self.mode == "slew"): # switch to precision guidance mode
+                self.mode = "precise"
+                print(f"Mode switched to precise with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
+            elif (error_angle_degrees > 50 and self.mode == "precise"): # switch to slew mode 
+                self.mode = "slew"
+                print(f"Mode switched to slew with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
+    
+    def bang_bang_controller(self, q_error, omega):
+        axis = -quat.quat_to_axis(q_error) # determine axis of rotation
+        rate = .1 # [rad/s]
+        omega_target = axis*rate
+        omega_error = omega_target - omega
+        axis_torque = self.satInertia @ omega_error/self.updateTime # tau = I*omega/dt
+        return axis_torque # negate to account for reaction wheel opposite reactions
+    
+    def sliding_bangbang_quat(self, q_error, omega, currentTimeNanos):            
+        error_angle_degrees = quat.error_angle(q_error) # get minimum error angle (in degrees)
+        self.mode_check(error_angle_degrees, currentTimeNanos) # switch modes based on current error
+
+        if self.mode == "precise":
+            return self.quaternion_controller(q_error, omega)
+        elif self.mode == "slew":
+            return self.bang_bang_controller(q_error, omega)
+        else:
+            print("MANUAL ERROR: Undefined controller mode", flush = True)
