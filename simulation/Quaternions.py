@@ -18,7 +18,7 @@ def hemi(q):
 #     q = np.asarray(q, dtype=float)
 #     return q / np.linalg.norm(q)
 
-def normalize(q, tol=1e-6):
+def normalize(q, tol=1e-3):
     q = np.asarray(q, dtype=float)
     q[np.abs(q) < tol] = 0.0
     q = q / np.linalg.norm(q)

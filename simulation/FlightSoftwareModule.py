@@ -91,7 +91,7 @@ class FlightSoftware(sysModel.SysModel):
         
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
             desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
-            desired_torque = self.sliding_bangbang_quat(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller
+            # desired_torque = self.sliding_bangbang_quat(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller
             
             wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
             self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload

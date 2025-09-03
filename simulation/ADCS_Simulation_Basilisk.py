@@ -312,13 +312,13 @@ if __name__ == "__main__":
     
     # initial satellite states
     init_rot_axis = [0, 1, 0] # this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
-    init_rot_angle = 180
+    init_rot_angle = 0
     omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations
     sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = 80
+    sat_rot_angle = 180
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight):
     # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
