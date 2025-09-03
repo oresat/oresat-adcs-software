@@ -7,7 +7,7 @@ import Quaternions as quat # quaternion operations
 from sys import exit
 
 class FlightSoftware(sysModel.SysModel):
-    def __init__(self, G_matrix, update_time, rw_Inertia, satInertia):
+    def __init__(self, G_matrix, update_time, rw_Inertia, satInertia, pointing_reference):
         super(FlightSoftware, self).__init__()
         self.ModelTag = "flight_software"
 
@@ -34,7 +34,7 @@ class FlightSoftware(sysModel.SysModel):
         self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxSpeed = 10000 * macros.RPM # [rad]
         self.output_states = False # output state messages or not for debugging
-        self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
+        self.controllerStartTime = 2 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
         self.fast_gain = get_gain_matrix(satInertia, update_time, .05, 0.03, use_integrator)
@@ -50,7 +50,13 @@ class FlightSoftware(sysModel.SysModel):
         self.val_array = []
         self.array_counter = 0
         self.sign_flipped = 0
-
+        
+        # Select the spacecraft pointing reference (which axis/sensor defines boresight):
+        # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), CFC (Cirrus Flux Camera, -z on body)    
+        self.pointing = pointing_reference
+        self.q_plusZ_rot = quat.axis_angle_to_quaternion([0,1,0], -90) # rotate star tracker output to +z side of satellite for Selfie Camera
+        self.q_minusZ_rot = quat.axis_angle_to_quaternion([0,1,0], 90) # rotate star tracker output to -z side of satellite for Cirrus Flux Camera
+        
     def Reset(self, currentTimeNanos):
         print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
         
@@ -59,10 +65,17 @@ class FlightSoftware(sysModel.SysModel):
         # gather system states
         if self.starTrackerMsgIn.isWritten():
             self.starTrackerMsg = self.starTrackerMsgIn()
-            q = self.starTrackerMsg.qInrtl2Case  # [qs, q1, q2, q3]
-            q = quat.to_scalar_last(q) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
-            q = quat.normalize(q) # normalize
-                        
+            q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
+            q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
+            q_star_tracker = quat.normalize(q_star_tracker) # 
+            
+            if self.pointing == "ST":
+                q = q_star_tracker
+            elif self.pointing == "SC":
+                q = quat.quat_mult(self.q_plusZ_rot, q_star_tracker)
+            elif self.pointing == "CFC":
+                q = quat.quat_mult(self.q_minusZ_rot, q_star_tracker)
+            
         if self.imuMsgIn.isWritten():
             self.imuMsg = self.imuMsgIn()
             omega = self.imuMsg.AngVelPlatform
@@ -75,7 +88,7 @@ class FlightSoftware(sysModel.SysModel):
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
         q_error = quat.hemi(q_error)
         self.error.append(q_error) # required for plotting after conclusion of sim
-
+        
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
             desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
             

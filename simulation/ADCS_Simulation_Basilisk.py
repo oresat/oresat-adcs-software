@@ -9,6 +9,7 @@ from Basilisk.architecture import messaging
 from FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
 from scipy.spatial.transform import Rotation as R # to create nadir pointing quaternion
 import Quaternions as quat
+import sys
 
 def getLineColor(idx, maxNum):
     """pick a nicer color pattern to plot 3 vector components"""
@@ -83,7 +84,7 @@ def get_nadir_pointing_quaternion(r_BN_N, body_axis=np.array([0, 0, 1])):
     q = rot.as_quat()  # returns [x, y, z, w] (scalar-last)
     return q
 
-def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle):
+def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference):
     """
     Gets all satellite states (attitude quaternion, omega)
     
@@ -156,7 +157,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
                        [1.0, 0.0, 0.0]]) # z_B -> x_C
     # dcm_CB = np.array([[1.0, 0.0, 0.0], # x_B -> x_C
     #                    [0.0, 0.0, 1.0],  # y_B -> z_C
-    #                    [0.0, -1.0, 0.0]]) # z_B -> x_C
+    #                    [0.0, -1.0, 0.0]]) # z_B -> -y_C
     starTrackerSensor.dcm_CB = dcm_CB
     
     starTrackerSensor.scStateInMsg.subscribeTo(scObject.scStateOutMsg)
@@ -184,7 +185,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
                    [-z,   -z,   -z,  -z]])) # Wheel moment/orientation matrix
     
     wheelInertia = 4.2946e-6      # [kg*m^2], moment of inertia about spin axis
-    maxSpeed = 100000.0 # ridiculous speed so our controller does the work. 100k effectively removes limit, and allows fsw to limit manually.
+    maxSpeed = 11000.0 # ridiculous speed so our controller does the work. 100k effectively removes limit, and allows fsw to limit manually.
     maxTorque = 100000.0 # only used when useMaxTorque = True. 100k effectively removes limit, and allows fsw to limit manually.
     
     varRWModel = messaging.BalancedWheels # define wheel type as balanced (jitter is also an option)
@@ -211,7 +212,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     sim.AddModelToTask("dynamicsTask", rwStateEffector, None, 2)
 
     # Create flight software object
-    fsw = FlightSoftware(G, fsw_update_time, wheelInertia, J) # Create flight software object. Model tag already defined in __init__ as flight_software
+    fsw = FlightSoftware(G, fsw_update_time, wheelInertia, J, pointing_reference) # Create flight software object. Model tag already defined in __init__ as flight_software
     fsw.starTrackerMsgIn.subscribeTo(starTrackerSensor.sensorOutMsg) # subscribe to star tracker messages
     fsw.imuMsgIn.subscribeTo(imu.sensorOutMsg) # subscribe to IMU messages
     fsw.rwSpeedMsgIn.subscribeTo(rwStateEffector.rwSpeedOutMsg) # subscribe fsw reaction wheel speed input to reaction wheel output
@@ -219,12 +220,24 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     rwStateEffector.rwMotorCmdInMsg.subscribeTo(fsw.rwMotorTorqueOutMsg) # subscribe reaction wheel input to flight software control output
     
-    st_q_init = quat.axis_angle_to_quaternion([0,1,0], 90) # star tracker is mounted on the +x face of the satellite
+    # determine initial pointing vector
     sat_q_init = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle) # account for any rotations of the satellite it self at sim initialization
-    q_init = quat.quat_mult(st_q_init, sat_q_init)
+    if fsw.pointing == "ST":
+        q_init = quat.quat_mult(quat.axis_angle_to_quaternion([0,1,0], 90), sat_q_init)
+    elif fsw.pointing == "SC":
+        q_init = sat_q_init
+    elif fsw.pointing == "CFC":
+        q_init = quat.quat_mult(quat.axis_angle_to_quaternion([0,1,0], 180), sat_q_init)
+    else:
+        print("ERROR: Invalid pointing reference selected!")
+        sys.exit()
+    
     
     q_rot = quat.axis_angle_to_quaternion(sat_rot_axis, sat_rot_angle)
-    fsw.q_target = quat.quat_mult(q_rot, q_init)
+    fsw.q_target = quat.hemi(quat.quat_mult(q_rot, q_init))
+    
+    print(f"Satellite view device is \"{fsw.pointing}\" with initial reference: {q_init}")
+    print(f"Satellite initial pointing target: {fsw.q_target}\n")
     
     rwSpeedLog = rwStateEffector.rwSpeedOutMsg.recorder()
     sim.AddModelToTask("dynamicsTask", rwSpeedLog)
@@ -273,7 +286,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     # error_expanded = None
     plot_rw_speeds(plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
     print(f"\nFinal target was: {fsw.q_target}, angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
-    print(f"Final error {quat.error_angle(fsw.error[-1]):.3f} degrees")
+    print(f"Final error: {quat.error_angle(fsw.error[-1]):.3f} degrees")
     
 if __name__ == "__main__":
     Jxx = 0.01650237
@@ -291,21 +304,24 @@ if __name__ == "__main__":
                   [Jzx, Jzy, Jzz]])
     mass = 3.05353136 # satellite mass [kg]
                   
-    # viz_filename = f"{fsw_update_time:.2f}".replace('.', 'p') + "s_fsw_update_time"
-    viz_filename = None
+    viz_filename = None # sim visualization savename
     
-    sim_time = 1500  # seconds  LOOK HERE: 90 degree rotation and 800 seconds shows really weird instability!!!
+    sim_time = 200
     dynamics_update_time = 0.01
     fsw_update_time = 0.1
     
     # initial satellite states
     init_rot_axis = [0, 1, 0] # this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
-    init_rot_angle = 0
+    init_rot_angle = 140
     omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations
     sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = 90
+    sat_rot_angle = 0
     
-    sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle) # call and run simulation
+    # Select the spacecraft pointing reference (which axis/sensor defines boresight):
+    # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
+    pointing_reference = "ST"
+    
+    sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference) # call and run simulation

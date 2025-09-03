@@ -14,12 +14,18 @@ def hemi(q):
     q = np.asarray(q, dtype=float)
     return q if q[3] >= 0 else -q # if scalar part negative negate entire quaternion
 
-def normalize(q):
+# def normalize(q):
+#     q = np.asarray(q, dtype=float)
+#     return q / np.linalg.norm(q)
+
+def normalize(q, tol=1e-5):
     q = np.asarray(q, dtype=float)
-    return q / np.linalg.norm(q)
+    q[np.abs(q) < tol] = 0.0
+    q = q / np.linalg.norm(q)
+    return q
 
 def quat_mult(q_rot, q_init):
-    x1, y1, z1, s1 = normalize(q_rot)    # sanitize inputs by normalizing and checking signs (hemisphere) USING HEMI HERE BUT NOT THE q_new hemi RESULTS IN REALLY WEIRD GRAPH WITH SIM TIME OF 1500 SECONDS AND GAINS OF .5, 0.05
+    x1, y1, z1, s1 = normalize(q_rot)    # sanitize inputs by normalizing and checking signs (hemisphere)
     x2, y2, z2, s2 = normalize(q_init)   # sanitize inputs by normalizing and checking signs (hemisphere)
     q_new = [
         s1*x2 + x1*s2 + y1*z2 - z1*y2,
@@ -67,57 +73,6 @@ def error_angle(q_error):
     """
     
     return 2*np.acos(abs(q_error[3])) * 180/ np.pi
-
-def rotation_sequence_to_quaternion(angles_deg, order='xyz'):
-    """
-    Convert a sequence of body-axis rotations into a single quaternion. Should be purely for artificial testing environment.
-
-    Parameters:
-    angles_deg: list or tuple of 3 angles [x, y, z] in degrees
-    order: str, order of rotations, e.g. 'xyz', 'zyx', etc.
-
-    Returns:
-    4x1 unit quaternion in scalar-last format [x, y, z, s]
-    """
-    assert len(angles_deg) == 3, "improper number of arguments in angles_deg vector"
-    assert len(order) == 3 and all(c in 'xyz' for c in order), "check order string"
-
-    # Axis map
-    axis_map = {'x': [1, 0, 0], 'y': [0, 1, 0], 'z': [0, 0, 1]}
-    
-    # Generate individual quaternions
-    q_list = [axis_angle_to_quaternion(axis_map[ax], angle)
-              for ax, angle in zip(order, angles_deg)]
-
-    # Compose in reverse (for extrinsic/global rotations)
-    q_total = q_list[2]
-    q_total = quat_mult(q_total, q_list[1])
-    q_total = quat_mult(q_total, q_list[0])
-    
-    # Normalize
-    q_total /= np.linalg.norm(q_total)
-    assert np.linalg.norm(q_total) == 1, "Created quaternion norm not equal to 1" # check that quaternion was properly assembled
-    return q_total
-
-def get_rotation_angle_from_quaternion(q, degrees=False):
-    """
-    Returns the magnitude of rotation represented by a unit quaternion.
-
-    Parameters:
-    q : array-like of shape (4,)
-        Unit quaternion in scalar-last format [x, y, z, s]
-    degrees : bool
-        If True, returns angle in degrees
-
-    Returns:
-    float : rotation angle
-    """
-    q = np.array(q)
-    q = q / np.linalg.norm(q)  # ensure it's normalized
-    q0 = q[3]  # scalar part
-    angle = 2 * np.arccos(np.clip(q0, -1.0, 1.0))  # clip for numerical safety
-
-    return np.degrees(angle) if degrees else angle
 
 if __name__ == "__main__":
     qtarget = axis_angle_to_quaternion([0,1,0], 90)
