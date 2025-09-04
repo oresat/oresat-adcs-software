@@ -241,7 +241,6 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     rwSpeedLog = rwStateEffector.rwSpeedOutMsg.recorder()
     sim.AddModelToTask("dynamicsTask", rwSpeedLog)
-    # print("Is RW input message linked?", rwStateEffector.rwMotorCmdInMsg.isLinked(), "\n")
 
     # add simulation recording
     stateRec = scObject.scStateOutMsg.recorder(macros.sec2nano(dynamics_update_time)) # create recorder of dynamics
@@ -261,30 +260,26 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
                                  scale=[-7, 7, 7], # scale model and mirror on x-axis
                                  rotation=[0,np.pi/2,np.pi/2]) # rotate to properly align body axes with simulation axes
     
-    print("\nSimulation setup complete\nBeginning simulation\n")
-    
     angle_quat = quat.quat_error(fsw.q_target, q_init)
     error_angle_degrees = quat.error_angle(angle_quat) # get minimum error angle (in degrees)
-    print("Targeting angle change of", error_angle_degrees, "deg\n")
+    # print("Targeting angle change of", error_angle_degrees, "deg\n")
     
     # simulate:
     sim.InitializeSimulation() # initialize simulation
     sim.ConfigureStopTime(macros.sec2nano(simTime)) # configure a simulation stop time
+    print("\nSimulation setup complete\nBeginning simulation\n")
     start = time.time()
-    
     sim.ExecuteSimulation() # execute simulation
     end = time.time()
-    
-    print(f"\nSimulation completed in {end-start} seconds")
-    print(f"Vizard visualization saved to: {fileName}")
     
     plot_times = rwSpeedLog.times() * 1e-9
     
     error_angles = [quat.error_angle(quaternion) for quaternion in fsw.error[:-1]]
     error_expanded = np.repeat(error_angles, 10, axis=0)  # stretch all but last to match with times
     error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
-    # error_expanded = None
     plot_rw_speeds(plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
+    
+    print(f"\nSimulation completed in {end-start} seconds")
     print(f"\nFinal target was: {fsw.q_target}, angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
     print(f"Final error: {quat.error_angle(fsw.error[-1]):.3f} degrees")
     
@@ -306,7 +301,7 @@ if __name__ == "__main__":
                   
     viz_filename = None # sim visualization savename
     
-    sim_time = 200
+    sim_time = 500
     dynamics_update_time = 0.01
     fsw_update_time = 0.1
     
@@ -318,7 +313,7 @@ if __name__ == "__main__":
     
     # command rotations
     sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = 180
+    sat_rot_angle = 50
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight):
     # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  

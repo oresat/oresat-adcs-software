@@ -33,12 +33,14 @@ class FlightSoftware(sysModel.SysModel):
         
         self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxSpeed = 10000 * macros.RPM # [rad]
+        self.bangbang_rate = 0.1 # max rotation rate of bang bang controller
         self.output_states = False # output state messages or not for debugging
-        self.controllerStartTime = 2 # time at which controller should begin taking control [seconds]
+        self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
-        self.fast_gain = get_gain_matrix(satInertia, update_time, .05, 0.03, use_integrator)
-        self.slow_gain = get_gain_matrix(satInertia, update_time, .05, 0.001, use_integrator)
+        self.LQR_max_error = 0.05
+        self.LQR_max_rate = 0.015
+        self.fast_gain = get_gain_matrix(satInertia, update_time, self.LQR_max_error, self.LQR_max_rate, use_integrator)
         self.K = self.fast_gain
         self.mode = "slew"
         
@@ -46,17 +48,15 @@ class FlightSoftware(sysModel.SysModel):
             
         print(f"\nGain matrix K:\n{self.K}\n")
         
-        self.target_num = 1
-        self.val_array = []
-        self.array_counter = 0
-        self.sign_flipped = 0
-        
         # Select the spacecraft pointing reference (which axis/sensor defines boresight):
         # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), CFC (Cirrus Flux Camera, -z on body)    
         self.pointing = pointing_reference
         self.q_plusZ_rot = quat.axis_angle_to_quaternion([0,1,0], -90) # rotate star tracker output to +z side of satellite for Selfie Camera
         self.q_minusZ_rot = quat.axis_angle_to_quaternion([0,1,0], 90) # rotate star tracker output to -z side of satellite for Cirrus Flux Camera
         
+        self.u_prev = np.zeros(4)
+        self.torque_rate_lim = .01
+
     def Reset(self, currentTimeNanos):
         print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
         
@@ -67,8 +67,9 @@ class FlightSoftware(sysModel.SysModel):
             self.starTrackerMsg = self.starTrackerMsgIn()
             q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
             q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
-            q_star_tracker = quat.normalize(q_star_tracker) # 
+            # q_star_tracker = quat.normalize(q_star_tracker) # Not sure if this normalization is necessary at this point. Check Star Tracker output.
             
+            # select reference vector for pointing commands
             if self.pointing == "ST":
                 q = q_star_tracker
             elif self.pointing == "SC":
@@ -79,7 +80,6 @@ class FlightSoftware(sysModel.SysModel):
         if self.imuMsgIn.isWritten():
             self.imuMsg = self.imuMsgIn()
             omega = self.imuMsg.AngVelPlatform
-            omega_rpm = np.asarray(omega) * 60 / (2 * np.pi)
         
         if self.rwSpeedMsgIn.isWritten():
             self.rwSpeedMsg = self.rwSpeedMsgIn()
@@ -107,10 +107,11 @@ class FlightSoftware(sysModel.SysModel):
         return self.G_pinv @ torque_array
     
     def check_torque_vals(self, wheel_torque, rwSpeeds): # ensure torque does not exceed maxTorque and that wheel speed does not exceed maxSpeed by the beginning of next step
+        
+        # wheel_torque = wheel_torque * 0.09
+        
         for i in range(len(self.torque_vals[:4])):
-            
             projected_speed = rwSpeeds[i] + (wheel_torque[i]/self.rwInertia) * self.updateTime # predicted speed at requested torque after next time step
-            
             if abs(projected_speed) > self.maxSpeed: # Clamp torque if it would cause overspeed
                 speed_sign = np.sign(rwSpeeds[i]) if rwSpeeds[i] != 0 else np.sign(wheel_torque[i])
                 required_torque = (speed_sign * self.maxSpeed - rwSpeeds[i]) * self.rwInertia / self.updateTime
@@ -133,8 +134,7 @@ class FlightSoftware(sysModel.SysModel):
     
     def bang_bang_controller(self, q_error, omega):
         axis = -quat.quat_to_axis(q_error) # determine axis of rotation
-        rate = .1 # [rad/s]
-        omega_target = axis*rate
+        omega_target = axis*self.bangbang_rate
         omega_error = omega_target - omega
         axis_torque = self.satInertia @ omega_error/self.updateTime # tau = I*omega/dt
         return axis_torque # negate to account for reaction wheel opposite reactions

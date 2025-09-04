@@ -85,7 +85,7 @@ def get_gain_matrix(J, Ts, max_error, max_rate, use_integrator = False):
     eigvals = np.linalg.eigvals(A_cl)
     
     for i, eig in enumerate(eigvals):
-        print(f"Eigenvalue {i}: {eig}  | Magnitude: {abs(eig)}")
+        # print(f"Eigenvalue {i}: {eig}  | Magnitude: {abs(eig)}")
         if abs(eig) > 1:
             print("WARNING: EIGENVALUE OUTSIDE OF UNIT CIRCLE")
     
