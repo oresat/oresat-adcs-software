@@ -39,7 +39,7 @@ class FlightSoftware(sysModel.SysModel):
         
         use_integrator = False # use gain matrix with integrator or without
         self.LQR_max_error = 0.05
-        self.LQR_max_rate = 0.015
+        self.LQR_max_rate = 0.03
         self.fast_gain = get_gain_matrix(satInertia, update_time, self.LQR_max_error, self.LQR_max_rate, use_integrator)
         self.K = self.fast_gain
         self.mode = "slew"
@@ -86,8 +86,14 @@ class FlightSoftware(sysModel.SysModel):
             wheelSpeeds = self.rwSpeedMsg.wheelSpeeds
             
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
-        q_error = quat.hemi(q_error)
+        q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hermisphere boundaries
         self.error.append(q_error) # required for plotting after conclusion of sim
+        
+        q_reconstruct = quat.quat_mult(quat.quat_conjugate(q_error), q)
+        q_reconstruct = quat.quat_mult(q, q_error)
+        # print(self.q_target, q)
+        # print(q_error)
+        # print(q_reconstruct, self.q_target, flush = True) # this checks that the error quaternion is properly defined (it is)
         
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
             desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
@@ -99,7 +105,7 @@ class FlightSoftware(sysModel.SysModel):
     def command_wheel_torques(self, currentTimeNanos, wheel_torque, wheelSpeeds): # send commanded torque values to reaction wheels
         self.check_torque_vals(wheel_torque, wheelSpeeds) # ensure none of the torque values exceed max torque or accelerate wheel past max RPM in either direction and write to self.torque_vals
         self.rwMotorTorquePayload.motorTorque = self.torque_vals
-        self.rwMotorTorqueOutMsg.write(self.rwMotorTorquePayload, currentTimeNanos, self.moduleID)    
+        self.rwMotorTorqueOutMsg.write(self.rwMotorTorquePayload, currentTimeNanos, self.moduleID)
           
     def convert_torque_to_wheels(self, torque_array): # convert 3-axis torque request to üyramid configuration reaction wheel output
         if (self.G_pinv.shape[1] != np.shape(torque_array)[0]):

@@ -55,11 +55,11 @@ def get_gain_matrix(J, Ts, max_error, max_rate, use_integrator = False):
     R = np.diag([1/max_input**2, 1/max_input**2, 1/max_input**2])
     #--------------------------------------------------------------------------
     '''
-    When using the left handed quaternion convention, meaning q_error = q_target * q_current^-1,
+    When using the left-error quaternion convention, meaning q_error = q_target * q_current^-1,
     the derivative of the error quaternion is negative, so A becomes negative. Currently using the right-handed convention
     so A is positive.
     '''
-    A = 0.5*np.eye(6, 6, 3) # A matrix: maps ω into q_dot, ω_dot is driven by control input (J^{-1} u). 
+    A = -0.5*np.eye(6, 6, 3) # A matrix: maps ω into q_dot, ω_dot is driven by control input (J^{-1} u). 
     B = np.block([[np.zeros((3,3))], [np.linalg.inv(J)]])
     C = np.identity(6) # sensors for all inputs
     C_aug = np.eye(3, 6) # integrator only cares about attitude error, only integrate quaternion values (top half of C matrix)
@@ -90,7 +90,6 @@ def get_gain_matrix(J, Ts, max_error, max_rate, use_integrator = False):
             print("WARNING: EIGENVALUE OUTSIDE OF UNIT CIRCLE")
     
     return K
-    
     
 if __name__ == "__main__":
     Jxx = 0.01650237
