@@ -14,15 +14,15 @@ def hemi(q):
     q = np.asarray(q, dtype=float)
     return q if q[3] >= 0 else -q # if scalar part negative negate entire quaternion
 
-def normalize(q):
-    q = np.asarray(q, dtype=float)
-    return q / np.linalg.norm(q)
-
-# def normalize(q, tol=1e-3):
+# def normalize(q):
 #     q = np.asarray(q, dtype=float)
-#     q[np.abs(q) < tol] = 0.0
-#     q = q / np.linalg.norm(q)
-#     return q
+#     return q / np.linalg.norm(q)
+
+def normalize(q, tol=1e-3):
+    q = np.asarray(q, dtype=float)
+    q[np.abs(q) < tol] = 0.0
+    q = q / np.linalg.norm(q)
+    return q
 
 # def quat_mult(q_rot, q_init): # Hamiltonian quaternion multiplcation
 #     x1, y1, z1, s1 = q_rot
@@ -52,11 +52,11 @@ def quat_mult(q_rot, q_init): # Shuster = Hamilton with the cross-product term N
 # def quat_error(q_target, q_current): # quat left-error hamiltonian operation
 #     return quat_mult(q_target, quat_conjugate(q_current)) # return normalized quaternion. Sanitization happens in quat_mult function
 
-def quat_error(q_target, q_current): # THIS ONE SEEMS TO WORK FOR SOME REASON WITH SMALL ANGLE ROTATIONS
-    return quat_mult(quat_conjugate(q_current), q_target) # return normalized quaternion. Sanitization happens in quat_mult function
+# def quat_error(q_target, q_current): # THIS ONE SEEMS TO WORK FOR SOME REASON WITH SMALL ANGLE ROTATIONS
+#     return quat_mult(quat_conjugate(q_current), q_target) # return normalized quaternion. Sanitization happens in quat_mult function
 
-# def quat_error(q_target, q_current): # error defined by Markley & Crassidis
-#     return quat_mult(q_current, quat_conjugate(q_target)) # return normalized quaternion. Sanitization happens in quat_mult function
+def quat_error(q_target, q_current): # error defined by Markley & Crassidis
+    return quat_mult(q_current, quat_conjugate(q_target)) # return normalized quaternion. Sanitization happens in quat_mult function
 
 def to_scalar_last(q): # convert quaternion to scalar-last convention
     return np.concatenate((q[1:], [q[0]]))

@@ -300,7 +300,7 @@ if __name__ == "__main__":
                   
     viz_filename = None # sim visualization savename
     
-    sim_time = 800
+    sim_time = 50
     dynamics_update_time = 0.01
     fsw_update_time = 0.1 
     
@@ -312,7 +312,7 @@ if __name__ == "__main__":
     
     # command rotations relative to initial orientation
     sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = 0
+    sat_rot_angle = 20
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight):
     # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
