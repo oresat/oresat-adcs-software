@@ -14,15 +14,9 @@ def hemi(q):
     q = np.asarray(q, dtype=float)
     return q if q[3] >= 0 else -q # if scalar part negative negate entire quaternion
 
-# def normalize(q):
-#     q = np.asarray(q, dtype=float)
-#     return q / np.linalg.norm(q)
-
-def normalize(q, tol=1e-12):
+def normalize(q):
     q = np.asarray(q, dtype=float)
-    q[np.abs(q) < tol] = 0.0
-    q = q / np.linalg.norm(q)
-    return q
+    return q / np.linalg.norm(q)
 
 # def quat_mult(q_rot, q_init): # Hamiltonian quaternion multiplcation
 #     x1, y1, z1, s1 = q_rot
@@ -36,7 +30,7 @@ def normalize(q, tol=1e-12):
 #     ]
 #     return normalize(q_new)
 
-def quat_mult(q_rot, q_init): # Shuster = Hamilton with the cross-product term NEGATED (THIS ALSO REQUIRES NEGATING THE A MATRIX IN THE LQR DEFINITION)
+def quat_mult(q_rot, q_init): # Shuster = Hamilton with the cross-product term NEGATED. This means that the inputs are also flipped. They are not flipped yet for testing purposes
     x1, y1, z1, s1 = q_rot
     x2, y2, z2, s2 = q_init
     
@@ -48,15 +42,18 @@ def quat_mult(q_rot, q_init): # Shuster = Hamilton with the cross-product term N
     ]
     return normalize(q_new)
 
+def quat_error(q_target, q_current): #4 error defined by Markley & Crassidis. Semi stable with hamilton for about 100 seconds
+    return quat_mult(q_current, quat_conjugate(q_target)) # returns normalized quaternion. Sanitization happens in quat_mult function
 
-# def quat_error(q_target, q_current): # quat left-error hamiltonian operation
+# def quat_error(q_target, q_current): # This one works without negating the A matrix when using hamilton 
+#     return quat_mult(quat_conjugate(q_target), q_current) # return normalized quaternion. Sanitization happens in quat_mult function
+
+# def quat_error(q_target, q_current): #2 is the inverse of #4, flipping A matrix to negative sign with hamilton makes this behave the same as #4
 #     return quat_mult(q_target, quat_conjugate(q_current)) # return normalized quaternion. Sanitization happens in quat_mult function
 
-# def quat_error(q_target, q_current): # THIS ONE SEEMS TO WORK FOR SOME REASON WITH SMALL ANGLE ROTATIONS
-#     return quat_mult(quat_conjugate(q_current), q_target) # return normalized quaternion. Sanitization happens in quat_mult function
+# def quat_error(q_target, q_current): #3 THIS ONE SEEMS TO WORK FOR SOME REASON WITH SMALL ANGLE ROTATIONS AND NEGATIVE A MATRIX
+#     return quat_mult(quat_conjugate(q_current), q_target) # returns normalized quaternion. Sanitization happens in quat_mult function
 
-def quat_error(q_target, q_current): # error defined by Markley & Crassidis
-    return quat_mult(q_current, quat_conjugate(q_target)) # return normalized quaternion. Sanitization happens in quat_mult function
 
 def to_scalar_last(q): # convert quaternion to scalar-last convention
     return np.concatenate((q[1:], [q[0]]))

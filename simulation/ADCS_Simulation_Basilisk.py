@@ -119,7 +119,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     scObject.ModelTag = "OreSat" # name object
     scObject.hub.mHub = mass  # [kg], not sure this is required given inertial space, but should be realistic
     scObject.hub.IHubPntBc_B = J # assign OreSat inertia matrix
-    initial_MRP = np.array(init_rot_axis) * np.tan(init_rot_angle*macros.D2R/4.0) # MRP set to customize initial inertial attitude
+    initial_MRP = (np.array(init_rot_axis)/np.linalg.norm(np.array(init_rot_axis))) * np.tan(init_rot_angle*macros.D2R/4.0) # MRP set to customize initial inertial attitude
     scObject.hub.sigma_BNInit = initial_MRP
     scObject.hub.omega_BN_BInit = omega_init_rad
     sim.AddModelToTask("dynamicsTask", scObject) # add spacecraft to the dynamics simulation
@@ -300,22 +300,23 @@ if __name__ == "__main__":
                   
     viz_filename = None # sim visualization savename
     
-    sim_time = 50
+    sim_time = 100
     dynamics_update_time = 0.01
     fsw_update_time = 0.1 
     
     # initial satellite states
-    init_rot_axis = [1, 1, 1]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
-    init_rot_angle = 0
-    omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
+    init_rot_axis = [1, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
+    init_rot_angle = 57
+    temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
+    omega_init_rpm = np.array([1.0, 3.0, 0.4])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
-    sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = 20
+    sat_rot_axis = [1, 0, 0]
+    sat_rot_angle = 165
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight):
     # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    pointing_reference = "CFC"
+    pointing_reference = "SC"
     
     sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference) # call and run simulation

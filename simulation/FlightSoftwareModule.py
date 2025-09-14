@@ -90,10 +90,11 @@ class FlightSoftware(sysModel.SysModel):
         self.error.append(q_error) # required for plotting after conclusion of sim
         
         q_reconstruct = quat.quat_mult(quat.quat_conjugate(q_error), q)
-        q_reconstruct = quat.quat_mult(q, q_error)
-        # print(self.q_target, q)
-        # print(q_error)
-        # print(q_reconstruct, self.q_target, flush = True) # this checks that the error quaternion is properly defined (it is)
+        # q_reconstruct = quat.quat_mult(q, q_error)
+        # print("Current: ", q)
+        # print("Error: ", q_error, quat.quat_to_axis(q_error), quat.error_angle(q_error))
+        # print("Reconstructed target: ", q_reconstruct)
+        # print("Actual target:        ", self.q_target) # this checks that the error quaternion is properly defined (it is)
         
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
             desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
