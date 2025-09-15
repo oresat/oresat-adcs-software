@@ -32,9 +32,9 @@ class FlightSoftware(sysModel.SysModel):
         self.omega_target = omega_target_rpm * 2*np.pi/60 # convert to rad/s
         
         self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
-        self.maxSpeed = 10000 * macros.RPM # [rad]
+        self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
         self.bangbang_rate = 0.1 # max rotation rate of bang bang controller
-        self.output_states = False # output state messages or not for debugging
+        self.output_states = True # output state messages or not for debugging
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
@@ -89,12 +89,8 @@ class FlightSoftware(sysModel.SysModel):
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hermisphere boundaries
         self.error.append(q_error) # required for plotting after conclusion of sim
         
-        q_reconstruct = quat.quat_mult(quat.quat_conjugate(q_error), q)
-        # q_reconstruct = quat.quat_mult(q, q_error)
-        # print("Current: ", q)
-        # print("Error: ", q_error, quat.quat_to_axis(q_error), quat.error_angle(q_error))
-        # print("Reconstructed target: ", q_reconstruct)
-        # print("Actual target:        ", self.q_target) # this checks that the error quaternion is properly defined (it is)
+        # CHECK TORQUES AND COMPARE RESULTS BETWEEN VIEWS TO SEE WHY THEY ARE NOT EQUAL WITH EQUAL ERRORS
+        # THEN PASS EXACT SAME INPUT TO CONTROLLER AND SEE IF THAT RESULTS IN SAME BEHAVIOR FOR ONE TIME STEP
         
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
             desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
@@ -103,6 +99,19 @@ class FlightSoftware(sysModel.SysModel):
             wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
             self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
             
+            
+        if self.output_states:
+            q_reconstruct = quat.quat_mult(quat.quat_conjugate(q_error), q)
+            print("\nTime: ", currentTimeNanos * macros.NANO2SEC)
+            print("Current quaternion: ", q)
+            print("Error: ", q_error)
+            print("Axis of rotation: ", quat.quat_to_axis(q_error))
+            print("Current angle error: ", quat.error_angle(q_error))
+            print("Reconstructed target: ", q_reconstruct)
+            print("Actual target:        ", self.q_target) # this checks that the error quaternion is properly defined (it is)
+            print("Desired torque: ", desired_torque)
+            print("Wheel Torque: ", wheel_torque)
+        
     def command_wheel_torques(self, currentTimeNanos, wheel_torque, wheelSpeeds): # send commanded torque values to reaction wheels
         self.check_torque_vals(wheel_torque, wheelSpeeds) # ensure none of the torque values exceed max torque or accelerate wheel past max RPM in either direction and write to self.torque_vals
         self.rwMotorTorquePayload.motorTorque = self.torque_vals

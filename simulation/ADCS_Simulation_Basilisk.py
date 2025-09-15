@@ -232,9 +232,8 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
         print("ERROR: Invalid pointing reference selected!")
         sys.exit()
     
-    
     q_rot = quat.axis_angle_to_quaternion(sat_rot_axis, sat_rot_angle)
-    fsw.q_target = quat.quat_mult(q_rot, q_init) # Probably shouldn't be applying hemisphere checkl to this operation! Removed for now, check logic.
+    fsw.q_target = quat.quat_mult(q_rot, q_init) # Probably shouldn't be applying hemisphere check to this operation! Removed for now, check logic.
     
     print(f"Satellite view device is \"{fsw.pointing}\" with initial reference: {q_init}")
     print(f"Satellite initial pointing target: {fsw.q_target}\n")
@@ -259,10 +258,6 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
                                  modelPath=r"C:\Users\benne\OneDrive\Master's Thesis\Code\OreSat_Simplified_Model.obj",
                                  scale=[-7, 7, 7], # scale model and mirror on x-axis
                                  rotation=[0,np.pi/2,np.pi/2]) # rotate to properly align body axes with simulation axes
-    
-    # angle_quat = quat.quat_error(fsw.q_target, q_init)
-    # error_angle_degrees = quat.error_angle(angle_quat) # get minimum error angle (in degrees)
-    # print("Targeting angle change of", error_angle_degrees, "deg\n")
     
     # simulate:
     sim.InitializeSimulation() # initialize simulation
@@ -296,27 +291,28 @@ if __name__ == "__main__":
     J = np.array([[Jxx, Jxy, Jxz], # satellite inertia matrix
                   [Jyx, Jyy, Jyz], 
                   [Jzx, Jzy, Jzz]])
+    
     mass = 3.05353136 # satellite mass [kg]
                   
     viz_filename = None # sim visualization savename
     
-    sim_time = 100
+    sim_time = 0.1
     dynamics_update_time = 0.01
-    fsw_update_time = 0.1 
+    fsw_update_time = 0.1
     
     # initial satellite states
-    init_rot_axis = [1, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
-    init_rot_angle = 57
+    init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
+    init_rot_angle = 0
     temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
-    omega_init_rpm = np.array([1.0, 3.0, 0.4])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
-    sat_rot_axis = [1, 0, 0]
-    sat_rot_angle = 165
+    sat_rot_axis = [1, 1, 0]
+    sat_rot_angle = 90
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight):
     # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    pointing_reference = "SC"
+    pointing_reference = "ST"
     
     sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference) # call and run simulation
