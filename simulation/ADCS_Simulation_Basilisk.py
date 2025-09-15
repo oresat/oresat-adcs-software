@@ -84,7 +84,7 @@ def get_nadir_pointing_quaternion(r_BN_N, body_axis=np.array([0, 0, 1])):
     q = rot.as_quat()  # returns [x, y, z, w] (scalar-last)
     return q
 
-def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference):
+def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states):
     """
     Gets all satellite states (attitude quaternion, omega)
     
@@ -212,7 +212,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     sim.AddModelToTask("dynamicsTask", rwStateEffector, None, 2)
 
     # Create flight software object
-    fsw = FlightSoftware(G, fsw_update_time, wheelInertia, J, pointing_reference) # Create flight software object. Model tag already defined in __init__ as flight_software
+    fsw = FlightSoftware(G, fsw_update_time, wheelInertia, J, pointing_reference, print_states) # Create flight software object. Model tag already defined in __init__ as flight_software
     fsw.starTrackerMsgIn.subscribeTo(starTrackerSensor.sensorOutMsg) # subscribe to star tracker messages
     fsw.imuMsgIn.subscribeTo(imu.sensorOutMsg) # subscribe to IMU messages
     fsw.rwSpeedMsgIn.subscribeTo(rwStateEffector.rwSpeedOutMsg) # subscribe fsw reaction wheel speed input to reaction wheel output
@@ -295,8 +295,9 @@ if __name__ == "__main__":
     mass = 3.05353136 # satellite mass [kg]
                   
     viz_filename = None # sim visualization savename
+    print_states = False
     
-    sim_time = 0.1
+    sim_time = 50
     dynamics_update_time = 0.01
     fsw_update_time = 0.1
     
@@ -313,6 +314,6 @@ if __name__ == "__main__":
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight):
     # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    pointing_reference = "ST"
+    pointing_reference = "CFC"
     
-    sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference) # call and run simulation
+    sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states) # call and run simulation
