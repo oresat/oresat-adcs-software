@@ -269,7 +269,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     plot_times = rwSpeedLog.times() * 1e-9
     error_angles = [quat.error_angle(quaternion) for quaternion in fsw.error[:-1]]
-    error_expanded = np.repeat(error_angles, 10, axis=0)  # stretch all but last to match with times
+    error_expanded = np.repeat(error_angles, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
     error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
     plot_rw_speeds(plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
     

@@ -111,6 +111,7 @@ class FlightSoftware(sysModel.SysModel):
             print("Actual target:        ", self.q_target) # this checks that the error quaternion is properly defined (it is)
             print("Desired torque: ", desired_torque)
             print("Wheel Torque: ", wheel_torque)
+            print("Current wheel speeds: ", wheelSpeeds[:4])
         
     def command_wheel_torques(self, currentTimeNanos, wheel_torque, wheelSpeeds): # send commanded torque values to reaction wheels
         self.check_torque_vals(wheel_torque, wheelSpeeds) # ensure none of the torque values exceed max torque or accelerate wheel past max RPM in either direction and write to self.torque_vals
