@@ -113,4 +113,6 @@ if __name__ == "__main__":
     q_error = quat_error(qtarget, qcurrent)
     print(q_error, error_angle(q_error))
     
+    print(quat_conjugate(axis_angle_to_quaternion([0,1,0], 180)))
+    
     

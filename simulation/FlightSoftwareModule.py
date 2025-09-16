@@ -52,8 +52,11 @@ class FlightSoftware(sysModel.SysModel):
         self.q_plusZ_rot = quat.axis_angle_to_quaternion([0,1,0], -90) # rotate star tracker output to +z side of satellite for Selfie Camera from Star Tracker orientation on +x side of satellite
         self.q_minusZ_rot = quat.axis_angle_to_quaternion([0,1,0], 90) # rotate star tracker output to -z side of satellite for Cirrus Flux Camera from Star Tracker orientation on +x side of satellite
         
-        self.u_prev = np.zeros(4)
-        self.torque_rate_lim = .01
+        # Quaternion change-of-basis rotations (comments in parentheses use R to denote a standard right-multiply rotation matrix notation)
+        self.B2ST = quat.axis_angle_to_quaternion([0,1,0], 90) # body to star tracker rotation (nominal right-multiply math notation would therefore be R_st_b)
+        self.ST2B = quat.quat_conjugate(self.B2ST) # star tracker to body rotation (nominal right-multiply math notation would therefore be R_b_st)
+        self.B2CFC = quat.axis_angle_to_quaternion([0,1,0], 180) # body to Cirrus Flux Camera rotation (nominal right-multiply math notation would therefore be R_cfc_b)
+        self.CFC2B = quat.quat_conjugate(self.B2CFC) # Cirrus Flux Camera to body rotation (nominal right-multiply math notation would therefore be R_b_cfc)
 
     def Reset(self, currentTimeNanos):
         print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
@@ -78,19 +81,20 @@ class FlightSoftware(sysModel.SysModel):
             self.imuMsg = self.imuMsgIn()
             omega = self.imuMsg.AngVelPlatform
             
-            # convert rates to the same frame that the error quaternion is generated in
-            if self.pointing == "ST":
-                omega = quat.rotate_vec_by_quat(omega, quat.axis_angle_to_quaternion([0,1,0], -90))
-            elif self.pointing == "SC":
-                pass # do nothing, as wheels are already defined in correct frame
-            elif self.pointing == "CFC":
-                omega = quat.rotate_vec_by_quat(omega, quat.axis_angle_to_quaternion([0,1,0], 180))
-                
         if self.rwSpeedMsgIn.isWritten():
             self.rwSpeedMsg = self.rwSpeedMsgIn()
             wheelSpeeds = self.rwSpeedMsg.wheelSpeeds
             
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
+        
+        # convert error quaternions to nominal body frame, as IMU, Inertia Matrix, and Reaction Wheels are all defined in this frame already.
+        if self.pointing == "ST":
+            q_error = quat.quat_mult(self.ST2B, quat.quat_mult(q_error, self.B2ST)) # equivalent to q_error_body = R_b_st * q_error_st * R_st_b
+        elif self.pointing == "SC":
+            pass # q_error is already in the correct frame
+        elif self.pointing == "CFC":
+            q_error = quat.quat_mult(self.CFC2B, quat.quat_mult(q_error, self.B2CFC)) # equivalent to q_error_body = R_b_cfc * q_error_cfc * R_cfc_b
+        
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hermisphere boundaries
         self.error.append(q_error) # required for plotting after conclusion of sim
         
@@ -98,15 +102,7 @@ class FlightSoftware(sysModel.SysModel):
             desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
             # desired_torque = self.sliding_bangbang_quat(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller
             
-            # convert torques to the reaction wheel frame based on "viewpoint"
-            if self.pointing == "ST":
-                frame_torque = quat.rotate_vec_by_quat(desired_torque, quat.axis_angle_to_quaternion([0,1,0], 90))
-            elif self.pointing == "SC":
-                frame_torque = desired_torque # SC is already in reaction wheel frame
-            elif self.pointing == "CFC":
-                frame_torque = quat.rotate_vec_by_quat(desired_torque, quat.axis_angle_to_quaternion([0,1,0], -180))
-            
-            wheel_torque = self.convert_torque_to_wheels(frame_torque) # convert desired 3-axis torque to inputs for 4 wheels
+            wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
             self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
             
         if self.output_states:
@@ -122,7 +118,6 @@ class FlightSoftware(sysModel.SysModel):
             print("Current wheel speeds: ", wheelSpeeds[:4])
             print("Body rates: ", omega)
             print("Desired torque: ", desired_torque)
-            print("Frame corrected torque: ", frame_torque)
             print("Wheel Torque: ", wheel_torque)
         
     def command_wheel_torques(self, currentTimeNanos, wheel_torque, wheelSpeeds): # send commanded torque values to reaction wheels
@@ -137,7 +132,7 @@ class FlightSoftware(sysModel.SysModel):
     
     def check_torque_vals(self, wheel_torque, rwSpeeds): # ensure torque does not exceed maxTorque and that wheel speed does not exceed maxSpeed by the beginning of next step
         
-        # wheel_torque = wheel_torque * 0.1
+        wheel_torque = wheel_torque * 0.1
         
         for i in range(len(self.torque_vals[:4])):
             projected_speed = rwSpeeds[i] + (wheel_torque[i]/self.rwInertia) * self.updateTime # predicted speed at requested torque after next time step
