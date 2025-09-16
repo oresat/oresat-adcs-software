@@ -1,10 +1,8 @@
 from Basilisk.architecture import sysModel, messaging
 from Basilisk.utilities import macros
-from array import array # C-style arrays for defining motor torques
 import numpy as np
 from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
 import Quaternions as quat # quaternion operations
-from sys import exit
 
 class FlightSoftware(sysModel.SysModel):
     def __init__(self, G_matrix, update_time, rw_Inertia, satInertia, pointing_reference, print_states):
@@ -39,7 +37,7 @@ class FlightSoftware(sysModel.SysModel):
         
         use_integrator = False # use gain matrix with integrator or without
         self.LQR_max_error = 0.05
-        self.LQR_max_rate = 0.03
+        self.LQR_max_rate = 0.02
         self.fast_gain = get_gain_matrix(satInertia, update_time, self.LQR_max_error, self.LQR_max_rate, use_integrator)
         self.K = self.fast_gain
         self.mode = "slew"
@@ -67,13 +65,12 @@ class FlightSoftware(sysModel.SysModel):
             self.starTrackerMsg = self.starTrackerMsgIn()
             q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
             q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
-            # q_star_tracker = quat.normalize(q_star_tracker) # Not sure if this normalization is necessary at this point. Check Star Tracker output.
             
             # select reference vector for pointing commands
             if self.pointing == "ST":
                 q = q_star_tracker
             elif self.pointing == "SC":
-                q = quat.quat_mult(self.q_plusZ_rot, q_star_tracker) # THIS STEP FIXES WHATEVER THE PROBLEM IS!!! And it's the q_plusZ_rot, when using that with the CFC, that fixes it too.
+                q = quat.quat_mult(self.q_plusZ_rot, q_star_tracker)
             elif self.pointing == "CFC":
                 q = quat.quat_mult(self.q_minusZ_rot, q_star_tracker)
             
@@ -81,9 +78,9 @@ class FlightSoftware(sysModel.SysModel):
             self.imuMsg = self.imuMsgIn()
             omega = self.imuMsg.AngVelPlatform
             
-            # convert rates to the same frame that the error quaternion is generated in "viewpoint"
+            # convert rates to the same frame that the error quaternion is generated in
             if self.pointing == "ST":
-                omega = quat.rotate_vec_by_quat(omega, quat.axis_angle_to_quaternion([0,1,0], 90))
+                omega = quat.rotate_vec_by_quat(omega, quat.axis_angle_to_quaternion([0,1,0], -90))
             elif self.pointing == "SC":
                 pass # do nothing, as wheels are already defined in correct frame
             elif self.pointing == "CFC":
@@ -103,7 +100,7 @@ class FlightSoftware(sysModel.SysModel):
             
             # convert torques to the reaction wheel frame based on "viewpoint"
             if self.pointing == "ST":
-                frame_torque = quat.rotate_vec_by_quat(desired_torque, quat.axis_angle_to_quaternion([0,1,0], -90))
+                frame_torque = quat.rotate_vec_by_quat(desired_torque, quat.axis_angle_to_quaternion([0,1,0], 90))
             elif self.pointing == "SC":
                 frame_torque = desired_torque # SC is already in reaction wheel frame
             elif self.pointing == "CFC":
@@ -125,6 +122,7 @@ class FlightSoftware(sysModel.SysModel):
             print("Current wheel speeds: ", wheelSpeeds[:4])
             print("Body rates: ", omega)
             print("Desired torque: ", desired_torque)
+            print("Frame corrected torque: ", frame_torque)
             print("Wheel Torque: ", wheel_torque)
         
     def command_wheel_torques(self, currentTimeNanos, wheel_torque, wheelSpeeds): # send commanded torque values to reaction wheels
@@ -139,7 +137,7 @@ class FlightSoftware(sysModel.SysModel):
     
     def check_torque_vals(self, wheel_torque, rwSpeeds): # ensure torque does not exceed maxTorque and that wheel speed does not exceed maxSpeed by the beginning of next step
         
-        # wheel_torque = wheel_torque * 0.09
+        # wheel_torque = wheel_torque * 0.1
         
         for i in range(len(self.torque_vals[:4])):
             projected_speed = rwSpeeds[i] + (wheel_torque[i]/self.rwInertia) * self.updateTime # predicted speed at requested torque after next time step

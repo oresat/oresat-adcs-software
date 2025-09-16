@@ -152,7 +152,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     starTrackerSensor.ModelTag = "starTracker"
     
     # Define dcm_CB for star tracker orientation (body-to-case, star tracker on +x side)
-    dcm_CB = np.array([[0.0, 0.0, -1.0], # x_B -> -y_C
+    dcm_CB = np.array([[0.0, 0.0, -1.0], # x_B -> -z_C
                        [0.0, 1.0, 0.0],  # y_B -> y_C
                        [1.0, 0.0, 0.0]]) # z_B -> x_C
     # dcm_CB = np.array([[1.0, 0.0, 0.0], # x_B -> x_C
@@ -288,9 +288,12 @@ if __name__ == "__main__":
     Jzy = Jyz
     Jzz = 0.00651814
     
-    J = np.array([[Jxx, Jxy, Jxz], # satellite inertia matrix
-                  [Jyx, Jyy, Jyz], 
-                  [Jzx, Jzy, Jzz]])
+    # J = np.array([[Jxx, Jxy, Jxz], # satellite inertia matrix
+    #               [Jyx, Jyy, Jyz], 
+    #               [Jzx, Jzy, Jzz]])
+    J = np.array([[Jxx, 0, 0], # satellite inertia matrix
+                  [0, Jxx, 0], 
+                  [0, 0, Jxx]])
     
     mass = 3.05353136 # satellite mass [kg]
                   
@@ -305,15 +308,15 @@ if __name__ == "__main__":
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
-    omega_init_rpm = np.array([1.0, 2.0, 0.0])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
-    sat_rot_axis = [1, 1, 0]
-    sat_rot_angle = 135
+    sat_rot_axis = [1, 0, 0]
+    sat_rot_angle = 90
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight):
     # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    pointing_reference = "CFC"
+    pointing_reference = "SC"
     
     sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states) # call and run simulation
