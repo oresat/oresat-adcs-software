@@ -90,6 +90,14 @@ def error_angle(q_error):
     
     return 2*np.acos(abs(q_error[3])) * 180/ np.pi
 
+def rotate_vec_by_quat(v, q):
+    """Rotate 3-vector v by unit, scalar-last quaternion q = [ex,ey,ez, s]."""
+    ex, ey, ez, s = q
+    e = np.array([ex, ey, ez], dtype=float)
+    v = np.array(v, dtype=float)
+    t = 2.0 * np.cross(e, v)
+    return v + s * t + np.cross(e, t)
+
 if __name__ == "__main__":
     qtarget = axis_angle_to_quaternion([1,1,0], 90)
     print(qtarget)

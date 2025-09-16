@@ -80,7 +80,15 @@ class FlightSoftware(sysModel.SysModel):
         if self.imuMsgIn.isWritten():
             self.imuMsg = self.imuMsgIn()
             omega = self.imuMsg.AngVelPlatform
-        
+            
+            # convert rates to the same frame that the error quaternion is generated in "viewpoint"
+            if self.pointing == "ST":
+                omega = quat.rotate_vec_by_quat(omega, quat.axis_angle_to_quaternion([0,1,0], 90))
+            elif self.pointing == "SC":
+                pass # do nothing, as wheels are already defined in correct frame
+            elif self.pointing == "CFC":
+                omega = quat.rotate_vec_by_quat(omega, quat.axis_angle_to_quaternion([0,1,0], 180))
+                
         if self.rwSpeedMsgIn.isWritten():
             self.rwSpeedMsg = self.rwSpeedMsgIn()
             wheelSpeeds = self.rwSpeedMsg.wheelSpeeds
@@ -93,23 +101,31 @@ class FlightSoftware(sysModel.SysModel):
             desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
             # desired_torque = self.sliding_bangbang_quat(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller
             
-            wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
+            # convert torques to the reaction wheel frame based on "viewpoint"
+            if self.pointing == "ST":
+                frame_torque = quat.rotate_vec_by_quat(desired_torque, quat.axis_angle_to_quaternion([0,1,0], -90))
+            elif self.pointing == "SC":
+                frame_torque = desired_torque # SC is already in reaction wheel frame
+            elif self.pointing == "CFC":
+                frame_torque = quat.rotate_vec_by_quat(desired_torque, quat.axis_angle_to_quaternion([0,1,0], -180))
+            
+            wheel_torque = self.convert_torque_to_wheels(frame_torque) # convert desired 3-axis torque to inputs for 4 wheels
             self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
             
         if self.output_states:
             q_reconstruct = quat.quat_mult(quat.quat_conjugate(q_error), q)
             print("\nTime: ", currentTimeNanos * macros.NANO2SEC)
             print("Current quaternion: ", q)
+            print("Raw Star Tracker output: ", q_star_tracker)
             print("Error quaternion: ", q_error)
             print("Axis of rotation: ", quat.quat_to_axis(q_error))
             print("Current angle error: ", quat.error_angle(q_error))
             print("Reconstructed target: ", q_reconstruct)
             print("Actual target:        ", self.q_target) # this checks that the error quaternion is properly defined (it is)
-            print("Desired torque: ", desired_torque)
-            print("Wheel Torque: ", wheel_torque)
             print("Current wheel speeds: ", wheelSpeeds[:4])
             print("Body rates: ", omega)
-            print("Raw Star Tracker output: ", q_star_tracker)
+            print("Desired torque: ", desired_torque)
+            print("Wheel Torque: ", wheel_torque)
         
     def command_wheel_torques(self, currentTimeNanos, wheel_torque, wheelSpeeds): # send commanded torque values to reaction wheels
         self.check_torque_vals(wheel_torque, wheelSpeeds) # ensure none of the torque values exceed max torque or accelerate wheel past max RPM in either direction and write to self.torque_vals
