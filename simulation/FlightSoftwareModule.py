@@ -69,7 +69,7 @@ class FlightSoftware(sysModel.SysModel):
             q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
             q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
             
-            # select reference vector for pointing commands
+            # select reference vector for pointing error calculations
             if self.pointing == "ST":
                 q = q_star_tracker
             elif self.pointing == "SC":
