@@ -4,15 +4,18 @@ import numpy as np
 from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
 import Quaternions as quat # quaternion operations
 
+print(dir(messaging))
+
 class FlightSoftware(sysModel.SysModel):
     def __init__(self, G_matrix, update_time, rw_Inertia, satInertia, pointing_reference, print_states):
         super(FlightSoftware, self).__init__()
         self.ModelTag = "flight_software"
 
-        # Create a reader for the star tracker, IMU and reaction wheel messages
+        # Create a reader for the star tracker, IMU, magnetometer, and reaction wheel messages
         self.starTrackerMsgIn = messaging.STSensorMsgReader() 
         self.imuMsgIn = messaging.IMUSensorMsgReader()
         self.rwSpeedMsgIn = messaging.RWSpeedMsgReader()
+        self.magRead = messaging.TAMSensorMsgReader()
         
         # setup reaction wheel output messages
         self.rwMotorTorqueOutMsg = messaging.ArrayMotorTorqueMsg()

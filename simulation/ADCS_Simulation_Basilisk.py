@@ -3,13 +3,15 @@ import time
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.cm as cmx
-from Basilisk.simulation import spacecraft, starTracker, imuSensor, reactionWheelStateEffector # import simulation related support
-from Basilisk.utilities import SimulationBaseClass, macros, vizSupport, simIncludeGravBody, orbitalMotion, simIncludeRW # import general simulation support files
+from Basilisk.simulation import spacecraft, starTracker, imuSensor, reactionWheelStateEffector, magneticFieldWMM, magnetometer # import simulation related support
+from Basilisk.utilities import SimulationBaseClass, macros, vizSupport, simIncludeGravBody, orbitalMotion, simIncludeRW, unitTestSupport # import general simulation support files
 from Basilisk.architecture import messaging
+from Basilisk import __path__
 from FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
 from scipy.spatial.transform import Rotation as R # to create nadir pointing quaternion
 import Quaternions as quat
 import sys
+bskPath = __path__[0]
 
 def getLineColor(idx, maxNum):
     """pick a nicer color pattern to plot 3 vector components"""
@@ -131,6 +133,15 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     mu_earth = earth.mu # get gravitational object's gravitational parameter
     gravFactory.addBodiesTo(scObject)  # automatically adds all created bodies
     
+    # create the magnetic field
+    magModule = magneticFieldWMM.MagneticFieldWMM()
+    magModule.ModelTag = "WMM" # World Magnetic Model
+    magModule.dataPath = bskPath + '/supportData/MagneticField/'
+    epochMsg = unitTestSupport.timeStringToGregorianUTCMsg('2025 June 27, 10:23:0.0 (UTC)')  # set epoch date/time message for WMM
+    magModule.addSpacecraftToModel(scObject.scStateOutMsg) # add spacecraft to the magnetic field module so it can read the sc position messages
+    sim.AddModelToTask("dynamicsTask", magModule) # add the magnetic field module to the simulation task
+    magModule.epochInMsg.subscribeTo(epochMsg) # connect epoch messages
+    
     # create orbit properties using classical orbit elements. Assuming perfectly circular orbit for now.
     oe = orbitalMotion.ClassicElements()
     oe.a = (460+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
@@ -155,9 +166,6 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     dcm_CB = np.array([[0.0, 0.0, -1.0], # x_B -> -z_C
                        [0.0, 1.0, 0.0],  # y_B -> y_C
                        [1.0, 0.0, 0.0]]) # z_B -> x_C
-    # dcm_CB = np.array([[1.0, 0.0, 0.0], # x_B -> x_C
-    #                    [0.0, 0.0, 1.0],  # y_B -> z_C
-    #                    [0.0, -1.0, 0.0]]) # z_B -> -y_C
     starTrackerSensor.dcm_CB = dcm_CB
     
     starTrackerSensor.scStateInMsg.subscribeTo(scObject.scStateOutMsg)
@@ -173,6 +181,11 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     imu.UpdateState(0)  # Force IMU to process initial state, otherwise first value is set to zero for some reason
     sim.AddModelToTask("fswTask", imu) # Add sensor to flight software task
     sim.AddModelToTask("fswTask", imuRec) # Add recording to task
+    
+    # Create magnetometer sensor
+    magSensor = magnetometer.Magnetometer()
+    magSensor.ModelTag = "TAM_sensor" # Three-Axis Magnetometer
+    magSensor.stateInMsg.subscribeTo(scObject.scStateOutMsg)
     
     # Create reaction wheels
     # Define 4 reaction wheel unit vectors in a pyramid configuration (60 deg tilt from z-axis) 
@@ -209,7 +222,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     rwStateEffector = reactionWheelStateEffector.ReactionWheelStateEffector()
     rwStateEffector.ModelTag = "RW_cluster"
     RWFactory.addToSpacecraft(scObject.ModelTag, rwStateEffector, scObject)
-    sim.AddModelToTask("dynamicsTask", rwStateEffector, None, 2)
+    sim.AddModelToTask("dynamicsTask", rwStateEffector)
 
     # Create flight software object
     fsw = FlightSoftware(G, fsw_update_time, wheelInertia, J, pointing_reference, print_states) # Create flight software object. Model tag already defined in __init__ as flight_software
@@ -220,7 +233,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     rwStateEffector.rwMotorCmdInMsg.subscribeTo(fsw.rwMotorTorqueOutMsg) # subscribe reaction wheel input to flight software control output
     
-    # determine initial pointing vector
+    # determine initial pointing vector for relative target calculations
     sat_q_init = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle) # account for any rotations of the satellite it self at sim initialization
     if fsw.pointing == "ST":
         q_init = quat.quat_mult(quat.axis_angle_to_quaternion([0,1,0], 90), sat_q_init)
@@ -274,7 +287,8 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     plot_rw_speeds(plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
     
     print(f"\nSimulation completed in {end-start} seconds")
-    print(f"\nFinal target was: {fsw.q_target}, angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
+    print(f"\nFinal target was: {fsw.q_target}")
+    print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
     print(f"Final error: {quat.error_angle(fsw.error[-1]):.3f} degrees")
     
 if __name__ == "__main__":
@@ -297,7 +311,7 @@ if __name__ == "__main__":
     viz_filename = None # sim visualization savename
     print_states = False
     
-    sim_time = 100
+    sim_time = 50
     dynamics_update_time = 0.01
     fsw_update_time = 0.1
     
