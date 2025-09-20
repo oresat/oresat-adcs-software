@@ -3,90 +3,19 @@ import time
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.cm as cmx
-from Basilisk.simulation import spacecraft, starTracker, imuSensor, reactionWheelStateEffector, magneticFieldWMM, magnetometer # import simulation related support
+from Basilisk.simulation import spacecraft, starTracker, imuSensor, reactionWheelStateEffector, magneticFieldWMM, magnetometer, MtbEffector # import simulation related support
 from Basilisk.utilities import SimulationBaseClass, macros, vizSupport, simIncludeGravBody, orbitalMotion, simIncludeRW, unitTestSupport # import general simulation support files
 from Basilisk.architecture import messaging
 from Basilisk import __path__
+from Plotting_Functions import plot_rw_speeds, plot_magfield
 from FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
 from scipy.spatial.transform import Rotation as R # to create nadir pointing quaternion
 import Quaternions as quat
 import sys
 bskPath = __path__[0]
 
-def getLineColor(idx, maxNum):
-    """pick a nicer color pattern to plot 3 vector components"""
-    values = list(range(0, maxNum + 2))
-    colorMap = plt.get_cmap('viridis') # select color from https://matplotlib.org/stable/users/explain/colors/colormaps.html gist_ncar, nipy_spectral, inferno, viridis
-    cNorm = colors.Normalize(vmin=0, vmax=values[-1])
-    scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=colorMap)
-    return scalarMap.to_rgba(values[idx + 1])
-
-def plot_rw_speeds(timeData, dataOmegaRW, numRW, errorArray=None):
-    """Plot the RW spin rates with optional error curve on right axis."""
-    fig, ax1 = plt.subplots(figsize=(8,4))
-
-    # --- Reaction wheel speeds ---
-    for idx in range(numRW):
-        ax1.plot(timeData, dataOmegaRW[:, idx] / macros.RPM,
-                 color=getLineColor(idx, numRW),
-                 label=r'$\Omega_{' + str(idx) + '}$')
-    ax1.set_xlabel('Time [s]')
-    ax1.set_ylabel('RW Speed (RPM)')
-    ax1.grid(True)
-
-    # --- Optional error line ---
-    if errorArray is not None:
-        ax2 = ax1.twinx()  # create second y-axis
-        ax2.plot(timeData, errorArray, 'r--', label='Error')
-        ax2.set_ylabel('Error (deg)')
-        # Add legend for error separately
-        lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
-    else:
-        plt.legend()
-    plt.title("Reaction Wheel Speeds and Orientation Error")
-    plt.show()
-
-def get_nadir_pointing_quaternion(r_BN_N, body_axis=np.array([0, 0, 1])):
-    """
-    Computes the quaternion that aligns a body axis (default: +Z) toward Earth.
-    
-    Parameters:
-    r_BN_N (numpy.ndarray): Position vector of satellite in inertial frame (3,)
-    body_axis (numpy.ndarray): Desired body axis to point toward Earth (default +Z)
-    
-    Returns:
-    np.ndarray: scalar-last quaternion [x, y, z, s]
-    """
-    # Normalize body and inertial vectors
-    r_hat = -r_BN_N / np.linalg.norm(r_BN_N)  # Nadir direction in inertial frame
-    b_hat = body_axis / np.linalg.norm(body_axis)  # Axis in body frame
-
-    # Compute rotation axis (cross product) and angle
-    cross = np.cross(b_hat, r_hat)
-    dot = np.dot(b_hat, r_hat)
-    norm_cross = np.linalg.norm(cross)
-
-    if norm_cross < 1e-8:  # vectors are nearly aligned or opposite
-        if dot > 0:
-            return np.array([0, 0, 0, 1])  # identity quaternion
-        else:
-            # 180° rotation around any axis perpendicular to b_hat
-            axis = np.array([1, 0, 0]) if abs(b_hat[0]) < 0.9 else np.array([0, 1, 0])
-            perp = np.cross(b_hat, axis)
-            perp /= np.linalg.norm(perp)
-            q_vec = perp * np.sin(np.pi/2)
-            q_scalar = np.cos(np.pi/2)
-            return np.concatenate((q_vec, [q_scalar]))
-
-    axis = cross / norm_cross
-    angle = np.arccos(np.clip(dot, -1.0, 1.0))
-    rot = R.from_rotvec(axis * angle)
-    q = rot.as_quat()  # returns [x, y, z, w] (scalar-last)
-    return q
-
-def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states):
+def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, 
+             init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, control_mode):
     """
     Gets all satellite states (attitude quaternion, omega)
     
@@ -116,6 +45,8 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     dynProcess.addTask(sim.CreateNewTask("dynamicsTask", macros.sec2nano(dynamics_update_time)))
     fswProcess.addTask(sim.CreateNewTask("fswTask", macros.sec2nano(fsw_update_time)))
     
+    ############################## SPACECRAFT #################################
+    
     # create spacecraft object
     scObject = spacecraft.Spacecraft() # initialize object
     scObject.ModelTag = "OreSat" # name object
@@ -125,7 +56,9 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     scObject.hub.sigma_BNInit = initial_MRP
     scObject.hub.omega_BN_BInit = omega_init_rad
     sim.AddModelToTask("dynamicsTask", scObject) # add spacecraft to the dynamics simulation
-
+    
+    ########################## ORBITAL ENVIRONMENT ############################
+    
     # create gravitational bodies (earth in this case, but might add moon later as well)
     gravFactory = simIncludeGravBody.gravBodyFactory()
     earth = gravFactory.createEarth()
@@ -144,19 +77,22 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     # create orbit properties using classical orbit elements. Assuming perfectly circular orbit for now.
     oe = orbitalMotion.ClassicElements()
-    oe.a = (460+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
+    oe.a = (415+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
     oe.e = 0 # eccentricity
-    oe.i = 80 * macros.D2R # inclination [rad]
-    oe.Omega = 40.0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
-    oe.omega = 30.0 * macros.D2R  # argument of periapsis [rad]
-    oe.f = 0 * macros.D2R       # true anomaly [rad]
+    oe.i = 0 * macros.D2R # inclination [rad]
+    oe.Omega = 0.0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
+    oe.omega = 0.0 * macros.D2R  # argument of periapsis [rad]
+    oe.f = 90 * macros.D2R       # true anomaly [rad]
     
     rN, vN = orbitalMotion.elem2rv(mu_earth, oe)
-    oe = orbitalMotion.rv2elem(mu_earth, rN, vN)      # this stores consistent initial orbit elements, fixes numerical errors, particulary with perfectly circular orbits. Consult ChatGPT for detailed explanation.
+    oe = orbitalMotion.rv2elem(mu_earth, rN, vN)  # this stores consistent initial orbit elements, fixes numerical errors, particulary with perfectly circular orbits. Consult ChatGPT for detailed explanation.
+    orbital_period = 2*np.pi*np.sqrt(oe.a**3/mu_earth) # define orbital period for plotting
     
     # To set the spacecraft initial conditions, the following initial position and velocity variables are set:
     scObject.hub.r_CN_NInit = rN  # r_BN_N [m]
     scObject.hub.v_CN_NInit = vN  # v_BN_N [m/s]
+    
+    ############################### SENSORS ###################################
     
     # Create and configure a star tracker
     starTrackerSensor = starTracker.StarTracker()
@@ -185,14 +121,20 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     # Create magnetometer sensor
     magSensor = magnetometer.Magnetometer()
     magSensor.ModelTag = "TAM_sensor" # Three-Axis Magnetometer
+    magSensor.magInMsg.subscribeTo(magModule.envOutMsgs[0])
     magSensor.stateInMsg.subscribeTo(scObject.scStateOutMsg)
+    magSensorRec = magSensor.tamDataOutMsg.recorder(macros.sec2nano(fsw_update_time))
+    sim.AddModelToTask("fswTask", magSensor)
+    sim.AddModelToTask("fswTask", magSensorRec) # Add recording to task
     
+    ############################## EFFECTORS ##################################
+
     # Create reaction wheels
     # Define 4 reaction wheel unit vectors in a pyramid configuration (60 deg tilt from z-axis) 
-    z = np.cos(60*np.pi/180) # wheel angle from z axis
+    z = np.cos(60*np.pi/180) # wheel angle from z axis. Same for all wheels
     xy = np.cos(52.238756*np.pi/180) # wheel angle from x/y axis, sign varies by quadrant
 
-                #  +x+y  +x-y  -x-y  -x+y  (motor orientations)
+                #  +x+y  +x-y  -x-y  -x+y  (motor positions in satellite quadrants. Each column represents one motor's torque components)
     G = np.array(([[xy,   xy,  -xy,  -xy],
                    [xy,  -xy,  -xy,   xy],
                    [-z,   -z,   -z,  -z]])) # Wheel moment/orientation matrix
@@ -223,12 +165,30 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     rwStateEffector.ModelTag = "RW_cluster"
     RWFactory.addToSpacecraft(scObject.ModelTag, rwStateEffector, scObject)
     sim.AddModelToTask("dynamicsTask", rwStateEffector)
+    
+    
+    # create magnetic torque bar object
+    mtb = MtbEffector.MtbEffector()
+    mtb.ModelTag = "MTB"
+    mtbConfigParams = messaging.MTBArrayConfigMsgPayload()
+    mtbConfigParams.numMTB = 3
+    
+    # row major torque bar alignments
+    mtbConfigParams.GtMatrix_B = [1., 0., 0.,
+                                  0., 1., 0.,
+                                  0., 0., 1.]
+    maxDipole = 0.1
+    # scObject.addDynamicEffector(mtb)
+    # sim.AddModelToTask("dynamicsTask", mtb)
 
-    # Create flight software object
-    fsw = FlightSoftware(G, fsw_update_time, wheelInertia, J, pointing_reference, print_states) # Create flight software object. Model tag already defined in __init__ as flight_software
+    ############################ FLIGHT SOFTWARE ##############################
+
+    # Create flight software object and subscribe all sensors
+    fsw = FlightSoftware(G, fsw_update_time, wheelInertia, J, pointing_reference, print_states, control_mode) # Create flight software object. Model tag already defined in __init__ as flight_software
     fsw.starTrackerMsgIn.subscribeTo(starTrackerSensor.sensorOutMsg) # subscribe to star tracker messages
     fsw.imuMsgIn.subscribeTo(imu.sensorOutMsg) # subscribe to IMU messages
     fsw.rwSpeedMsgIn.subscribeTo(rwStateEffector.rwSpeedOutMsg) # subscribe fsw reaction wheel speed input to reaction wheel output
+    fsw.magMsgIn.subscribeTo(magSensor.tamDataOutMsg)
     sim.AddModelToTask("fswTask", fsw)
     
     rwStateEffector.rwMotorCmdInMsg.subscribeTo(fsw.rwMotorTorqueOutMsg) # subscribe reaction wheel input to flight software control output
@@ -250,6 +210,8 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     print(f"Satellite view device is \"{fsw.pointing}\" with initial reference: {q_init}")
     print(f"Satellite initial pointing target: {fsw.q_target}\n")
+    
+    ############################## SIMULATION #################################
     
     rwSpeedLog = rwStateEffector.rwSpeedOutMsg.recorder()
     sim.AddModelToTask("dynamicsTask", rwSpeedLog)
@@ -286,6 +248,10 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
     plot_rw_speeds(plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
     
+    TAMvalues = magSensorRec.tam_S
+    TAMtimes = magSensorRec.times()*1e-9
+    plot_magfield(TAMtimes, TAMvalues, orbital_period, "orbits")
+    
     print(f"\nSimulation completed in {end-start} seconds")
     print(f"\nFinal target was: {fsw.q_target}")
     print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
@@ -311,15 +277,15 @@ if __name__ == "__main__":
     viz_filename = None # sim visualization savename
     print_states = False
     
-    sim_time = 50
-    dynamics_update_time = 0.01
-    fsw_update_time = 0.1
+    sim_time = 6000
+    dynamics_update_time = 60
+    fsw_update_time = 60
     
     # initial satellite states
     init_rot_axis = [0, 1, 1]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
-    init_rot_angle = 110
+    init_rot_angle = 0
     temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
-    omega_init_rpm = np.array([-1.0, -2.0, 0.3])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
@@ -329,5 +295,6 @@ if __name__ == "__main__":
     # Select the spacecraft pointing reference (which axis/sensor defines boresight):
     # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     pointing_reference = "ST"
+    control_mode = "MAG"
     
-    sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states) # call and run simulation
+    sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, control_mode) # call and run simulation

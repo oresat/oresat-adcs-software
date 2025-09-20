@@ -4,10 +4,8 @@ import numpy as np
 from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
 import Quaternions as quat # quaternion operations
 
-print(dir(messaging))
-
 class FlightSoftware(sysModel.SysModel):
-    def __init__(self, G_matrix, update_time, rw_Inertia, satInertia, pointing_reference, print_states):
+    def __init__(self, G_matrix, update_time, rw_Inertia, satInertia, pointing_reference, print_states, controlMode):
         super(FlightSoftware, self).__init__()
         self.ModelTag = "flight_software"
 
@@ -15,7 +13,7 @@ class FlightSoftware(sysModel.SysModel):
         self.starTrackerMsgIn = messaging.STSensorMsgReader() 
         self.imuMsgIn = messaging.IMUSensorMsgReader()
         self.rwSpeedMsgIn = messaging.RWSpeedMsgReader()
-        self.magRead = messaging.TAMSensorMsgReader()
+        self.magMsgIn = messaging.TAMSensorMsgReader()
         
         # setup reaction wheel output messages
         self.rwMotorTorqueOutMsg = messaging.ArrayMotorTorqueMsg()
@@ -23,31 +21,26 @@ class FlightSoftware(sysModel.SysModel):
         self.torque_vals = np.zeros(36) # initialize torque input array
         
         self.G_pinv = -np.linalg.pinv(G_matrix) # pseudo inverse matrix for torque calculations. Negated because of Basilisk conventions (I think)
-        self.G = G_matrix
-        self.rwInertia = rw_Inertia
-        self.satInertia = satInertia
+        self.rwInertia = rw_Inertia # reaction wheel inertia (scalar)
+        self.satInertia = satInertia # satellite inertia tensor (matrix)
         self.updateTime = update_time
-        self.mode = "slew" # only used for sliding mode controllers
-        self.q_target = np.array([0,0,0,1])
+        self.q_target = np.array([0,0,0,1]) # attribute initialization, set to real value in sim main
         omega_target_rpm = np.array([0.0, 0.0, 0.0])
         self.omega_target = omega_target_rpm * 2*np.pi/60 # convert to rad/s
+        self.error = [] # used for tracking and graphing error
         
         self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
-        self.bangbang_rate = 0.1 # max rotation rate of bang bang controller
+        self.bangbang_rate = 0.2 # max rotation rate of bang bang controller
         self.output_states = print_states # output state messages or not for debugging
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
-        self.LQR_max_error = 0.05
-        self.LQR_max_rate = 0.02
-        self.fast_gain = get_gain_matrix(satInertia, update_time, self.LQR_max_error, self.LQR_max_rate, use_integrator)
-        self.K = self.fast_gain
-        self.mode = "slew"
-        
-        self.error = [] # used for tracking and graphing error
-            
-        print(f"\nGain matrix K:\n{self.K}\n")
+        self.LQR_max_error = 0.01
+        self.LQR_max_rate = 0.003
+        self.K = get_gain_matrix(satInertia, update_time, self.LQR_max_error, self.LQR_max_rate, use_integrator)
+        self.controlMode = controlMode # activates either Reaction Wheels ("RW") or Magnetorquers ("MAG")
+        self.slewMode = "slew" # only used for sliding mode bang-bang controller. Can be "slew" for large-angle rotations or "precise" for fine-pointing operations
         
         # Select the spacecraft pointing reference (which axis/sensor defines boresight):
         # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), CFC (Cirrus Flux Camera, -z on body)    
@@ -60,12 +53,13 @@ class FlightSoftware(sysModel.SysModel):
         self.ST2B = quat.quat_conjugate(self.B2ST) # star tracker to body rotation (nominal right-multiply math notation would therefore be R_b_st)
         self.B2CFC = quat.axis_angle_to_quaternion([0,1,0], 180) # body to Cirrus Flux Camera rotation (nominal right-multiply math notation would therefore be R_cfc_b)
         self.CFC2B = quat.quat_conjugate(self.B2CFC) # Cirrus Flux Camera to body rotation (nominal right-multiply math notation would therefore be R_b_cfc)
+        
+        print(f"\nGain matrix K:\n{self.K}\n")
 
     def Reset(self, currentTimeNanos):
         print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
         
     def UpdateState(self, currentTimeNanos):
-        
         # gather system states
         if self.starTrackerMsgIn.isWritten():
             self.starTrackerMsg = self.starTrackerMsgIn()
@@ -88,25 +82,31 @@ class FlightSoftware(sysModel.SysModel):
             self.rwSpeedMsg = self.rwSpeedMsgIn()
             wheelSpeeds = self.rwSpeedMsg.wheelSpeeds
             
-        q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
-        
+        if self.magMsgIn.isWritten():
+            self.magMsg = self.magMsgIn()
+            magData = self.magMsg.tam_S
+            # print(magData)
+            
         # convert error quaternions to nominal body frame, as IMU, Inertia Matrix, and Reaction Wheels are all defined in this frame already.
+        q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
         if self.pointing == "ST":
             q_error = quat.quat_mult(self.ST2B, quat.quat_mult(q_error, self.B2ST)) # equivalent to q_error_body = R_b_st * q_error_st * R_st_b
         elif self.pointing == "SC":
             pass # q_error is already in the correct frame
         elif self.pointing == "CFC":
             q_error = quat.quat_mult(self.CFC2B, quat.quat_mult(q_error, self.B2CFC)) # equivalent to q_error_body = R_b_cfc * q_error_cfc * R_cfc_b
-        
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hermisphere boundaries
         self.error.append(q_error) # required for plotting after conclusion of sim
         
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
-            desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
-            # desired_torque = self.sliding_bangbang_quat(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller
-            
-            wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
-            self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
+            if self.controlMode == "RW":
+                desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
+                # desired_torque = self.sliding_bangbang_quat(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller
+                wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
+                self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
+                
+            elif self.controlMode == "MAG":
+                pass
             
         if self.output_states:
             q_reconstruct = quat.quat_mult(quat.quat_conjugate(q_error), q)
@@ -135,7 +135,7 @@ class FlightSoftware(sysModel.SysModel):
     
     def check_torque_vals(self, wheel_torque, rwSpeeds): # ensure torque does not exceed maxTorque and that wheel speed does not exceed maxSpeed by the beginning of next step
         
-        wheel_torque = wheel_torque * 0.1
+        # wheel_torque = wheel_torque * 0.1
         
         for i in range(len(self.torque_vals[:4])):
             projected_speed = rwSpeeds[i] + (wheel_torque[i]/self.rwInertia) * self.updateTime # predicted speed at requested torque after next time step
@@ -151,12 +151,12 @@ class FlightSoftware(sysModel.SysModel):
         x = np.concatenate((q_error[:3], omega_error)) # assemble state vector
         return -self.K @ x # invert sign for control
     
-    def mode_check(self, error_angle_degrees, currentTimeNanos): # check which control mode to use for sliding-mode controllers. 10 degree buffer zone to prevent hysteresis
-            if (error_angle_degrees < 40 and self.mode == "slew"): # switch to precision guidance mode
-                self.mode = "precise"
+    def slew_mode_check(self, error_angle_degrees, currentTimeNanos): # check which control mode to use for sliding-mode controllers. 10 degree buffer zone to prevent hysteresis
+            if (error_angle_degrees < 40 and self.slewMode == "slew"): # switch to precision guidance mode
+                self.slewMode = "precise"
                 print(f"Mode switched to precise with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
-            elif (error_angle_degrees > 50 and self.mode == "precise"): # switch to slew mode 
-                self.mode = "slew"
+            elif (error_angle_degrees > 50 and self.slewMode == "precise"): # switch to slew mode 
+                self.slewMode = "slew"
                 print(f"Mode switched to slew with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
     
     def bang_bang_controller(self, q_error, omega):
@@ -168,11 +168,11 @@ class FlightSoftware(sysModel.SysModel):
     
     def sliding_bangbang_quat(self, q_error, omega, currentTimeNanos):            
         error_angle_degrees = quat.error_angle(q_error) # get minimum error angle (in degrees)
-        self.mode_check(error_angle_degrees, currentTimeNanos) # switch modes based on current error
+        self.slew_mode_check(error_angle_degrees, currentTimeNanos) # switch modes based on current error
 
-        if self.mode == "precise":
+        if self.slewMode == "precise":
             return self.quaternion_controller(q_error, omega)
-        elif self.mode == "slew":
+        elif self.slewMode == "slew":
             return self.bang_bang_controller(q_error, omega)
         else:
             print("MANUAL ERROR: Undefined controller mode", flush = True)
