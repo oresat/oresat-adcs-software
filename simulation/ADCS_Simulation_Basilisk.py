@@ -168,47 +168,30 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     
     # create magnetic torque bar object
-    # mtb = MtbEffector.MtbEffector()
-    # mtb.ModelTag = "MTB"
-    # mtbConfigParams = messaging.MTBArrayConfigMsgPayload()
-    # mtbConfigParams.numMTB = 3
-    
-    # # row major torque bar alignments
-    # mtbConfigParams.GtMatrix_B = [1., 0., 0.,
-    #                               0., 1., 0.,
-    #                               0., 0., 1.]
-    
     mtbEff = MtbEffector.MtbEffector()
     mtbEff.ModelTag = "MtbEff"
-    # Now attach and schedule
     scObject.addDynamicEffector(mtbEff)
     sim.AddModelToTask("dynamicsTask", mtbEff)
     
     # (1) Array configuration
-    mtbCfg = messaging.MTBArrayConfigMsgPayload()
-    mtbCfg.numMTB = 3
-    mtbCfg.GtMatrix_B = [  # 3 x numMTB, row-major (X row, Y row, Z row)
-        1., 0., 0.,
-        0., 1., 0.,
-        0., 0., 1.
-    ]
-    mtbCfg.maxMtbDipoles = [0.2, 0.2, 0.2]   # A·m^2 per rod (set to your hardware)
-    mtbCfgMsg = messaging.MTBArrayConfigMsg().write(mtbCfg)
+    mtbConfigParams = messaging.MTBArrayConfigMsgPayload()
+    mtbConfigParams.numMTB = 3
+    mtbConfigParams.GtMatrix_B = [1., 0., 0., # 3 x numMTB, row-major (X row, Y row, Z row)
+                                  0., 1., 0.,
+                                  0., 0., 1.]
+    mtbConfigParams.maxMtbDipoles = [0.2, 0.2, 0.2]   # A·m^2 per rod (set to your hardware)
+    mtbCfgMsg = messaging.MTBArrayConfigMsg().write(mtbConfigParams)
     
     # (2) Command dipoles (start with zeros)
     mtbCmd = messaging.MTBCmdMsgPayload()
-    mtbCmd.mtbDipoleCmds = [0.0] * mtbCfg.numMTB
+    mtbCmd.mtbDipoleCmds = [0.0] * mtbConfigParams.numMTB
     mtbCmdMsg = messaging.MTBCmdMsg().write(mtbCmd)
     
     # (3) Wire messages BEFORE registering the effector
     mtbEff.mtbParamsInMsg.subscribeTo(mtbCfgMsg)
     mtbEff.mtbCmdInMsg.subscribeTo(mtbCmdMsg)
     mtbEff.magInMsg.subscribeTo(magModule.envOutMsgs[0])  # from your WMM module
-    
-    
-    # maxDipole = 0.1
-    # scObject.addDynamicEffector(mtb)
-    # sim.AddModelToTask("dynamicsTask", mtb)
+    # mtbEff.mtbCmdInMsg.subscribeTo(CONNECT FSW MESSAGE) # subscribe MTB effector command to fsw output
 
     ############################ FLIGHT SOFTWARE ##############################
 
@@ -217,7 +200,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     fsw.starTrackerMsgIn.subscribeTo(starTrackerSensor.sensorOutMsg) # subscribe to star tracker messages
     fsw.imuMsgIn.subscribeTo(imu.sensorOutMsg) # subscribe to IMU messages
     fsw.rwSpeedMsgIn.subscribeTo(rwStateEffector.rwSpeedOutMsg) # subscribe fsw reaction wheel speed input to reaction wheel output
-    fsw.magMsgIn.subscribeTo(magSensor.tamDataOutMsg)
+    fsw.magMsgIn.subscribeTo(magSensor.tamDataOutMsg) # subscribe fsw to magenotometer readings
     sim.AddModelToTask("fswTask", fsw)
     
     rwStateEffector.rwMotorCmdInMsg.subscribeTo(fsw.rwMotorTorqueOutMsg) # subscribe reaction wheel input to flight software control output
@@ -304,9 +287,9 @@ if __name__ == "__main__":
     mass = 3.05353136 # satellite mass [kg]
                   
     viz_filename = None # sim visualization savename
-    print_states = False
+    print_states = False # print states in flight software
     
-    sim_time = 6000
+    sim_time = 60
     dynamics_update_time = 60
     fsw_update_time = 60
     
@@ -319,7 +302,7 @@ if __name__ == "__main__":
     
     # command rotations relative to initial orientation
     sat_rot_axis = [1, 1.5, 0]
-    sat_rot_angle = 165
+    sat_rot_angle = 0
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight):
     # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  

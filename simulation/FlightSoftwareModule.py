@@ -4,6 +4,8 @@ import numpy as np
 from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
 import Quaternions as quat # quaternion operations
 
+# print(dir(messaging))
+
 class FlightSoftware(sysModel.SysModel):
     def __init__(self, G_matrix, update_time, rw_Inertia, satInertia, pointing_reference, print_states, controlMode):
         super(FlightSoftware, self).__init__()
@@ -85,7 +87,6 @@ class FlightSoftware(sysModel.SysModel):
         if self.magMsgIn.isWritten():
             self.magMsg = self.magMsgIn()
             magData = self.magMsg.tam_S
-            # print(magData)
             
         # convert error quaternions to nominal body frame, as IMU, Inertia Matrix, and Reaction Wheels are all defined in this frame already.
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
@@ -106,7 +107,7 @@ class FlightSoftware(sysModel.SysModel):
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
                 
             elif self.controlMode == "MAG":
-                pass
+                print(messaging.MTBCmdMsg)
             
         if self.output_states:
             q_reconstruct = quat.quat_mult(quat.quat_conjugate(q_error), q)
