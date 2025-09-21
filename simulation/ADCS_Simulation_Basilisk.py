@@ -168,16 +168,45 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     
     # create magnetic torque bar object
-    mtb = MtbEffector.MtbEffector()
-    mtb.ModelTag = "MTB"
-    mtbConfigParams = messaging.MTBArrayConfigMsgPayload()
-    mtbConfigParams.numMTB = 3
+    # mtb = MtbEffector.MtbEffector()
+    # mtb.ModelTag = "MTB"
+    # mtbConfigParams = messaging.MTBArrayConfigMsgPayload()
+    # mtbConfigParams.numMTB = 3
     
-    # row major torque bar alignments
-    mtbConfigParams.GtMatrix_B = [1., 0., 0.,
-                                  0., 1., 0.,
-                                  0., 0., 1.]
-    maxDipole = 0.1
+    # # row major torque bar alignments
+    # mtbConfigParams.GtMatrix_B = [1., 0., 0.,
+    #                               0., 1., 0.,
+    #                               0., 0., 1.]
+    
+    mtbEff = MtbEffector.MtbEffector()
+    mtbEff.ModelTag = "MtbEff"
+    # Now attach and schedule
+    scObject.addDynamicEffector(mtbEff)
+    sim.AddModelToTask("dynamicsTask", mtbEff)
+    
+    # (1) Array configuration
+    mtbCfg = messaging.MTBArrayConfigMsgPayload()
+    mtbCfg.numMTB = 3
+    mtbCfg.GtMatrix_B = [  # 3 x numMTB, row-major (X row, Y row, Z row)
+        1., 0., 0.,
+        0., 1., 0.,
+        0., 0., 1.
+    ]
+    mtbCfg.maxMtbDipoles = [0.2, 0.2, 0.2]   # A·m^2 per rod (set to your hardware)
+    mtbCfgMsg = messaging.MTBArrayConfigMsg().write(mtbCfg)
+    
+    # (2) Command dipoles (start with zeros)
+    mtbCmd = messaging.MTBCmdMsgPayload()
+    mtbCmd.mtbDipoleCmds = [0.0] * mtbCfg.numMTB
+    mtbCmdMsg = messaging.MTBCmdMsg().write(mtbCmd)
+    
+    # (3) Wire messages BEFORE registering the effector
+    mtbEff.mtbParamsInMsg.subscribeTo(mtbCfgMsg)
+    mtbEff.mtbCmdInMsg.subscribeTo(mtbCmdMsg)
+    mtbEff.magInMsg.subscribeTo(magModule.envOutMsgs[0])  # from your WMM module
+    
+    
+    # maxDipole = 0.1
     # scObject.addDynamicEffector(mtb)
     # sim.AddModelToTask("dynamicsTask", mtb)
 
