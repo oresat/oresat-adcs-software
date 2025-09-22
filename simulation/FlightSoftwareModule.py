@@ -5,6 +5,12 @@ from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
 import Quaternions as quat # quaternion operations
 
 # print(dir(messaging))
+# print(dir(messaging.ArrayMotorTorqueMsgPayload()))
+# print(messaging.ArrayMotorTorqueMsgPayload().motorTorque)
+print(dir(messaging.MTBCmdMsgPayload))
+print(messaging.MTBCmdMsgPayload.mtbDipoleCmds)
+# print(messaging.MTBMsgPayload.mtbNetTorque_B)
+# print(dir(messaging.MTBMsgPayload))
 
 class FlightSoftware(sysModel.SysModel):
     def __init__(self, G_matrix, update_time, rw_Inertia, satInertia, pointing_reference, print_states, controlMode):
@@ -21,6 +27,8 @@ class FlightSoftware(sysModel.SysModel):
         self.rwMotorTorqueOutMsg = messaging.ArrayMotorTorqueMsg()
         self.rwMotorTorquePayload = messaging.ArrayMotorTorqueMsgPayload()
         self.torque_vals = np.zeros(36) # initialize torque input array
+        
+        self.mag_torques = np.zeros(36)
         
         self.G_pinv = -np.linalg.pinv(G_matrix) # pseudo inverse matrix for torque calculations. Negated because of Basilisk conventions (I think)
         self.rwInertia = rw_Inertia # reaction wheel inertia (scalar)
@@ -107,7 +115,11 @@ class FlightSoftware(sysModel.SysModel):
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
                 
             elif self.controlMode == "MAG":
-                print(messaging.MTBCmdMsg)
+                output = [1,0,0]
+                
+                # print(messaging.MTBCmdMsg)
+                # print("here")
+                pass
             
         if self.output_states:
             q_reconstruct = quat.quat_mult(quat.quat_conjugate(q_error), q)
@@ -136,7 +148,7 @@ class FlightSoftware(sysModel.SysModel):
     
     def check_torque_vals(self, wheel_torque, rwSpeeds): # ensure torque does not exceed maxTorque and that wheel speed does not exceed maxSpeed by the beginning of next step
         
-        # wheel_torque = wheel_torque * 0.1
+        wheel_torque = wheel_torque * 0.1
         
         for i in range(len(self.torque_vals[:4])):
             projected_speed = rwSpeeds[i] + (wheel_torque[i]/self.rwInertia) * self.updateTime # predicted speed at requested torque after next time step

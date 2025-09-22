@@ -166,7 +166,6 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     RWFactory.addToSpacecraft(scObject.ModelTag, rwStateEffector, scObject)
     sim.AddModelToTask("dynamicsTask", rwStateEffector)
     
-    
     # create magnetic torque bar object
     mtbEff = MtbEffector.MtbEffector()
     mtbEff.ModelTag = "MtbEff"
@@ -179,7 +178,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     mtbConfigParams.GtMatrix_B = [1., 0., 0., # 3 x numMTB, row-major (X row, Y row, Z row)
                                   0., 1., 0.,
                                   0., 0., 1.]
-    mtbConfigParams.maxMtbDipoles = [0.2, 0.2, 0.2]   # A·m^2 per rod (set to your hardware)
+    mtbConfigParams.maxMtbDipoles = [0.5e-3, 0.5e-3, 0.75e-3]   # A·m^2 per rod (set to your hardware)
     mtbCfgMsg = messaging.MTBArrayConfigMsg().write(mtbConfigParams)
     
     # (2) Command dipoles (start with zeros)
@@ -190,7 +189,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     # (3) Wire messages BEFORE registering the effector
     mtbEff.mtbParamsInMsg.subscribeTo(mtbCfgMsg)
     mtbEff.mtbCmdInMsg.subscribeTo(mtbCmdMsg)
-    mtbEff.magInMsg.subscribeTo(magModule.envOutMsgs[0])  # from your WMM module
+    mtbEff.magInMsg.subscribeTo(magModule.envOutMsgs[0])  # from WMM module
     # mtbEff.mtbCmdInMsg.subscribeTo(CONNECT FSW MESSAGE) # subscribe MTB effector command to fsw output
 
     ############################ FLIGHT SOFTWARE ##############################
@@ -289,7 +288,7 @@ if __name__ == "__main__":
     viz_filename = None # sim visualization savename
     print_states = False # print states in flight software
     
-    sim_time = 60
+    sim_time = 6000
     dynamics_update_time = 60
     fsw_update_time = 60
     
@@ -302,7 +301,7 @@ if __name__ == "__main__":
     
     # command rotations relative to initial orientation
     sat_rot_axis = [1, 1.5, 0]
-    sat_rot_angle = 0
+    sat_rot_angle = 20
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight):
     # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
