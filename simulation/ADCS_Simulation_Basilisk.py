@@ -172,25 +172,22 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     scObject.addDynamicEffector(mtbEff)
     sim.AddModelToTask("dynamicsTask", mtbEff)
     
-    # (1) Array configuration
     mtbConfigParams = messaging.MTBArrayConfigMsgPayload()
     mtbConfigParams.numMTB = 3
     mtbConfigParams.GtMatrix_B = [1., 0., 0., # 3 x numMTB, row-major (X row, Y row, Z row)
                                   0., 1., 0.,
                                   0., 0., 1.]
-    mtbConfigParams.maxMtbDipoles = [0.5e-3, 0.5e-3, 0.75e-3]   # A·m^2 per rod (set to your hardware)
+    mtbConfigParams.maxMtbDipoles = [0.5e-3, 0.5e-3, 0.75e-3]   # individual rod Dipole limits. Currently set to max continuous limit, not burst limit [A·m^2]
     mtbCfgMsg = messaging.MTBArrayConfigMsg().write(mtbConfigParams)
     
-    # (2) Command dipoles (start with zeros)
     mtbCmd = messaging.MTBCmdMsgPayload()
     mtbCmd.mtbDipoleCmds = [0.0] * mtbConfigParams.numMTB
     mtbCmdMsg = messaging.MTBCmdMsg().write(mtbCmd)
     
-    # (3) Wire messages BEFORE registering the effector
+    # subscribe messages
     mtbEff.mtbParamsInMsg.subscribeTo(mtbCfgMsg)
     mtbEff.mtbCmdInMsg.subscribeTo(mtbCmdMsg)
     mtbEff.magInMsg.subscribeTo(magModule.envOutMsgs[0])  # from WMM module
-    # mtbEff.mtbCmdInMsg.subscribeTo(CONNECT FSW MESSAGE) # subscribe MTB effector command to fsw output
 
     ############################ FLIGHT SOFTWARE ##############################
 
@@ -202,7 +199,8 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     fsw.magMsgIn.subscribeTo(magSensor.tamDataOutMsg) # subscribe fsw to magenotometer readings
     sim.AddModelToTask("fswTask", fsw)
     
-    rwStateEffector.rwMotorCmdInMsg.subscribeTo(fsw.rwMotorTorqueOutMsg) # subscribe reaction wheel input to flight software control output
+    rwStateEffector.rwMotorCmdInMsg.subscribeTo(fsw.rwMotorTorqueOutMsg) # subscribe reaction wheel command input to flight software control output
+    mtbEff.mtbCmdInMsg.subscribeTo(fsw.magTorqueOutMsg)  # subscribe magnetorquer command input to flight software control output
     
     # determine initial pointing vector for relative target calculations
     sat_q_init = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle) # account for any rotations of the satellite it self at sim initialization
@@ -289,8 +287,8 @@ if __name__ == "__main__":
     print_states = False # print states in flight software
     
     sim_time = 6000
-    dynamics_update_time = 60
-    fsw_update_time = 60
+    dynamics_update_time = 10
+    fsw_update_time = 10
     
     # initial satellite states
     init_rot_axis = [0, 1, 1]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 

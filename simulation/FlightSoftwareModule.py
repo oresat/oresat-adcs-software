@@ -4,14 +4,6 @@ import numpy as np
 from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
 import Quaternions as quat # quaternion operations
 
-# print(dir(messaging))
-# print(dir(messaging.ArrayMotorTorqueMsgPayload()))
-# print(messaging.ArrayMotorTorqueMsgPayload().motorTorque)
-print(dir(messaging.MTBCmdMsgPayload))
-print(messaging.MTBCmdMsgPayload.mtbDipoleCmds)
-# print(messaging.MTBMsgPayload.mtbNetTorque_B)
-# print(dir(messaging.MTBMsgPayload))
-
 class FlightSoftware(sysModel.SysModel):
     def __init__(self, G_matrix, update_time, rw_Inertia, satInertia, pointing_reference, print_states, controlMode):
         super(FlightSoftware, self).__init__()
@@ -28,6 +20,9 @@ class FlightSoftware(sysModel.SysModel):
         self.rwMotorTorquePayload = messaging.ArrayMotorTorqueMsgPayload()
         self.torque_vals = np.zeros(36) # initialize torque input array
         
+        # setup magnetorquer output messages
+        self.magTorqueOutMsg = messaging.MTBCmdMsg()
+        self.magTorquePayload = messaging.MTBCmdMsgPayload()
         self.mag_torques = np.zeros(36)
         
         self.G_pinv = -np.linalg.pinv(G_matrix) # pseudo inverse matrix for torque calculations. Negated because of Basilisk conventions (I think)
@@ -107,7 +102,7 @@ class FlightSoftware(sysModel.SysModel):
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hermisphere boundaries
         self.error.append(q_error) # required for plotting after conclusion of sim
         
-        if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime):
+        if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime): # turn controller on at specified time and check control mode for either Reaction Wheel or Magnetorquer (MTB) control
             if self.controlMode == "RW":
                 desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
                 # desired_torque = self.sliding_bangbang_quat(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller
@@ -115,11 +110,11 @@ class FlightSoftware(sysModel.SysModel):
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
                 
             elif self.controlMode == "MAG":
-                output = [1,0,0]
-                
-                # print(messaging.MTBCmdMsg)
-                # print("here")
-                pass
+                self.mag_torques[0] = 2
+                self.mag_torques[1] = 2
+                self.mag_torques[2] = 2
+                self.magTorquePayload.mtbDipoleCmds = self.mag_torques
+                self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
             
         if self.output_states:
             q_reconstruct = quat.quat_mult(quat.quat_conjugate(q_error), q)
