@@ -38,7 +38,7 @@ class FlightSoftware(sysModel.SysModel):
         self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
         self.bangbang_rate = 0.2 # max rotation rate of bang bang controller
         self.output_states = print_states # output state messages or not for debugging
-        self.controllerStartTime = 60 # time at which controller should begin taking control [seconds]
+        self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
         self.LQR_max_error = 0.01

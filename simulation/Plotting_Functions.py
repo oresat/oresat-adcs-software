@@ -39,17 +39,17 @@ def plot_rw_speeds(timeData, dataOmegaRW, numRW, errorArray=None):
     plt.title("Reaction Wheel Speeds and Orientation Error")
     plt.show()
     
-def plot_magfield(TAMtimes, TAMvalues, orbital_period, time_axis = "orbits"): 
+def plot_magfield(times, TAMvalues, orbital_period, time_axis = "orbits"): 
     """Plot the measured three-axis magnetic field values"""
     if time_axis == "seconds":
-        time_array = TAMtimes
+        time_array = times
         label_name = 'Time [s]'
     elif time_axis == "orbits":
-        time_array = TAMtimes/orbital_period # convert times to orbital periods
+        time_array = times/orbital_period # convert times to orbital periods
         label_name = 'Orbits'
     else:
         print("Unkown time axis argument, defaulting to 'orbit'")
-        time_array = TAMtimes/orbital_period # convert times to orbital periods
+        time_array = times/orbital_period # convert times to orbital periods
         label_name = 'Orbits'
         
     fig, ax1 = plt.subplots(figsize=(8,4))
@@ -64,4 +64,31 @@ def plot_magfield(TAMtimes, TAMvalues, orbital_period, time_axis = "orbits"):
     
     plt.legend()
     plt.title("3-Axis Magnetometer Measurements")
+    plt.show()
+    
+def plot_imu(times, imuValues, orbital_period, time_axis = "orbits"): 
+    """Plot the measured IMU values"""
+    if time_axis == "seconds":
+        time_array = times
+        label_name = 'Time [s]'
+    elif time_axis == "orbits":
+        time_array = times/orbital_period # convert times to orbital periods
+        label_name = 'Orbits'
+    else:
+        print("Unkown time axis argument, defaulting to 'orbit'")
+        time_array = times/orbital_period # convert times to orbital periods
+        label_name = 'Orbits'
+        
+    fig, ax1 = plt.subplots(figsize=(8,4))
+    axis_labels = [r'$\omega_x$', r'$\omega_y$', r'$\omega_z$']
+    for idx in range(3):
+        ax1.plot(time_array, imuValues[:, idx],
+                 color=getLineColor(idx, 3, 3, "nipy_spectral"),
+                 label=axis_labels[idx])
+    ax1.set_xlabel(label_name)
+    ax1.set_ylabel('Magnetic Field [T]')
+    ax1.grid(True)
+    
+    plt.legend()
+    plt.title("3-Axis Satellite Body Rates")
     plt.show()

@@ -7,7 +7,7 @@ from Basilisk.simulation import spacecraft, starTracker, imuSensor, reactionWhee
 from Basilisk.utilities import SimulationBaseClass, macros, vizSupport, simIncludeGravBody, orbitalMotion, simIncludeRW, unitTestSupport # import general simulation support files
 from Basilisk.architecture import messaging
 from Basilisk import __path__
-from Plotting_Functions import plot_rw_speeds, plot_magfield
+from Plotting_Functions import plot_rw_speeds, plot_magfield, plot_imu
 from FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
 from scipy.spatial.transform import Rotation as R # to create nadir pointing quaternion
 import Quaternions as quat
@@ -253,26 +253,25 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     sim.ExecuteSimulation() # execute simulation
     end = time.time()
     
-    plot_times = rwSpeedLog.times() * 1e-9
+    RW_plot_times = rwSpeedLog.times() * 1e-9
     error_angles = [quat.error_angle(quaternion) for quaternion in fsw.error[:-1]]
     error_expanded = np.repeat(error_angles, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
     error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
-    plot_rw_speeds(plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
+    plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
     
+    plot_times = magSensorRec.times() * 1e-9
     TAMvalues = magSensorRec.tam_S
-    TAMtimes = magSensorRec.times()*1e-9
-    plot_magfield(TAMtimes, TAMvalues, orbital_period, "orbits")
+    plot_magfield(plot_times, TAMvalues, orbital_period, "orbits")
+    
+    imuValues = imuRec.AngVelPlatform
+    plot_imu(plot_times, imuValues, orbital_period, "orbits")
     
     print(f"\nSimulation completed in {end-start} seconds")
     print(f"\nFinal target was: {fsw.q_target}")
     print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
     print(f"Final error: {quat.error_angle(fsw.error[-1]):.3f} degrees")
     
-    # print("Message type:", imuRec.findMsgName())     # e.g., "IMUSensorMsg"
-    # print(imuRec.simple_attribute_map())             # dict of attr -> shape/indices
-    # print(imuRec.explore_and_find_subattr("vel"))    # handy for guessing names
-    # print(imuRec.sensedAngVel_B)
-    
+
 if __name__ == "__main__":
     Jxx = 0.01650237
     Jxy = 0.00000711
@@ -293,7 +292,7 @@ if __name__ == "__main__":
     viz_filename = None # sim visualization savename
     print_states = False # print states in flight software
     
-    sim_time = 30000
+    sim_time = 36000
     dynamics_update_time = 10
     fsw_update_time = 10
     
@@ -301,12 +300,12 @@ if __name__ == "__main__":
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
-    omega_init_rpm = np.array([0.0, 1, 0.0])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([1.0, 1.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
-    sat_rot_axis = [1, 1.5, 0]
-    sat_rot_angle = 20
+    sat_rot_axis = [-1, -1.5, 0]
+    sat_rot_angle = 165
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight):
     # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
