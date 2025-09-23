@@ -79,10 +79,10 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     oe = orbitalMotion.ClassicElements()
     oe.a = (415+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
     oe.e = 0 # eccentricity
-    oe.i = 0 * macros.D2R # inclination [rad]
+    oe.i = 30 * macros.D2R # inclination [rad]
     oe.Omega = 0.0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
     oe.omega = 0.0 * macros.D2R  # argument of periapsis [rad]
-    oe.f = 90 * macros.D2R       # true anomaly [rad]
+    oe.f = 0 * macros.D2R       # true anomaly [rad]
     
     rN, vN = orbitalMotion.elem2rv(mu_earth, oe)
     oe = orbitalMotion.rv2elem(mu_earth, rN, vN)  # this stores consistent initial orbit elements, fixes numerical errors, particulary with perfectly circular orbits. Consult ChatGPT for detailed explanation.
@@ -91,6 +91,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     # To set the spacecraft initial conditions, the following initial position and velocity variables are set:
     scObject.hub.r_CN_NInit = rN  # r_BN_N [m]
     scObject.hub.v_CN_NInit = vN  # v_BN_N [m/s]
+    print(orbital_period)
     
     ############################### SENSORS ###################################
     
@@ -166,7 +167,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     RWFactory.addToSpacecraft(scObject.ModelTag, rwStateEffector, scObject)
     sim.AddModelToTask("dynamicsTask", rwStateEffector)
     
-    # create magnetic torque bar object
+    # create magnetic torque bar (MTB) object
     mtbEff = MtbEffector.MtbEffector()
     mtbEff.ModelTag = "MtbEff"
     scObject.addDynamicEffector(mtbEff)
@@ -177,7 +178,8 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     mtbConfigParams.GtMatrix_B = [1., 0., 0., # 3 x numMTB, row-major (X row, Y row, Z row)
                                   0., 1., 0.,
                                   0., 0., 1.]
-    mtbConfigParams.maxMtbDipoles = [0.5e-3, 0.5e-3, 0.75e-3]   # individual rod Dipole limits. Currently set to max continuous limit, not burst limit [A·m^2]
+    # mtbConfigParams.maxMtbDipoles = [0.5e-3, 0.5e-3, 0.75e-3]   # individual rod Dipole limits. Currently set to max continuous limit, not burst limit [A·m^2]
+    mtbConfigParams.maxMtbDipoles = [5, 5, 7.5] 
     mtbCfgMsg = messaging.MTBArrayConfigMsg().write(mtbConfigParams)
     
     mtbCmd = messaging.MTBCmdMsgPayload()
@@ -266,6 +268,11 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
     print(f"Final error: {quat.error_angle(fsw.error[-1]):.3f} degrees")
     
+    # print("Message type:", imuRec.findMsgName())     # e.g., "IMUSensorMsg"
+    # print(imuRec.simple_attribute_map())             # dict of attr -> shape/indices
+    # print(imuRec.explore_and_find_subattr("vel"))    # handy for guessing names
+    # print(imuRec.sensedAngVel_B)
+    
 if __name__ == "__main__":
     Jxx = 0.01650237
     Jxy = 0.00000711
@@ -286,15 +293,15 @@ if __name__ == "__main__":
     viz_filename = None # sim visualization savename
     print_states = False # print states in flight software
     
-    sim_time = 6000
+    sim_time = 36000
     dynamics_update_time = 10
     fsw_update_time = 10
     
     # initial satellite states
-    init_rot_axis = [0, 1, 1]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
+    init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
-    omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([0.0, 1, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation

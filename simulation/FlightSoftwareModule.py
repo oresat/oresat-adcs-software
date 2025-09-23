@@ -38,7 +38,7 @@ class FlightSoftware(sysModel.SysModel):
         self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
         self.bangbang_rate = 0.2 # max rotation rate of bang bang controller
         self.output_states = print_states # output state messages or not for debugging
-        self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
+        self.controllerStartTime = 60 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
         self.LQR_max_error = 0.01
@@ -110,9 +110,20 @@ class FlightSoftware(sysModel.SysModel):
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
                 
             elif self.controlMode == "MAG":
-                self.mag_torques[0] = 2
-                self.mag_torques[1] = 2
-                self.mag_torques[2] = 2
+                # k = 0.05
+                k = 4*np.pi/5563*(1+np.sin(30*2*np.pi/180))*0.00651814
+                # print(k)
+                # print(magData, np.linalg.norm(magData))
+                # m = -k/np.linalg.norm(magData)*np.asarray(magData)
+                m = k/(np.linalg.norm(magData)**2)*np.cross(omega, magData)
+                # print(np.asarray(omega).dot(L))
+                # print(omega)
+                # self.mag_torques[0] = 2
+                # self.mag_torques[1] = 2
+                # self.mag_torques[2] = 2
+                self.mag_torques[0] = m[0]
+                self.mag_torques[1] = m[1]
+                self.mag_torques[2] = m[2]
                 self.magTorquePayload.mtbDipoleCmds = self.mag_torques
                 self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
             
