@@ -178,8 +178,8 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     mtbConfigParams.GtMatrix_B = [1., 0., 0., # 3 x numMTB, row-major (X row, Y row, Z row)
                                   0., 1., 0.,
                                   0., 0., 1.]
-    # mtbConfigParams.maxMtbDipoles = [0.5e-3, 0.5e-3, 0.75e-3]   # individual rod Dipole limits. Currently set to max continuous limit, not burst limit [A·m^2]
-    mtbConfigParams.maxMtbDipoles = [5, 5, 7.5] 
+    # mtbConfigParams.maxMtbDipoles = [0.5e-3, 0.5e-3, 0.75e-3] # individual rod Dipole limits. Currently set to max continuous limit, not burst limit [A·m^2]
+    mtbConfigParams.maxMtbDipoles = [0.5e-2, 0.5e-2, 0.75e-2] 
     mtbCfgMsg = messaging.MTBArrayConfigMsg().write(mtbConfigParams)
     
     mtbCmd = messaging.MTBCmdMsgPayload()
@@ -293,7 +293,7 @@ if __name__ == "__main__":
     viz_filename = None # sim visualization savename
     print_states = False # print states in flight software
     
-    sim_time = 36000
+    sim_time = 30000
     dynamics_update_time = 10
     fsw_update_time = 10
     
