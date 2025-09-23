@@ -110,8 +110,8 @@ class FlightSoftware(sysModel.SysModel):
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
                 
             elif self.controlMode == "MAG":
-                # k = 0.05
-                k = 4*np.pi/5563*(1+np.sin(30*2*np.pi/180))*0.00651814
+                k = 0.05
+                # k = 4*np.pi/5563*(1+np.sin(30*2*np.pi/180))*0.00651814
                 # print(k)
                 # print(magData, np.linalg.norm(magData))
                 # m = -k/np.linalg.norm(magData)*np.asarray(magData)
