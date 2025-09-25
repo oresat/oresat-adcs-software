@@ -86,7 +86,7 @@ def plot_imu(times, imuValues, orbital_period, time_axis = "orbits"):
                  color=getLineColor(idx, 3, 3, "nipy_spectral"),
                  label=axis_labels[idx])
     ax1.set_xlabel(label_name)
-    ax1.set_ylabel('Magnetic Field [T]')
+    ax1.set_ylabel('Angular Velocity [rad/s]')
     ax1.grid(True)
     
     plt.legend()

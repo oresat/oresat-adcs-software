@@ -11,11 +11,11 @@ from Plotting_Functions import plot_rw_speeds, plot_magfield, plot_imu
 from FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
 from scipy.spatial.transform import Rotation as R # to create nadir pointing quaternion
 import Quaternions as quat
-import sys
+from sys import exit
 bskPath = __path__[0]
 
-def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, 
-             init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, control_mode):
+def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle,
+             omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, control_mode, mission_mode):
     """
     Gets all satellite states (attitude quaternion, omega)
     
@@ -87,6 +87,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     rN, vN = orbitalMotion.elem2rv(mu_earth, oe)
     oe = orbitalMotion.rv2elem(mu_earth, rN, vN)  # this stores consistent initial orbit elements, fixes numerical errors, particulary with perfectly circular orbits. Consult ChatGPT for detailed explanation.
     orbital_period = 2*np.pi*np.sqrt(oe.a**3/mu_earth) # define orbital period for plotting
+    orbital_inclination = oe.i # used for readable argument passing when defining FSW
     
     # To set the spacecraft initial conditions, the following initial position and velocity variables are set:
     scObject.hub.r_CN_NInit = rN  # r_BN_N [m]
@@ -194,7 +195,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     ############################ FLIGHT SOFTWARE ##############################
 
     # Create flight software object and subscribe all sensors
-    fsw = FlightSoftware(G, fsw_update_time, wheelInertia, J, pointing_reference, print_states, control_mode) # Create flight software object. Model tag already defined in __init__ as flight_software
+    fsw = FlightSoftware(G, fsw_update_time, wheelInertia, J, pointing_reference, print_states, control_mode, mission_mode, orbital_period, orbital_inclination) # Create flight software object. Model tag already defined in __init__ as flight_software
     fsw.starTrackerMsgIn.subscribeTo(starTrackerSensor.sensorOutMsg) # subscribe to star tracker messages
     fsw.imuMsgIn.subscribeTo(imu.sensorOutMsg) # subscribe to IMU messages
     fsw.rwSpeedMsgIn.subscribeTo(rwStateEffector.rwSpeedOutMsg) # subscribe fsw reaction wheel speed input to reaction wheel output
@@ -214,7 +215,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
         q_init = quat.quat_mult(quat.axis_angle_to_quaternion([0,1,0], 180), sat_q_init)
     else:
         print("ERROR: Invalid pointing reference selected!")
-        sys.exit()
+        exit()
     
     q_rot = quat.axis_angle_to_quaternion(sat_rot_axis, sat_rot_angle)
     fsw.q_target = quat.quat_mult(q_rot, q_init) # Probably shouldn't be applying hemisphere check to this operation! Removed for now, check logic.
@@ -224,6 +225,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     ############################## SIMULATION #################################
     
+    # print(dir(rwStateEffector.rwSpeedOutMsg))
     rwSpeedLog = rwStateEffector.rwSpeedOutMsg.recorder()
     sim.AddModelToTask("dynamicsTask", rwSpeedLog)
 
@@ -253,24 +255,26 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     sim.ExecuteSimulation() # execute simulation
     end = time.time()
     
-    RW_plot_times = rwSpeedLog.times() * 1e-9
-    error_angles = [quat.error_angle(quaternion) for quaternion in fsw.error[:-1]]
-    error_expanded = np.repeat(error_angles, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
-    error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
-    plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
-    
-    plot_times = magSensorRec.times() * 1e-9
-    TAMvalues = magSensorRec.tam_S
-    plot_magfield(plot_times, TAMvalues, orbital_period, "orbits")
+    plot_times = imuRec.times() * 1e-9
+    if (control_mode == "RW"):
+        RW_plot_times = rwSpeedLog.times() * 1e-9
+        error_angles = [quat.error_angle(quaternion) for quaternion in fsw.error[:-1]]
+        error_expanded = np.repeat(error_angles, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
+        error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
+        plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
+        time_axis = "seconds"
+    elif (control_mode == "MAG"):
+        TAMvalues = magSensorRec.tam_S
+        plot_magfield(plot_times, TAMvalues, orbital_period, "orbits")
+        time_axis = "orbits"
     
     imuValues = imuRec.AngVelPlatform
-    plot_imu(plot_times, imuValues, orbital_period, "orbits")
+    plot_imu(plot_times, imuValues, orbital_period, time_axis)
     
     print(f"\nSimulation completed in {end-start} seconds")
     print(f"\nFinal target was: {fsw.q_target}")
     print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
     print(f"Final error: {quat.error_angle(fsw.error[-1]):.3f} degrees")
-    
 
 if __name__ == "__main__":
     Jxx = 0.01650237
@@ -292,9 +296,9 @@ if __name__ == "__main__":
     viz_filename = None # sim visualization savename
     print_states = False # print states in flight software
     
-    sim_time = 36000
-    dynamics_update_time = 10
-    fsw_update_time = 10
+    sim_time = 30000
+    dynamics_update_time = 2
+    fsw_update_time = 3
     
     # initial satellite states
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
@@ -311,5 +315,11 @@ if __name__ == "__main__":
     # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     pointing_reference = "ST"
     control_mode = "MAG"
+    mission_mode = "DETUMBLE" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN
     
-    sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle, omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, control_mode) # call and run simulation
+    if ((control_mode == "RW") and (fsw_update_time > 2)): # give user warning about system settings so THEY DON'T WASTE TIME
+        print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
+        exit()
+    
+    sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle,
+             omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, control_mode, mission_mode) # call and run simulation
