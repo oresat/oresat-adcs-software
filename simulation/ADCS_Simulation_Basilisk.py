@@ -92,7 +92,6 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     # To set the spacecraft initial conditions, the following initial position and velocity variables are set:
     scObject.hub.r_CN_NInit = rN  # r_BN_N [m]
     scObject.hub.v_CN_NInit = vN  # v_BN_N [m/s]
-    print(orbital_period)
     
     ############################### SENSORS ###################################
     
@@ -179,8 +178,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     mtbConfigParams.GtMatrix_B = [1., 0., 0., # 3 x numMTB, row-major (X row, Y row, Z row)
                                   0., 1., 0.,
                                   0., 0., 1.]
-    # mtbConfigParams.maxMtbDipoles = [0.5e-3, 0.5e-3, 0.75e-3] # individual rod Dipole limits. Currently set to max continuous limit, not burst limit [A·m^2]
-    mtbConfigParams.maxMtbDipoles = [0.5e-2, 0.5e-2, 0.75e-2] 
+    mtbConfigParams.maxMtbDipoles = [0.5e-2, 0.5e-2, 0.75e-2] # individual rod Dipole limits. Currently set to max continuous limit, not burst limit [A·m^2]
     mtbCfgMsg = messaging.MTBArrayConfigMsg().write(mtbConfigParams)
     
     mtbCmd = messaging.MTBCmdMsgPayload()
@@ -225,7 +223,6 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     ############################## SIMULATION #################################
     
-    # print(dir(rwStateEffector.rwSpeedOutMsg))
     rwSpeedLog = rwStateEffector.rwSpeedOutMsg.recorder()
     sim.AddModelToTask("dynamicsTask", rwSpeedLog)
 
@@ -298,7 +295,7 @@ if __name__ == "__main__":
     
     sim_time = 30000
     dynamics_update_time = 2
-    fsw_update_time = 3
+    fsw_update_time = 2
     
     # initial satellite states
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
@@ -315,11 +312,14 @@ if __name__ == "__main__":
     # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     pointing_reference = "ST"
     control_mode = "MAG"
-    mission_mode = "DETUMBLE" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN
+    mission_mode = "DETUMBLE" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
     
     if ((control_mode == "RW") and (fsw_update_time > 2)): # give user warning about system settings so THEY DON'T WASTE TIME
         print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
         exit()
-    
+    if((control_mode == "RW") and (mission_mode != "POINTING")):
+        print("\nERROR: reaction wheels can only use 'POINTING' mission mode\nExiting sim")
+        exit()
+        
     sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle,
              omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, control_mode, mission_mode) # call and run simulation

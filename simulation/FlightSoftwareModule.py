@@ -10,7 +10,7 @@ class FlightSoftware(sysModel.SysModel):
         super(FlightSoftware, self).__init__()
         self.ModelTag = "flight_software"
 
-        # Create a reader for the star tracker, IMU, magnetometer, and reaction wheel messages
+        # Create readers for the star tracker, IMU, magnetometer, and reaction wheel messages
         self.starTrackerMsgIn = messaging.STSensorMsgReader() 
         self.imuMsgIn = messaging.IMUSensorMsgReader()
         self.rwSpeedMsgIn = messaging.RWSpeedMsgReader()
@@ -19,12 +19,12 @@ class FlightSoftware(sysModel.SysModel):
         # setup reaction wheel output messages
         self.rwMotorTorqueOutMsg = messaging.ArrayMotorTorqueMsg()
         self.rwMotorTorquePayload = messaging.ArrayMotorTorqueMsgPayload()
-        self.torque_vals = np.zeros(36) # initialize torque input array
+        self.torque_vals = np.zeros(36) # initialize RW torque input array
         
         # setup magnetorquer output messages
         self.magTorqueOutMsg = messaging.MTBCmdMsg()
         self.magTorquePayload = messaging.MTBCmdMsgPayload()
-        self.mag_torques = np.zeros(36)
+        self.mag_torques = np.zeros(36) # initialize MTB torque input array
         
         self.G_pinv = -np.linalg.pinv(G_matrix) # pseudo inverse matrix for torque calculations. Negated because of Basilisk conventions (I think)
         self.rwInertia = rw_Inertia # reaction wheel inertia (scalar)
@@ -75,32 +75,29 @@ class FlightSoftware(sysModel.SysModel):
     def UpdateState(self, currentTimeNanos):
         if self.crashTheKernel == True: # This method allows error message printing *jank intensifies*
             exit()
-            
-        # gather system states
+        
+        ######### GATHER SYSTEM STATES AND CALCULATE ERROR QUATERNION #########
+        if self.imuMsgIn.isWritten():
+            self.imuMsg = self.imuMsgIn()
+            omega = self.imuMsg.AngVelPlatform
+        if self.rwSpeedMsgIn.isWritten():
+            self.rwSpeedMsg = self.rwSpeedMsgIn()
+            wheelSpeeds = self.rwSpeedMsg.wheelSpeeds
+        if self.magMsgIn.isWritten():
+            self.magMsg = self.magMsgIn()
+            magData = self.magMsg.tam_S
         if self.starTrackerMsgIn.isWritten():
             self.starTrackerMsg = self.starTrackerMsgIn()
             q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
             q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
             
-            # select reference vector for pointing error calculations
+            # select and calculate reference vector for pointing error calculations
             if self.pointing == "ST":
                 q = q_star_tracker
             elif self.pointing == "SC":
                 q = quat.quat_mult(self.q_plusZ_rot, q_star_tracker)
             elif self.pointing == "CFC":
                 q = quat.quat_mult(self.q_minusZ_rot, q_star_tracker)
-            
-        if self.imuMsgIn.isWritten():
-            self.imuMsg = self.imuMsgIn()
-            omega = self.imuMsg.AngVelPlatform
-            
-        if self.rwSpeedMsgIn.isWritten():
-            self.rwSpeedMsg = self.rwSpeedMsgIn()
-            wheelSpeeds = self.rwSpeedMsg.wheelSpeeds
-            
-        if self.magMsgIn.isWritten():
-            self.magMsg = self.magMsgIn()
-            magData = self.magMsg.tam_S
             
         # convert error quaternions to nominal body frame, as IMU, Inertia Matrix, and Reaction Wheels are all defined in this frame already.
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
@@ -112,24 +109,25 @@ class FlightSoftware(sysModel.SysModel):
             q_error = quat.quat_mult(self.CFC2B, quat.quat_mult(q_error, self.B2CFC)) # equivalent to q_error_body = R_b_cfc * q_error_cfc * R_cfc_b
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hermisphere boundaries
         self.error.append(q_error) # required for plotting after conclusion of sim
-        
+    
+        ######################### CONTROL LOGIC ###############################    
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime): # turn controller on at specified time and check control mode for either Reaction Wheel or Magnetorquer (MTB) control
             if self.actuator_mode == "RW":
                 if self.mission_mode == "POINTING":
                     desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
                     # desired_torque = self.sliding_bangbang_quat(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller (bang-bang sliding mode controller)
                     wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
-                    self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload
+                    self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
                 else:
                     print("ERROR: Unknown mission mode specified", flush = True)
                     self.crashTheKernel = True
-                
+            
             elif self.actuator_mode == "MAG":
                 if self.mission_mode == "DETUMBLE":
-                    m = self.detumble_gain/(np.linalg.norm(magData)**2)*np.cross(omega, magData)
-                    self.mag_torques[:3] = m
-                    self.magTorquePayload.mtbDipoleCmds = self.mag_torques
-                    self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
+                    desired_torque = self.detumble_gain/(np.linalg.norm(magData)**2)*np.cross(omega, magData) # detumble controller as defined by Markley & Crassidis
+                    self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
+                elif self.mission_mode ==  "POINTING":
+                    pass
                 else:
                     print("ERROR: Unknown mission mode specified", flush = True)
                     self.crashTheKernel = True
@@ -148,6 +146,11 @@ class FlightSoftware(sysModel.SysModel):
             print("Body rates: ", omega)
             print("Desired torque: ", desired_torque)
             print("Wheel Torque: ", wheel_torque)
+    
+    def command_MTB_torques(self, desired_torque, currentTimeNanos):
+        self.mag_torques[:3] = desired_torque
+        self.magTorquePayload.mtbDipoleCmds = self.mag_torques
+        self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
         
     def command_wheel_torques(self, currentTimeNanos, wheel_torque, wheelSpeeds): # send commanded torque values to reaction wheels
         self.check_torque_vals(wheel_torque, wheelSpeeds) # ensure none of the torque values exceed max torque or accelerate wheel past max RPM in either direction and write to self.torque_vals
