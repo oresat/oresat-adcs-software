@@ -251,20 +251,23 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     end = time.time()
     
     plot_times = imuRec.times() * 1e-9
-    # if (actuator_mode == "RW"):
-    RW_plot_times = rwSpeedLog.times() * 1e-9
     error_angles = [quat.error_angle(quaternion) for quaternion in fsw.error[:-1]]
     error_expanded = np.repeat(error_angles, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
     error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
-    plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
-    time_axis = "seconds"
-    if (actuator_mode == "MAG"):
+    if (actuator_mode == "RW"):
+        RW_plot_times = rwSpeedLog.times() * 1e-9
+        print(len(RW_plot_times))
+        plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
+        # plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW)
+        time_axis = "seconds"
+    elif (actuator_mode == "MAG"):
         # TAMvalues = magSensorRec.tam_S
         # plot_magfield(plot_times, TAMvalues, orbital_period, "orbits")
         time_axis = "orbits"
     
     imuValues = imuRec.AngVelPlatform
-    plot_imu(plot_times, imuValues, orbital_period, time_axis)
+    error_angles.append(quat.error_angle(fsw.error[-1])) # append final value, as unlike RW's, the IMU is in the FSW task, rather than the dynamics task, so has array logic had to be modified
+    plot_imu(plot_times, imuValues, orbital_period, time_axis, error_angles)
     
     print(f"\nSimulation completed in {end-start} seconds")
     print(f"\nFinal target was: {fsw.q_target}")
@@ -291,16 +294,6 @@ if __name__ == "__main__":
     viz_filename = None # sim visualization savename
     print_states = False # print states in flight software
     
-    # realistic MAG sim setup
-    sim_time = 36000
-    dynamics_update_time = 2
-    fsw_update_time = 2
-    
-    # realistic RW sim setup
-    # sim_time = 100
-    # dynamics_update_time = 0.01
-    # fsw_update_time = 0.1
-    
     # initial satellite states
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
@@ -309,20 +302,33 @@ if __name__ == "__main__":
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
-    sat_rot_axis = [-1, -1.5, 0]
+    sat_rot_axis = [-1, 0, 0]
     sat_rot_angle = 20
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "ST" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    actuator_mode = "RW" # Valid modes are RW and MAG
+    actuator_mode = "MAG" # Valid modes are RW and MAG
     mission_mode = "POINTING" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
     
-    if ((actuator_mode == "RW") and (fsw_update_time > 2)): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
-        print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
-        exit()
-    if((actuator_mode == "RW") and (mission_mode != "POINTING")): # warn about nonexistent control mode for reaction wheels
-        print("\nERROR: reaction wheels can only use 'POINTING' mission mode\nExiting sim")
-        exit()
+    
+            
+    if (actuator_mode == "MAG"): # realistic RW sim setup
+        sim_time = 6000
+        dynamics_update_time = 0.2
+        fsw_update_time = 0.2
+
+    elif (actuator_mode == "RW"): # realistic MAG sim setup
+        sim_time = 100
+        dynamics_update_time = 0.01
+        fsw_update_time = 0.1
+
+        if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
+            print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
+            exit()
+        if (mission_mode != "POINTING"): # warn about nonexistent control mode for reaction wheels
+            print("\nERROR: reaction wheels only support 'POINTING' mission mode\nExiting sim")
+            exit()
+    
     print(f"\nActuator Mode: {actuator_mode}\nMission Mode: {mission_mode}")
     
     sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle,

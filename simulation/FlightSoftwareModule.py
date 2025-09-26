@@ -129,7 +129,14 @@ class FlightSoftware(sysModel.SysModel):
                     desired_torque = self.detumble_gain/(np.linalg.norm(b_field)**2)*np.cross(omega, b_field) # detumble controller as defined by Markley & Crassidis
                     self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
                 elif self.mission_mode ==  "POINTING":
-                    pass
+                    # body_torques = self.mag_LQR_controller(q_error, omega) # calculate body-frame torques
+                    # desired_torque = np.cross(b_field, body_torques)/np.linalg.norm(b_field)**2 #project torques into dipole moments
+                    # self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
+                    tau_des = self.mag_LQR_controller(q_error, omega)          # torque request
+                    B = np.asarray(b_field)
+                    B2 = B @ B
+                    m_cmd = np.zeros(3) if B2 < (5e-6)**2 else np.cross(B, tau_des) / B2  # A·m²
+                    self.command_MTB_torques(m_cmd, currentTimeNanos)
                 else:
                     print("ERROR: Unknown mission mode specified", flush = True)
                     self.crashTheKernel = True
@@ -177,9 +184,12 @@ class FlightSoftware(sysModel.SysModel):
             else:  # Otherwise clamp to max torque bounds
                 self.torque_vals[i] = max(-self.maxTorque, min(wheel_torque[i], self.maxTorque))
     
+    def mag_LQR_controller(self, q_error, omega):
+        x = np.concatenate((q_error[:3], omega)) # assemble state vector
+        return -self.K_MTB @ x
+    
     def quaternion_controller(self, q_error, omega):
-        omega_error = omega - self.omega_target
-        x = np.concatenate((q_error[:3], omega_error)) # assemble state vector
+        x = np.concatenate((q_error[:3], omega)) # assemble state vector
         return -self.K_RW @ x # invert sign for control
     
     def slew_mode_check(self, error_angle_degrees, currentTimeNanos): # check which control mode to use for sliding-mode controllers. 10 degree buffer zone to prevent hysteresis

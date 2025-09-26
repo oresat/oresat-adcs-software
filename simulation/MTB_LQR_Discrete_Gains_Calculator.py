@@ -20,7 +20,7 @@ def get_MTB_gain_matrix(J, timestep, max_error, max_rate, orbital_period):
     Jyy = J[1,1]
     Jzz = J[2,2]
     
-    A = np.eye(6, 6, 3) # A matrix as defined by  
+    A = np.eye(6, 6, 3) # A matrix as defined by Miyata & van der Ha and converted to quaternion convention with small approximation
     omega_orbital = 2*np.pi/orbital_period
     A[0,1] = omega_orbital
     A[1,0] = -omega_orbital
@@ -28,6 +28,11 @@ def get_MTB_gain_matrix(J, timestep, max_error, max_rate, orbital_period):
     A[3,4] = (Jzz-Jxx)*omega_orbital/Jyy
 
     B = np.block([[np.zeros((3,3))], [np.linalg.inv(J)]])
+    # B = np.block([[np.zeros((3,3))], [np.zeros((3,3))]])
+    # B[3,0] = 1/Jxx
+    # B[4,1] = 1/Jyy
+    # B[5,2] = 1/Jzz
+
     C = np.identity(6) # sensors for all inputs
     D = np.zeros((C.shape[0], B.shape[1]))
     
