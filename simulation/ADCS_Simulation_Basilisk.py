@@ -15,7 +15,7 @@ from sys import exit
 bskPath = __path__[0]
 
 def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle,
-             omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, control_mode, mission_mode):
+             omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, actuator_mode, mission_mode):
     """
     Gets all satellite states (attitude quaternion, omega)
     
@@ -157,9 +157,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
             u_max = maxTorque,
             RWModel=varRWModel
         )
-        
     numRW = RWFactory.getNumOfDevices()
-    print(f"\nFound {numRW} reaction wheels in satellite")
 
     # create RW object container and tie to spacecraft object
     rwStateEffector = reactionWheelStateEffector.ReactionWheelStateEffector()
@@ -193,7 +191,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     ############################ FLIGHT SOFTWARE ##############################
 
     # Create flight software object and subscribe all sensors
-    fsw = FlightSoftware(G, fsw_update_time, wheelInertia, J, pointing_reference, print_states, control_mode, mission_mode, orbital_period, orbital_inclination) # Create flight software object. Model tag already defined in __init__ as flight_software
+    fsw = FlightSoftware(G, fsw_update_time, wheelInertia, J, pointing_reference, print_states, actuator_mode, mission_mode, orbital_period, orbital_inclination) # Create flight software object. Model tag already defined in __init__ as flight_software
     fsw.starTrackerMsgIn.subscribeTo(starTrackerSensor.sensorOutMsg) # subscribe to star tracker messages
     fsw.imuMsgIn.subscribeTo(imu.sensorOutMsg) # subscribe to IMU messages
     fsw.rwSpeedMsgIn.subscribeTo(rwStateEffector.rwSpeedOutMsg) # subscribe fsw reaction wheel speed input to reaction wheel output
@@ -218,7 +216,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     q_rot = quat.axis_angle_to_quaternion(sat_rot_axis, sat_rot_angle)
     fsw.q_target = quat.quat_mult(q_rot, q_init) # Probably shouldn't be applying hemisphere check to this operation! Removed for now, check logic.
     
-    print(f"Satellite view device is \"{fsw.pointing}\" with initial reference: {q_init}")
+    print(f"\nSatellite view device is \"{fsw.pointing}\" with initial reference: {q_init}")
     print(f"Satellite initial pointing target: {fsw.q_target}\n")
     
     ############################## SIMULATION #################################
@@ -253,16 +251,16 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     end = time.time()
     
     plot_times = imuRec.times() * 1e-9
-    if (control_mode == "RW"):
-        RW_plot_times = rwSpeedLog.times() * 1e-9
-        error_angles = [quat.error_angle(quaternion) for quaternion in fsw.error[:-1]]
-        error_expanded = np.repeat(error_angles, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
-        error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
-        plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
-        time_axis = "seconds"
-    elif (control_mode == "MAG"):
-        TAMvalues = magSensorRec.tam_S
-        plot_magfield(plot_times, TAMvalues, orbital_period, "orbits")
+    # if (actuator_mode == "RW"):
+    RW_plot_times = rwSpeedLog.times() * 1e-9
+    error_angles = [quat.error_angle(quaternion) for quaternion in fsw.error[:-1]]
+    error_expanded = np.repeat(error_angles, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
+    error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
+    plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
+    time_axis = "seconds"
+    if (actuator_mode == "MAG"):
+        # TAMvalues = magSensorRec.tam_S
+        # plot_magfield(plot_times, TAMvalues, orbital_period, "orbits")
         time_axis = "orbits"
     
     imuValues = imuRec.AngVelPlatform
@@ -293,33 +291,39 @@ if __name__ == "__main__":
     viz_filename = None # sim visualization savename
     print_states = False # print states in flight software
     
-    sim_time = 30000
+    # realistic MAG sim setup
+    sim_time = 36000
     dynamics_update_time = 2
     fsw_update_time = 2
+    
+    # realistic RW sim setup
+    # sim_time = 100
+    # dynamics_update_time = 0.01
+    # fsw_update_time = 0.1
     
     # initial satellite states
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
-    omega_init_rpm = np.array([1.0, 1.0, 0.0])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
     sat_rot_axis = [-1, -1.5, 0]
-    sat_rot_angle = 165
+    sat_rot_angle = 20
     
-    # Select the spacecraft pointing reference (which axis/sensor defines boresight):
-    # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    pointing_reference = "ST"
-    control_mode = "MAG"
-    mission_mode = "DETUMBLE" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
+    # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
+    pointing_reference = "ST" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
+    actuator_mode = "RW" # Valid modes are RW and MAG
+    mission_mode = "POINTING" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
     
-    if ((control_mode == "RW") and (fsw_update_time > 2)): # give user warning about system settings so THEY DON'T WASTE TIME
+    if ((actuator_mode == "RW") and (fsw_update_time > 2)): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
         print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
         exit()
-    if((control_mode == "RW") and (mission_mode != "POINTING")):
+    if((actuator_mode == "RW") and (mission_mode != "POINTING")): # warn about nonexistent control mode for reaction wheels
         print("\nERROR: reaction wheels can only use 'POINTING' mission mode\nExiting sim")
         exit()
-        
+    print(f"\nActuator Mode: {actuator_mode}\nMission Mode: {mission_mode}")
+    
     sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle,
-             omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, control_mode, mission_mode) # call and run simulation
+             omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, actuator_mode, mission_mode) # call and run simulation

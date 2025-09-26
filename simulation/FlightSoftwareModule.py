@@ -1,7 +1,8 @@
 from Basilisk.architecture import sysModel, messaging
 from Basilisk.utilities import macros
 import numpy as np
-from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
+from ADCS_Discrete_State_Space_Calculator import get_RW_gain_matrix
+from MTB_LQR_Discrete_Gains_Calculator import get_MTB_gain_matrix
 import Quaternions as quat # quaternion operations
 from sys import exit
 
@@ -43,9 +44,10 @@ class FlightSoftware(sysModel.SysModel):
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
-        self.LQR_max_error = 0.01
-        self.LQR_max_rate = 0.003
-        self.K = get_gain_matrix(satInertia, update_time, self.LQR_max_error, self.LQR_max_rate, use_integrator)
+        LQR_max_error = 0.01
+        LQR_max_rate = 0.003
+        self.K_RW = get_RW_gain_matrix(satInertia, update_time, LQR_max_error, LQR_max_rate, use_integrator)
+        self.K_MTB = get_MTB_gain_matrix(satInertia, update_time, LQR_max_error, LQR_max_rate, orbital_period)
         self.actuator_mode = actuator_mode # activates either Reaction Wheels ("RW") or Magnetorquers ("MAG")
         self.mission_mode = mission_mode
         self.slewMode = "slew" # only used for sliding mode bang-bang controller. Can be "slew" for large-angle rotations or "precise" for fine-pointing operations
@@ -67,7 +69,7 @@ class FlightSoftware(sysModel.SysModel):
         self.detumble_gain = 4*np.pi/orbital_period*(1+np.sin(orbital_inclination*2*np.pi/180))*Jmin # gain based on minimal principal moment of inertia as defined in Markley & Crassidis
         # self.detumble_gain = 4*np.pi/5563*(1+np.sin(30*2*np.pi/180))*0.00651814 # experimental value, lowest inertia tensor value on main diagonal, for some reason this works slightly better
         
-        print(f"\nGain matrix K:\n{self.K}\n")
+        # print(f"\nGain matrix K:\n{self.K}\n")
 
     def Reset(self, currentTimeNanos):
         print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
@@ -85,7 +87,7 @@ class FlightSoftware(sysModel.SysModel):
             wheelSpeeds = self.rwSpeedMsg.wheelSpeeds
         if self.magMsgIn.isWritten():
             self.magMsg = self.magMsgIn()
-            magData = self.magMsg.tam_S
+            b_field = self.magMsg.tam_S
         if self.starTrackerMsgIn.isWritten():
             self.starTrackerMsg = self.starTrackerMsgIn()
             q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
@@ -124,7 +126,7 @@ class FlightSoftware(sysModel.SysModel):
             
             elif self.actuator_mode == "MAG":
                 if self.mission_mode == "DETUMBLE":
-                    desired_torque = self.detumble_gain/(np.linalg.norm(magData)**2)*np.cross(omega, magData) # detumble controller as defined by Markley & Crassidis
+                    desired_torque = self.detumble_gain/(np.linalg.norm(b_field)**2)*np.cross(omega, b_field) # detumble controller as defined by Markley & Crassidis
                     self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
                 elif self.mission_mode ==  "POINTING":
                     pass
@@ -178,7 +180,7 @@ class FlightSoftware(sysModel.SysModel):
     def quaternion_controller(self, q_error, omega):
         omega_error = omega - self.omega_target
         x = np.concatenate((q_error[:3], omega_error)) # assemble state vector
-        return -self.K @ x # invert sign for control
+        return -self.K_RW @ x # invert sign for control
     
     def slew_mode_check(self, error_angle_degrees, currentTimeNanos): # check which control mode to use for sliding-mode controllers. 10 degree buffer zone to prevent hysteresis
             if (error_angle_degrees < 40 and self.slewMode == "slew"): # switch to precision guidance mode
