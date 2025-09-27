@@ -267,7 +267,8 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     imuValues = imuRec.AngVelPlatform
     error_angles.append(quat.error_angle(fsw.error[-1])) # append final value, as unlike RW's, the IMU is in the FSW task, rather than the dynamics task, so has array logic had to be modified
-    plot_imu(plot_times, imuValues, orbital_period, time_axis, error_angles)
+    plot_imu(plot_times, imuValues, orbital_period, time_axis)
+    # plot_imu(plot_times, imuValues, orbital_period, time_axis, error_angles)
     
     print(f"\nSimulation completed in {end-start} seconds")
     print(f"\nFinal target was: {fsw.q_target}")
@@ -298,29 +299,29 @@ if __name__ == "__main__":
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
-    omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([0.1, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
-    sat_rot_axis = [-1, 0, 0]
-    sat_rot_angle = 20
+    sat_rot_axis = [0, 1, 0]
+    sat_rot_angle = 90
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "ST" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     actuator_mode = "MAG" # Valid modes are RW and MAG
-    mission_mode = "POINTING" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
+    mission_mode = "THERMAL_SPIN" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
     
-    
+    # q_target [0.5 0.5 0.5 0.5]
             
     if (actuator_mode == "MAG"): # realistic RW sim setup
-        sim_time = 6000
-        dynamics_update_time = 0.2
-        fsw_update_time = 0.2
+        sim_time = 7000
+        dynamics_update_time = 0.1
+        fsw_update_time = 0.1
 
     elif (actuator_mode == "RW"): # realistic MAG sim setup
-        sim_time = 100
-        dynamics_update_time = 0.01
-        fsw_update_time = 0.1
+        sim_time = 50
+        dynamics_update_time = 2
+        fsw_update_time = 2
 
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
