@@ -34,9 +34,10 @@ def plot_rw_speeds(timeData, dataOmegaRW, numRW, errorArray=None):
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+        plt.title("Reaction Wheel Speeds and Orientation Error")
     else:
         plt.legend()
-    plt.title("Reaction Wheel Speeds and Orientation Error")
+        plt.title("Reaction Wheel Speeds")
     plt.show()
     
 def plot_magfield(times, TAMvalues, orbital_period, time_axis = "orbits"): 
@@ -66,7 +67,7 @@ def plot_magfield(times, TAMvalues, orbital_period, time_axis = "orbits"):
     plt.title("3-Axis Magnetometer Measurements")
     plt.show()
     
-def plot_imu(times, imuValues, orbital_period, time_axis = "orbits"): 
+def plot_imu(times, imuValues, orbital_period, time_axis = "orbits", errorArray=None): 
     """Plot the measured IMU values"""
     if time_axis == "seconds":
         time_array = times
@@ -86,9 +87,21 @@ def plot_imu(times, imuValues, orbital_period, time_axis = "orbits"):
                  color=getLineColor(idx, 3, 3, "nipy_spectral"),
                  label=axis_labels[idx])
     ax1.set_xlabel(label_name)
-    ax1.set_ylabel('Magnetic Field [T]')
+    ax1.set_ylabel('Angular Velocity [rad/s]')
     ax1.grid(True)
     
-    plt.legend()
-    plt.title("3-Axis Satellite Body Rates")
+    # --- Optional error line ---
+    if errorArray is not None:
+        ax2 = ax1.twinx()  # create second y-axis
+        ax2.plot(time_array, errorArray, 'r--', label='Error')
+        ax2.set_ylabel('Error (deg)')
+        # Add legend for error separately
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+        plt.title("3-Axis Satellite Body Rates and Orientation Error")
+    else:
+        plt.legend()
+        plt.title("3-Axis Satellite Body Rates")
+        
     plt.show()

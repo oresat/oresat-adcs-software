@@ -42,14 +42,12 @@ def add_integrators(A, B, C):
 
     return A_aug, B_aug
 
-def get_gain_matrix(J, Ts, max_error, max_rate, use_integrator = False):
-    #Moments of Inertia (kg m^2)
-    
+def get_RW_gain_matrix(J, timestep, max_error, max_rate, use_integrator = False):
     #----------------- LQR matrices--------------------------------------------
-    max_error = max_error # q_vec error, previously used 0.05 or .2
-    max_velocity = max_rate # ω_sat, previously used 0.02 or .075
+    max_error = max_error # q_vec error
+    max_velocity = max_rate # ω_sat
     max_integrator = 0.1 # integrator term in Q matrix, integrator state, accumulated error (shouldnt exceed Q values for quaternion error)
-    max_input = 0.04 # max torque (N·m) previously used 0.5
+    max_input = 0.04 # max torque (N·m)
     
     Q = np.diag([1/max_error**2, 1/max_error**2, 1/max_error**2, 1/max_velocity**2, 1/max_velocity**2, 1/max_velocity**2, 1/max_integrator**2, 1/max_integrator**2, 1/max_integrator**2])
     R = np.diag([1/max_input**2, 1/max_input**2, 1/max_input**2])
@@ -70,14 +68,14 @@ def get_gain_matrix(J, Ts, max_error, max_rate, use_integrator = False):
         D_aug = np.zeros((C_aug.shape[0], B_aug.shape[1]))
 
         
-        Ad, Bd, Cd, Dd, dt = cont2discrete((A_aug, B_aug, C_aug, D_aug), Ts)
+        Ad, Bd, Cd, Dd, dt = cont2discrete((A_aug, B_aug, C_aug, D_aug), timestep)
         P = solve_discrete_are(Ad, Bd, Q, R)
         K = np.linalg.inv(R+Bd.T @ P @ Bd) @ Bd.T @ P @ Ad
         
     else:
         D = np.zeros((C.shape[0], B.shape[1]))
         
-        Ad, Bd, Cd, Dd, dt = cont2discrete((A, B, C, D), Ts)
+        Ad, Bd, Cd, Dd, dt = cont2discrete((A, B, C, D), timestep)
         P = solve_discrete_are(Ad, Bd, Q[:6, :6], R)
         K = np.linalg.inv(R+Bd.T @ P @ Bd) @ Bd.T @ P @ Ad
     
@@ -107,7 +105,7 @@ if __name__ == "__main__":
                   [Jzx, Jzy, Jzz]])
     
     useInt = False
-    K = get_gain_matrix(J, 0.1, 0.1, 0.05, useInt)
+    K = get_RW_gain_matrix(J, 0.1, 0.1, 0.05, useInt)
     if useInt:
         print("LQR gain matrix K_int:", K)
     else:

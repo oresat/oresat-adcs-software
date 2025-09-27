@@ -18,19 +18,7 @@ def normalize(q):
     q = np.asarray(q, dtype=float)
     return q / np.linalg.norm(q)
 
-# def quat_mult(q_rot, q_init): # Hamiltonian quaternion multiplcation
-#     x1, y1, z1, s1 = q_rot
-#     x2, y2, z2, s2 = q_init
-#     q_new = [
-#         s1*x2 + x1*s2 + y1*z2 - z1*y2,
-#         s1*y2 - x1*z2 + y1*s2 + z1*x2,
-#         s1*z2 + x1*y2 - y1*x2 + z1*s2,
-#         s1*s2 - x1*x2 - y1*y2 - z1*z2
-
-#     ]
-#     return normalize(q_new)
-
-def quat_mult(q_rot, q_init): # Shuster = Hamilton with the cross-product term NEGATED. This means that the inputs are also flipped. They are not flipped yet for testing purposes
+def quat_mult(q_rot, q_init): # Shuster quaternion multiplication
     x1, y1, z1, s1 = q_rot
     x2, y2, z2, s2 = q_init
     
@@ -42,18 +30,8 @@ def quat_mult(q_rot, q_init): # Shuster = Hamilton with the cross-product term N
     ]
     return normalize(q_new)
 
-def quat_error(q_target, q_current): #4 error defined by Markley & Crassidis. Semi stable with hamilton for about 100 seconds
+def quat_error(q_target, q_current): #error defined by Markley & Crassidis.
     return quat_mult(q_current, quat_conjugate(q_target)) # returns normalized quaternion. Sanitization happens in quat_mult function
-
-# def quat_error(q_target, q_current): # This one works without negating the A matrix when using hamilton 
-#     return quat_mult(quat_conjugate(q_target), q_current) # return normalized quaternion. Sanitization happens in quat_mult function
-
-# def quat_error(q_target, q_current): #2 is the inverse of #4, flipping A matrix to negative sign with hamilton makes this behave the same as #4
-#     return quat_mult(q_target, quat_conjugate(q_current)) # return normalized quaternion. Sanitization happens in quat_mult function
-
-# def quat_error(q_target, q_current): #3 THIS ONE SEEMS TO WORK FOR SOME REASON WITH SMALL ANGLE ROTATIONS AND NEGATIVE A MATRIX
-#     return quat_mult(quat_conjugate(q_current), q_target) # returns normalized quaternion. Sanitization happens in quat_mult function
-
 
 def to_scalar_last(q): # convert quaternion to scalar-last convention
     return np.concatenate((q[1:], [q[0]]))
