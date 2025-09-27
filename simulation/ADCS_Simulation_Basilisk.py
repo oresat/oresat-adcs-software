@@ -14,24 +14,10 @@ import Quaternions as quat
 from sys import exit
 bskPath = __path__[0]
 
-def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle,
-             omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, actuator_mode, mission_mode):
-    """
-    Gets all satellite states (attitude quaternion, omega)
-    
-    Parameters:
-    simTime: time over which simulation runs
-    J: inertia matrix of spacecraft
-    dynamics_update_time: update time of the dynamics simulation
-    fsw_update_time: update time of the flight software module
-    
-    Returns:
-    A sick simulation
-    """
-    
+def sim_main(config):
     # simulation variables
-    dynamics_update_time = dynamics_update_time # seconds
-    fsw_update_time = fsw_update_time # temporarily REALLY small to make the system respond as intended
+    dynamics_update_time = config["dynamics_update_time"] # seconds
+    fsw_update_time = config["fsw_update_time"] # temporarily REALLY small to make the system respond as intended
     
     # Create a sim module as an empty container
     sim = SimulationBaseClass.SimBaseClass()
@@ -140,7 +126,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
                    [xy,  -xy,  -xy,   xy],
                    [-z,   -z,   -z,  -z]])) # Wheel moment/orientation matrix
     
-    wheelInertia = 4.2946e-6      # [kg*m^2], moment of inertia about spin axis
+    rw_Inertia = 4.2946e-6      # [kg*m^2], moment of inertia about spin axis
     maxSpeed = 11000.0 # ridiculous speed so our controller does the work. 100k effectively removes limit, and allows fsw to limit manually.
     maxTorque = 100000.0 # only used when useMaxTorque = True. 100k effectively removes limit, and allows fsw to limit manually.
     
@@ -151,7 +137,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
         RWFactory.create(
             "custom",              # unique name
             axis,                  # spin axis
-            Js=wheelInertia,       # wheel inertia
+            Js=rw_Inertia,       # wheel inertia
             useMaxTorque=False,    # disable max torque check
             Omega_max=maxSpeed,    # max speed
             u_max = maxTorque,
@@ -189,9 +175,11 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     mtbEff.magInMsg.subscribeTo(magModule.envOutMsgs[0])  # from WMM module
 
     ############################ FLIGHT SOFTWARE ##############################
-
+    # update config dict
+    config.update({"G":G, "rw_Inertia":rw_Inertia, "orbital_period":orbital_period, "orbital_inclination":orbital_inclination})
+    
     # Create flight software object and subscribe all sensors
-    fsw = FlightSoftware(G, fsw_update_time, wheelInertia, J, pointing_reference, print_states, actuator_mode, mission_mode, orbital_period, orbital_inclination) # Create flight software object. Model tag already defined in __init__ as flight_software
+    fsw = FlightSoftware(config) # Create flight software object. Model tag already defined in __init__ as flight_software
     fsw.starTrackerMsgIn.subscribeTo(starTrackerSensor.sensorOutMsg) # subscribe to star tracker messages
     fsw.imuMsgIn.subscribeTo(imu.sensorOutMsg) # subscribe to IMU messages
     fsw.rwSpeedMsgIn.subscribeTo(rwStateEffector.rwSpeedOutMsg) # subscribe fsw reaction wheel speed input to reaction wheel output
@@ -244,7 +232,7 @@ def sim_main(simTime, J, mass, dynamics_update_time, fsw_update_time, viz_filena
     
     # simulate:
     sim.InitializeSimulation() # initialize simulation
-    sim.ConfigureStopTime(macros.sec2nano(simTime)) # configure a simulation stop time
+    sim.ConfigureStopTime(macros.sec2nano(config["sim_time"])) # configure a simulation stop time
     print("\nSimulation setup complete\nBeginning simulation\n")
     start = time.time()
     sim.ExecuteSimulation() # execute simulation
@@ -332,5 +320,10 @@ if __name__ == "__main__":
     
     print(f"\nActuator Mode: {actuator_mode}\nMission Mode: {mission_mode}")
     
-    sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle,
-             omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, actuator_mode, mission_mode) # call and run simulation
+    config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,
+              "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "actuator_mode":actuator_mode, "mission_mode":mission_mode,
+              "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states}
+    
+    sim_main(config)
+    # sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle,
+    #          omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, actuator_mode, mission_mode) # call and run simulation

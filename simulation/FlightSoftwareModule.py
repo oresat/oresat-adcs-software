@@ -7,7 +7,7 @@ import Quaternions as quat # quaternion operations
 from sys import exit
 
 class FlightSoftware(sysModel.SysModel):
-    def __init__(self, G_matrix, update_time, rw_Inertia, satInertia, pointing_reference, print_states, actuator_mode, mission_mode, orbital_period, orbital_inclination):
+    def __init__(self, config):
         super(FlightSoftware, self).__init__()
         self.ModelTag = "flight_software"
 
@@ -27,11 +27,11 @@ class FlightSoftware(sysModel.SysModel):
         self.magTorquePayload = messaging.MTBCmdMsgPayload()
         self.mag_torques = np.zeros(36) # initialize MTB torque input array
         
-        self.G_pinv = -np.linalg.pinv(G_matrix) # pseudo inverse matrix for torque calculations. Negated because of Basilisk conventions (I think)
-        self.rwInertia = rw_Inertia # reaction wheel inertia (scalar)
-        self.satInertia = satInertia # satellite inertia tensor (matrix)
-        self.updateTime = update_time
-        self.output_states = print_states # output state messages or not for debugging
+        self.G_pinv = -np.linalg.pinv(config["G"]) # pseudo inverse matrix for torque calculations. Negated because of Basilisk conventions (I think)
+        self.rwInertia = config["rw_Inertia"] # reaction wheel inertia (scalar)
+        self.satInertia = config["J"] # satellite inertia tensor (matrix)
+        self.updateTime = config["fsw_update_time"]
+        self.output_states = config["print_states"] # output state messages or not for debugging
         self.crashTheKernel = False # intentional exit to catch errors. Crashes the kernel because of SWIG. 
         self.error = [] # used for tracking and graphing error
         
@@ -48,15 +48,15 @@ class FlightSoftware(sysModel.SysModel):
         use_integrator = False # use gain matrix with integrator or without
         LQR_max_error = 0.01
         LQR_max_rate = 0.003
-        self.K_RW = get_RW_gain_matrix(satInertia, update_time, LQR_max_error, LQR_max_rate, use_integrator)
-        self.K_MTB = get_MTB_gain_matrix(satInertia, update_time, LQR_max_error, LQR_max_rate, orbital_period)
-        self.actuator_mode = actuator_mode # activates either Reaction Wheels ("RW") or Magnetorquers ("MAG")
-        self.mission_mode = mission_mode
+        self.K_RW = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, use_integrator)
+        self.K_MTB = get_MTB_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, config["orbital_period"])
+        self.actuator_mode = config["actuator_mode"] # activates either Reaction Wheels ("RW") or Magnetorquers ("MAG")
+        self.mission_mode = config["mission_mode"]
         self.slewMode = "slew" # only used for sliding mode bang-bang controller. Can be "slew" for large-angle rotations or "precise" for fine-pointing operations
         
         # Select the spacecraft pointing reference (which axis/sensor defines boresight):
         # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), CFC (Cirrus Flux Camera, -z on body)    
-        self.pointing = pointing_reference
+        self.pointing = config["pointing_reference"]
         self.q_plusZ_rot = quat.axis_angle_to_quaternion([0,1,0], -90) # rotate star tracker output to +z side of satellite for Selfie Camera from Star Tracker orientation on +x side of satellite
         self.q_minusZ_rot = quat.axis_angle_to_quaternion([0,1,0], 90) # rotate star tracker output to -z side of satellite for Cirrus Flux Camera from Star Tracker orientation on +x side of satellite
         
@@ -67,8 +67,8 @@ class FlightSoftware(sysModel.SysModel):
         self.CFC2B = quat.quat_conjugate(self.B2CFC) # Cirrus Flux Camera to body rotation (nominal right-multiply math notation would therefore be R_b_cfc)
         
         # Controller gains
-        Jmin = np.min(np.linalg.eigvals(satInertia)) # minimum principal moment of inertia
-        self.detumble_gain = 4*np.pi/orbital_period*(1+np.sin(orbital_inclination*2*np.pi/180))*Jmin # gain based on minimal principal moment of inertia as defined in Markley & Crassidis
+        Jmin = np.min(np.linalg.eigvals(self.satInertia)) # minimum principal moment of inertia
+        self.detumble_gain = 4*np.pi/config["orbital_period"]*(1+np.sin(config["orbital_inclination"]*2*np.pi/180))*Jmin # gain based on minimal principal moment of inertia as defined in Markley & Crassidis
 
     def Reset(self, currentTimeNanos):
         print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
@@ -139,7 +139,7 @@ class FlightSoftware(sysModel.SysModel):
                 elif self.mission_mode == "THERMAL_SPIN":
                     desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
                     self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
-                    if (np.all(np.abs(omega) < 1e-3)):
+                    if (np.all(np.abs(omega) < 1e-4)):
                         self.actuator_mode = "RW" # switch to reaction wheels for thermal reorientation
                         self.mission_mode = "THERMAL_REORIENT"
                         print(f"SWITCHING TO REACTION WHEEL REORIENTATION AT {currentTimeNanos*macros.NANO2SEC} SECONDS")
