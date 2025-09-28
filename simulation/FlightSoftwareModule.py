@@ -67,7 +67,7 @@ class FlightSoftware(sysModel.SysModel):
         self.CFC2B = quat.quat_conjugate(self.B2CFC) # Cirrus Flux Camera to body rotation (nominal right-multiply math notation would therefore be R_b_cfc)
         
         # Controller gains
-        Jmin = np.min(np.linalg.eigvals(self.satInertia)) # minimum principal moment of inertia
+        Jmin = np.max(np.linalg.eigvals(self.satInertia)) # maximum principal moment of inertia (Markley & Crassidis defines this with the minimum principal moment of inertia, but maximum works better???)
         self.detumble_gain = 4*np.pi/config["orbital_period"]*(1+np.sin(config["orbital_inclination"]*2*np.pi/180))*Jmin # gain based on minimal principal moment of inertia as defined in Markley & Crassidis
 
     def Reset(self, currentTimeNanos):

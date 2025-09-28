@@ -287,7 +287,7 @@ if __name__ == "__main__":
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
-    omega_init_rpm = np.array([0.1, 0.0, 0.0])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([1.0, 0.0, 0.2])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
@@ -302,7 +302,7 @@ if __name__ == "__main__":
     # q_target [0.5 0.5 0.5 0.5]
             
     if (actuator_mode == "MAG"): # realistic RW sim setup
-        sim_time = 7000
+        sim_time = 20000
         dynamics_update_time = 0.1
         fsw_update_time = 0.1
 
