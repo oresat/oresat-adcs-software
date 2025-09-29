@@ -11,6 +11,7 @@ from Plotting_Functions import plot_rw_speeds, plot_magfield, plot_imu
 from FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
 from scipy.spatial.transform import Rotation as R # to create nadir pointing quaternion
 import Quaternions as quat
+from pathlib import Path
 from sys import exit
 bskPath = __path__[0]
 
@@ -244,19 +245,18 @@ def sim_main(config):
     error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
     if (actuator_mode == "RW"):
         RW_plot_times = rwSpeedLog.times() * 1e-9
-        print(len(RW_plot_times))
-        plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, error_expanded)
+        plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, config, error_expanded)
         # plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW)
         time_axis = "seconds"
     elif (actuator_mode == "MAG"):
-        # TAMvalues = magSensorRec.tam_S
-        # plot_magfield(plot_times, TAMvalues, orbital_period, "orbits")
         time_axis = "orbits"
+        TAMvalues = magSensorRec.tam_S
+        plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
     
     imuValues = imuRec.AngVelPlatform
     error_angles.append(quat.error_angle(fsw.error[-1])) # append final value, as unlike RW's, the IMU is in the FSW task, rather than the dynamics task, so has array logic had to be modified
-    plot_imu(plot_times, imuValues, orbital_period, time_axis)
-    # plot_imu(plot_times, imuValues, orbital_period, time_axis, error_angles)
+    plot_imu(plot_times, imuValues, orbital_period, config, time_axis)
+    # plot_imu(plot_times, imuValues, orbital_period, config, time_axis, error_angles)
     
     print(f"\nSimulation completed in {end-start} seconds")
     print(f"\nFinal target was: {fsw.q_target}")
@@ -282,6 +282,8 @@ if __name__ == "__main__":
                   
     viz_filename = None # sim visualization savename
     print_states = False # print states in flight software
+    save_plots = True # save plots as PDF's to target folder
+    plot_basepath = Path(r"C:\Users\benne\OneDrive\Master's Thesis\OSGC Documents\OSGC_Poster_Template") # path to which graphs should be saved
     
     # initial satellite states
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
@@ -291,8 +293,8 @@ if __name__ == "__main__":
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
-    sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = 90
+    sat_rot_axis = [1, 1, 0]
+    sat_rot_angle = 165
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "ST" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
@@ -303,13 +305,13 @@ if __name__ == "__main__":
             
     if (actuator_mode == "MAG"): # realistic RW sim setup
         sim_time = 20000
-        dynamics_update_time = 0.1
-        fsw_update_time = 0.1
+        dynamics_update_time = .1
+        fsw_update_time = .1
 
     elif (actuator_mode == "RW"): # realistic MAG sim setup
         sim_time = 50
-        dynamics_update_time = 2
-        fsw_update_time = 2
+        dynamics_update_time = 0.01
+        fsw_update_time = 0.1
 
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
@@ -322,8 +324,7 @@ if __name__ == "__main__":
     
     config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,
               "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "actuator_mode":actuator_mode, "mission_mode":mission_mode,
-              "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states}
+              "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states,
+              "save_plots":save_plots, "plot_basepath":plot_basepath}
     
     sim_main(config)
-    # sim_main(sim_time, J, mass, dynamics_update_time, fsw_update_time, viz_filename, init_rot_axis, init_rot_angle,
-    #          omega_init_rad, sat_rot_axis, sat_rot_angle, pointing_reference, print_states, actuator_mode, mission_mode) # call and run simulation

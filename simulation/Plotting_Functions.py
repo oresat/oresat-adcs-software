@@ -12,7 +12,7 @@ def getLineColor(idx, maxNum, offset = 0, colorlib = "viridis"):
     scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=colorMap)
     return scalarMap.to_rgba(values[idx + 1])
 
-def plot_rw_speeds(timeData, dataOmegaRW, numRW, errorArray=None):
+def plot_rw_speeds(timeData, dataOmegaRW, numRW, config, errorArray=None):
     """Plot the RW spin rates with optional error curve on right axis."""
     fig, ax1 = plt.subplots(figsize=(8,4))
 
@@ -38,9 +38,15 @@ def plot_rw_speeds(timeData, dataOmegaRW, numRW, errorArray=None):
     else:
         plt.legend()
         plt.title("Reaction Wheel Speeds")
+    
+    if config["save_plots"] == True:
+        pdf_path = config["plot_basepath"] / "RW_graph.pdf"
+        plt.savefig(pdf_path, dpi=300)
+        print(f"Plot saved as {pdf_path}")
+    
     plt.show()
     
-def plot_magfield(times, TAMvalues, orbital_period, time_axis = "orbits"): 
+def plot_magfield(times, TAMvalues, orbital_period, config, time_axis = "orbits"): 
     """Plot the measured three-axis magnetic field values"""
     if time_axis == "seconds":
         time_array = times
@@ -65,9 +71,15 @@ def plot_magfield(times, TAMvalues, orbital_period, time_axis = "orbits"):
     
     plt.legend()
     plt.title("3-Axis Magnetometer Measurements")
+    
+    if config["save_plots"] == True:
+        pdf_path = config["plot_basepath"] / "TAM.pdf"
+        plt.savefig(pdf_path, dpi=300)
+        print(f"Plot saved as {pdf_path}")
+    
     plt.show()
     
-def plot_imu(times, imuValues, orbital_period, time_axis = "orbits", errorArray=None): 
+def plot_imu(times, imuValues, orbital_period, config, time_axis = "orbits", errorArray=None): 
     """Plot the measured IMU values"""
     if time_axis == "seconds":
         time_array = times
@@ -104,4 +116,9 @@ def plot_imu(times, imuValues, orbital_period, time_axis = "orbits", errorArray=
         plt.legend()
         plt.title("3-Axis Satellite Body Rates")
         
+    if config["save_plots"] == True:
+        pdf_path = config["plot_basepath"] / "IMU.pdf"
+        plt.savefig(pdf_path, dpi=300)
+        print(f"Plot saved as {pdf_path}")
+    
     plt.show()
