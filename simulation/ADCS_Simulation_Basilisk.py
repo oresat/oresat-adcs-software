@@ -250,8 +250,8 @@ def sim_main(config):
         time_axis = "seconds"
     elif (actuator_mode == "MAG"):
         time_axis = "orbits"
-        TAMvalues = magSensorRec.tam_S
-        plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
+        # TAMvalues = magSensorRec.tam_S
+        # plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
     
     imuValues = imuRec.AngVelPlatform
     error_angles.append(quat.error_angle(fsw.error[-1])) # append final value, as unlike RW's, the IMU is in the FSW task, rather than the dynamics task, so has array logic had to be modified
@@ -282,7 +282,7 @@ if __name__ == "__main__":
                   
     viz_filename = None # sim visualization savename
     print_states = False # print states in flight software
-    save_plots = True # save plots as PDF's to target folder
+    save_plots = False # save plots as PDF's to target folder
     plot_basepath = Path(r"C:\Users\benne\OneDrive\Master's Thesis\OSGC Documents\OSGC_Poster_Template") # path to which graphs should be saved
     
     # initial satellite states
@@ -293,13 +293,13 @@ if __name__ == "__main__":
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
-    sat_rot_axis = [1, 1, 0]
-    sat_rot_angle = 165
+    sat_rot_axis = [0, 1, 0]
+    sat_rot_angle = 90
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "ST" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    actuator_mode = "MAG" # Valid modes are RW and MAG
-    mission_mode = "THERMAL_SPIN" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
+    actuator_mode = "RW" # Valid modes are RW and MAG
+    mission_mode = "POINTING" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
     
     # q_target [0.5 0.5 0.5 0.5]
             
@@ -309,7 +309,7 @@ if __name__ == "__main__":
         fsw_update_time = .1
 
     elif (actuator_mode == "RW"): # realistic MAG sim setup
-        sim_time = 50
+        sim_time = 10
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
 

@@ -4,6 +4,7 @@ import numpy as np
 from ADCS_Discrete_State_Space_Calculator import get_RW_gain_matrix
 from MTB_LQR_Discrete_Gains_Calculator import get_MTB_gain_matrix
 import Quaternions as quat # quaternion operations
+from Kalman_Filter import Extended_Kalman_Filter
 from sys import exit
 
 class FlightSoftware(sysModel.SysModel):
@@ -49,7 +50,7 @@ class FlightSoftware(sysModel.SysModel):
         LQR_max_error = 0.01
         LQR_max_rate = 0.003
         self.K_RW = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, use_integrator)
-        self.K_MTB = get_MTB_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, config["orbital_period"])
+        # self.K_MTB = get_MTB_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, config["orbital_period"])
         self.actuator_mode = config["actuator_mode"] # activates either Reaction Wheels ("RW") or Magnetorquers ("MAG")
         self.mission_mode = config["mission_mode"]
         self.slewMode = "slew" # only used for sliding mode bang-bang controller. Can be "slew" for large-angle rotations or "precise" for fine-pointing operations
@@ -69,12 +70,15 @@ class FlightSoftware(sysModel.SysModel):
         # Controller gains
         Jmin = np.max(np.linalg.eigvals(self.satInertia)) # maximum principal moment of inertia (Markley & Crassidis defines this with the minimum principal moment of inertia, but maximum works better???)
         self.detumble_gain = 4*np.pi/config["orbital_period"]*(1+np.sin(config["orbital_inclination"]*2*np.pi/180))*Jmin # gain based on minimal principal moment of inertia as defined in Markley & Crassidis
+        
+        # Kalman filter object to store filter
+        EKF = Extended_Kalman_Filter()
 
     def Reset(self, currentTimeNanos):
         print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
         
     def UpdateState(self, currentTimeNanos):
-        if self.crashTheKernel == True: # This method allows error message printing *jank intensifies*
+        if self.crashTheKernel == True: # This method allows error message printing  *jank intensifies*
             exit()
         
         ######### GATHER SYSTEM STATES AND CALCULATE ERROR QUATERNION #########
@@ -143,14 +147,14 @@ class FlightSoftware(sysModel.SysModel):
                         self.actuator_mode = "RW" # switch to reaction wheels for thermal reorientation
                         self.mission_mode = "THERMAL_REORIENT"
                         print(f"SWITCHING TO REACTION WHEEL REORIENTATION AT {currentTimeNanos*macros.NANO2SEC} SECONDS")
-                elif self.mission_mode ==  "POINTING":
-                    # body_torques = self.mag_LQR_controller(q_error, omega) # calculate body-frame torques
-                    # desired_torque = np.cross(b_field, body_torques)/np.linalg.norm(b_field)**2 #project torques into dipole moments
-                    # self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
-                    tau_des = self.mag_LQR_controller(q_error, omega)          # torque request
-                    B2 = B @ B
-                    m_cmd = np.zeros(3) if B2 < (5e-6)**2 else np.cross(B, tau_des) / B2  # A·m²
-                    self.command_MTB_torques(m_cmd, currentTimeNanos)
+                # elif self.mission_mode ==  "POINTING":
+                #     # body_torques = self.mag_LQR_controller(q_error, omega) # calculate body-frame torques
+                #     # desired_torque = np.cross(b_field, body_torques)/np.linalg.norm(b_field)**2 #project torques into dipole moments
+                #     # self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
+                #     tau_des = self.mag_LQR_controller(q_error, omega)          # torque request
+                #     B2 = B @ B
+                #     m_cmd = np.zeros(3) if B2 < (5e-6)**2 else np.cross(B, tau_des) / B2  # A·m²
+                #     self.command_MTB_torques(m_cmd, currentTimeNanos)
                 elif self.mission_mode == "SPINUP": # spinup satellite for thermal spin about the axis
                     if (omega[2] < self.thermal_spin_rpm*2*np.pi/60): # while satellite is spinning slower than set rate about the z axis, spin up
                         tau_des = [0,0,1] # spin about the z axis
@@ -203,9 +207,9 @@ class FlightSoftware(sysModel.SysModel):
             else:  # Otherwise clamp to max torque bounds
                 self.torque_vals[i] = max(-self.maxTorque, min(wheel_torque[i], self.maxTorque))
     
-    def mag_LQR_controller(self, q_error, omega):
-        x = np.concatenate((q_error[:3], omega)) # assemble state vector
-        return -self.K_MTB @ x
+    # def mag_LQR_controller(self, q_error, omega):
+    #     x = np.concatenate((q_error[:3], omega)) # assemble state vector
+    #     return -self.K_MTB @ x
     
     def quaternion_controller(self, q_error, omega):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector
