@@ -127,7 +127,9 @@ def sim_main(config):
                    [xy,  -xy,  -xy,   xy],
                    [-z,   -z,   -z,  -z]])) # Wheel moment/orientation matrix
     
-    rw_Inertia = 4.2946e-6      # [kg*m^2], moment of inertia about spin axis
+    # rw_Inertia = 4.2946e-6      # [kg*m^2], moment of inertia about spin axis (old values from OreSat 0.5 wheels)
+    rw_Inertia = 7.271e-6      # [kg*m^2], moment of inertia about spin axis
+    
     maxSpeed = 11000.0 # ridiculous speed so our controller does the work. 100k effectively removes limit, and allows fsw to limit manually.
     maxTorque = 100000.0 # only used when useMaxTorque = True. 100k effectively removes limit, and allows fsw to limit manually.
     
@@ -289,7 +291,7 @@ if __name__ == "__main__":
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
-    omega_init_rpm = np.array([1.0, 0.0, 0.2])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([-1.0, -2.0, 0.2])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
@@ -309,7 +311,7 @@ if __name__ == "__main__":
         fsw_update_time = .1
 
     elif (actuator_mode == "RW"): # realistic MAG sim setup
-        sim_time = 10
+        sim_time = 50
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
 

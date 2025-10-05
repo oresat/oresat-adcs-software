@@ -72,7 +72,7 @@ class FlightSoftware(sysModel.SysModel):
         self.detumble_gain = 4*np.pi/config["orbital_period"]*(1+np.sin(config["orbital_inclination"]*2*np.pi/180))*Jmin # gain based on minimal principal moment of inertia as defined in Markley & Crassidis
         
         # Kalman filter object to store filter
-        EKF = Extended_Kalman_Filter()
+        # EKF = Extended_Kalman_Filter()
 
     def Reset(self, currentTimeNanos):
         print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
