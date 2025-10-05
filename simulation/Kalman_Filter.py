@@ -15,8 +15,8 @@ class Extended_Kalman_Filter():
         self.P = np.block([[P_theta, Z3], # P: 6x6 covariance matrix
                            [Z3, P_omega]])
         
-        Q11 = (sigma_gyro**2 * dt + sigma_bias**2 * dt**3/3) * I3
-        Q12 = -(sigma_bias**2 * dt**2) * I3
+        Q11 = (sigma_gyro**2 * dt + (sigma_bias**2) * dt**3 / 3.0) * I3
+        Q12 = (-(sigma_bias**2 * dt**2 / 2.0)) * I3
         Q22 = (sigma_bias**2 * dt) * I3
         self.Q = np.block([[Q11, Q12],
                            [Q12, Q22]])        
@@ -25,12 +25,12 @@ class Extended_Kalman_Filter():
         
     def update(self, omega, q_measured=None): # update Kalman filter and return output
         self.prediction(omega) # predict state
-        if (q_measured is not None): # if star tracker sensor measurement exists, erform correction step as well
+        if (q_measured is not None): # if star tracker sensor measurement exists, perform correction step as well
             self.correction(q_measured) # correct state
         return self.q
     
-    def prediction(self, omega): # predict next state based on IMU input. Also known as the propogation step.
-        omega = omega - self.b # correct oemga with estimated gyro bias
+    def prediction(self, omega): # predict next state based on IMU input. Also known as the propagation step.
+        omega = omega - self.b # correct omega with estimated gyro bias
         phi = phi_matrix(self.dt, omega)
         
         # propagate estimated quaternion state based on body rates
@@ -60,7 +60,7 @@ class Extended_Kalman_Filter():
         delta_q = axis_angle_to_quaternion(axis, theta)
         self.q = hemi(quat_mult(delta_q, self.q))
         
-        self.b += db # udpate gyro bias
+        self.b += db # update gyro bias
         I6 = np.eye(6)
         self.P = (I6 - K @ self.H) @ self.P @ (I6 - K @ self.H).T + K @ self.R @ K.T # update covariance matrix
 
