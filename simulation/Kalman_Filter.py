@@ -31,7 +31,7 @@ class Extended_Kalman_Filter():
     
     def prediction(self, omega): # predict next state based on IMU input. Also known as the propogation step.
         omega = omega - self.b # correct oemga with estimated gyro bias
-        F, phi = discrete_kalman_matrices(self.dt, omega)
+        phi = phi_matrix(self.dt, omega)
         
         # propagate estimated quaternion state based on body rates
         omega_norm = np.linalg.norm(omega)
@@ -64,7 +64,7 @@ class Extended_Kalman_Filter():
         I6 = np.eye(6)
         self.P = (I6 - K @ self.H) @ self.P @ (I6 - K @ self.H).T + K @ self.R @ K.T # update covariance matrix
 
-def discrete_kalman_matrices(dt, omega):
+def phi_matrix(dt, omega):
     skew_matrix = skew(omega)
     S2 = skew_matrix @ skew_matrix
     I3 = np.eye(3) # 3x3 unit matrix
@@ -72,16 +72,12 @@ def discrete_kalman_matrices(dt, omega):
     norm = np.linalg.norm(omega)
     w1, w2, w3 = norm, norm**2, norm**3
     
-    F = np.block([[-skew_matrix, -I3],
-                   [Z3, Z3]])
-    
     phi11 = I3 - skew_matrix * np.sin(w1*dt)/w1 + S2 * (1-np.cos(w1*dt))/w2
     phi12 = skew_matrix *(1-np.cos(w1*dt))/w2 - I3*dt - S2 * (w1*dt - np.sin(w1*dt))/w3
     
     phi = np.block([[phi11, phi12],
                     [Z3, I3]])
-    
-    return F, phi
+    return phi
 
 def skew(omega):
     """
