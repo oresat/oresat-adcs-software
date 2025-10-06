@@ -305,12 +305,12 @@ if __name__ == "__main__":
     
     # q_target [0.5 0.5 0.5 0.5]
             
-    if (actuator_mode == "MAG"): # realistic RW sim setup
+    if (actuator_mode == "MAG"): # realistic MAG sim setup
         sim_time = 20000
         dynamics_update_time = .1
         fsw_update_time = .1
 
-    elif (actuator_mode == "RW"): # realistic MAG sim setup
+    elif (actuator_mode == "RW"): # realistic RW sim setup
         sim_time = 50
         dynamics_update_time = 0.01
         fsw_update_time = 0.1

@@ -94,4 +94,4 @@ def skew(omega):
 if __name__ == "__main__":
     omega = [1,2,3]
     # ekf = Extended_Kalman_Filter()
-    print(np.zeros(3,3))
+    print(np.zeros((3,3)))

@@ -44,7 +44,7 @@ def plot_rw_speeds(timeData, dataOmegaRW, numRW, config, errorArray=None):
         plt.savefig(pdf_path, dpi=300)
         print(f"Plot saved as {pdf_path}")
     
-    plt.show()
+    plt.show(block=False)
     
 def plot_magfield(times, TAMvalues, orbital_period, config, time_axis = "orbits"): 
     """Plot the measured three-axis magnetic field values"""
@@ -77,7 +77,7 @@ def plot_magfield(times, TAMvalues, orbital_period, config, time_axis = "orbits"
         plt.savefig(pdf_path, dpi=300)
         print(f"Plot saved as {pdf_path}")
     
-    plt.show()
+    plt.show(block=False)
     
 def plot_imu(times, imuValues, orbital_period, config, time_axis = "orbits", errorArray=None): 
     """Plot the measured IMU values"""
@@ -121,4 +121,4 @@ def plot_imu(times, imuValues, orbital_period, config, time_axis = "orbits", err
         plt.savefig(pdf_path, dpi=300)
         print(f"Plot saved as {pdf_path}")
     
-    plt.show()
+    plt.show(block=False)
