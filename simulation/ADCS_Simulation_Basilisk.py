@@ -65,7 +65,7 @@ def sim_main(config):
     oe.i = 30 * macros.D2R # inclination [rad]
     oe.Omega = 0.0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
     oe.omega = 0.0 * macros.D2R  # argument of periapsis [rad]
-    oe.f = 50 * macros.D2R       # true anomaly [rad]
+    oe.f = 90 * macros.D2R       # true anomaly [rad]
     
     rN, vN = orbitalMotion.elem2rv(mu_earth, oe)
     oe = orbitalMotion.rv2elem(mu_earth, rN, vN)  # this stores consistent initial orbit elements, fixes numerical errors, particulary with perfectly circular orbits. Consult ChatGPT for detailed explanation.
@@ -199,9 +199,9 @@ def sim_main(config):
     else:
         print("ERROR: Invalid pointing reference selected!")
         exit()
-    
+
     q_rot = quat.axis_angle_to_quaternion(sat_rot_axis, sat_rot_angle)
-    fsw.q_target = quat.quat_mult(q_rot, q_init) # Probably shouldn't be applying hemisphere check to this operation! Removed for now, check logic.
+    fsw.update_target(quat.quat_mult(q_rot, q_init))
     
     print(f"\nSatellite view device is \"{fsw.pointing}\" with initial reference: {q_init}")
     print(f"Satellite initial pointing target: {fsw.q_target}\n")
@@ -308,7 +308,7 @@ if __name__ == "__main__":
         fsw_update_time = .1
 
     elif (actuator_mode == "RW"): # realistic RW sim setup
-        sim_time = 50
+        sim_time = 100
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
 

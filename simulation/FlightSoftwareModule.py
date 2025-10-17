@@ -60,6 +60,8 @@ class FlightSoftware(sysModel.SysModel):
         self.pointing = config["pointing_reference"]
         self.q_plusZ_rot = quat.axis_angle_to_quaternion([0,1,0], -90) # rotate star tracker output to +z side of satellite for Selfie Camera from Star Tracker orientation on +x side of satellite
         self.q_minusZ_rot = quat.axis_angle_to_quaternion([0,1,0], 90) # rotate star tracker output to -z side of satellite for Cirrus Flux Camera from Star Tracker orientation on +x side of satellite
+        self.q_90_rot = quat.axis_angle_to_quaternion([0,1,0], -90) # translate star tracker targets to +z side of satellite
+        self.q_180_rot = quat.axis_angle_to_quaternion([0,1,0], -180) # translate CFC targets to +z side/viewpoint of satellite
         
         # Quaternion change-of-basis rotations (comments in parentheses use R to denote a standard right-multiply rotation matrix notation)
         self.B2ST = quat.axis_angle_to_quaternion([0,1,0], 90) # body to star tracker rotation (nominal right-multiply math notation would therefore be R_st_b)
@@ -101,23 +103,12 @@ class FlightSoftware(sysModel.SysModel):
             self.starTrackerMsg = self.starTrackerMsgIn()
             q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
             q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
+        
+        q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
             
-            # select and calculate reference vector for pointing error calculations
-            if self.pointing == "ST":
-                q = q_star_tracker
-            elif self.pointing == "SC":
-                q = quat.quat_mult(self.q_plusZ_rot, q_star_tracker)
-            elif self.pointing == "CFC":
-                q = quat.quat_mult(self.q_minusZ_rot, q_star_tracker)
-            
-        # convert error quaternions to nominal body frame, as IMU, Inertia Matrix, and Reaction Wheels are all defined in this frame already.
+        #ADD FILTER HERE
+        
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
-        if self.pointing == "ST":
-            q_error = quat.quat_mult(self.ST2B, quat.quat_mult(q_error, self.B2ST)) # equivalent to q_error_body = R_b_st * q_error_st * R_st_b
-        elif self.pointing == "SC":
-            pass # q_error is already in the correct frame
-        elif self.pointing == "CFC":
-            q_error = quat.quat_mult(self.CFC2B, quat.quat_mult(q_error, self.B2CFC)) # equivalent to q_error_body = R_b_cfc * q_error_cfc * R_cfc_b
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hermisphere boundaries
         self.error.append(q_error) # required for plotting after conclusion of sim
         
@@ -184,6 +175,14 @@ class FlightSoftware(sysModel.SysModel):
             print("Body rates: ", omega)
             print("Desired torque: ", desired_torque)
             print("Wheel Torque: ", wheel_torque)
+    
+    def update_target(self, target_quat):
+        if self.pointing == "ST":
+            self.q_target = quat.quat_mult(self.q_90_rot, target_quat) # define target in body coordinates
+        elif self.pointing == "SC":
+            self.q_target = target_quat # target does not require rotation
+        elif self.pointing == "CFC":
+            self.q_target = quat.quat_mult(self.q_180_rot, target_quat) # define target in body coordinates
     
     def command_MTB_torques(self, desired_torque, currentTimeNanos):
         self.mag_torques[:3] = desired_torque
