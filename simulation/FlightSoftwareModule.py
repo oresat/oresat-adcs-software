@@ -58,16 +58,8 @@ class FlightSoftware(sysModel.SysModel):
         # Select the spacecraft pointing reference (which axis/sensor defines boresight):
         # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), CFC (Cirrus Flux Camera, -z on body)    
         self.pointing = config["pointing_reference"]
-        self.q_plusZ_rot = quat.axis_angle_to_quaternion([0,1,0], -90) # rotate star tracker output to +z side of satellite for Selfie Camera from Star Tracker orientation on +x side of satellite
-        self.q_minusZ_rot = quat.axis_angle_to_quaternion([0,1,0], 90) # rotate star tracker output to -z side of satellite for Cirrus Flux Camera from Star Tracker orientation on +x side of satellite
         self.q_90_rot = quat.axis_angle_to_quaternion([0,1,0], -90) # translate star tracker targets to +z side of satellite
         self.q_180_rot = quat.axis_angle_to_quaternion([0,1,0], -180) # translate CFC targets to +z side/viewpoint of satellite
-        
-        # Quaternion change-of-basis rotations (comments in parentheses use R to denote a standard right-multiply rotation matrix notation)
-        self.B2ST = quat.axis_angle_to_quaternion([0,1,0], 90) # body to star tracker rotation (nominal right-multiply math notation would therefore be R_st_b)
-        self.ST2B = quat.quat_conjugate(self.B2ST) # star tracker to body rotation (nominal right-multiply math notation would therefore be R_b_st)
-        self.B2CFC = quat.axis_angle_to_quaternion([0,1,0], 180) # body to Cirrus Flux Camera rotation (nominal right-multiply math notation would therefore be R_cfc_b)
-        self.CFC2B = quat.quat_conjugate(self.B2CFC) # Cirrus Flux Camera to body rotation (nominal right-multiply math notation would therefore be R_b_cfc)
         
         # Controller gains
         Jmin = np.min(np.linalg.eigvals(self.satInertia)) # maximum principal moment of inertia (Markley & Crassidis defines this with the minimum principal moment of inertia, but maximum works better???)
