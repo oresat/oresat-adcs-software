@@ -2,7 +2,7 @@ import numpy as np
 from Quaternions import quat_mult, axis_angle_to_quaternion, quat_conjugate, hemi
 
 class Extended_Kalman_Filter():
-    def __init__(self, dt, P_att0, P_b0, sigma_gyro, sigma_bias, sigma_star): #star_tracker_covariance, omega_covariance, quat_process_noise, IMU_process_noise, sigma_star_tracker):
+    def __init__(self, dt, P_star_tracker_0, sigma_star, P_b0, sigma_gyro, sigma_bias):
         I3 = np.eye(3) # 3x3 unit matrix
         Z3 = np.zeros((3,3)) # 3x3 zeros matrix
         
@@ -10,7 +10,7 @@ class Extended_Kalman_Filter():
         self.q = None # estimated quaternion. Must be updated to initial measured quaternion in flight software
         self.b = np.zeros(3) # estimated gyro bias (3x1)
         
-        P_theta = P_att0 * I3
+        P_theta = P_star_tracker_0 * I3
         P_omega = P_b0 * I3
         self.P = np.block([[P_theta, Z3], # P: 6x6 covariance matrix
                            [Z3, P_omega]])
@@ -45,7 +45,7 @@ class Extended_Kalman_Filter():
         
         self.P = phi @ self.P @ phi.T + self.Q # update covariance matrix
         
-    def correction(self, q_measured): # correct/update filter based on measurement input from star tracker. Also known as the innovation step.
+    def correction(self, q_measured): # correct/update filter based on measurement input from star tracker. Also known as the innovation or update step.
         q = hemi(quat_mult(q_measured, quat_conjugate(self.q))) # calculate the innovation quaternion (measurement residual)
         y = 2 * q[:3] # small-angle innovation vector
         
@@ -68,7 +68,7 @@ def phi_matrix(dt, omega):
     skew_matrix = skew(omega)
     S2 = skew_matrix @ skew_matrix
     I3 = np.eye(3) # 3x3 unit matrix
-    Z3 = np.zeros(3,3) # 3x3 zeros matrix
+    Z3 = np.zeros((3,3)) # 3x3 zeros matrix
     norm = np.linalg.norm(omega)
     w1, w2, w3 = norm, norm**2, norm**3
     
@@ -95,3 +95,4 @@ if __name__ == "__main__":
     omega = [1,2,3]
     # ekf = Extended_Kalman_Filter()
     print(np.zeros((3,3)))
+    print(0.014 * 2*np.pi/360)

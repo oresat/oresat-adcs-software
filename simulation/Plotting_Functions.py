@@ -43,6 +43,10 @@ def plot_rw_speeds(timeData, dataOmegaRW, numRW, config, errorArray=None):
         pdf_path = config["plot_basepath"] / "RW_graph.pdf"
         plt.savefig(pdf_path, dpi=300)
         print(f"Plot saved as {pdf_path}")
+        
+        png_path = config["plot_basepath"] / "RW_graph.png"
+        plt.savefig(png_path, dpi=300)
+        print(f"Plot saved as {png_path}")
     
     plt.show(block=False)
     
@@ -76,6 +80,10 @@ def plot_magfield(times, TAMvalues, orbital_period, config, time_axis = "orbits"
         pdf_path = config["plot_basepath"] / "TAM.pdf"
         plt.savefig(pdf_path, dpi=300)
         print(f"Plot saved as {pdf_path}")
+        
+        png_path = config["plot_basepath"] / "TAM.png"
+        plt.savefig(png_path, dpi=300)
+        print(f"Plot saved as {png_path}")
     
     plt.show(block=False)
     
@@ -121,4 +129,8 @@ def plot_imu(times, imuValues, orbital_period, config, time_axis = "orbits", err
         plt.savefig(pdf_path, dpi=300)
         print(f"Plot saved as {pdf_path}")
     
+        png_path = config["plot_basepath"] / "IMU.png"
+        plt.savefig(png_path, dpi=300)
+        print(f"Plot saved as {png_path}")
+        
     plt.show(block=False)

@@ -1,15 +1,11 @@
 import numpy as np
 import time
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
-import matplotlib.cm as cmx
 from Basilisk.simulation import spacecraft, starTracker, imuSensor, reactionWheelStateEffector, magneticFieldWMM, magnetometer, MtbEffector # import simulation related support
 from Basilisk.utilities import SimulationBaseClass, macros, vizSupport, simIncludeGravBody, orbitalMotion, simIncludeRW, unitTestSupport # import general simulation support files
 from Basilisk.architecture import messaging
 from Basilisk import __path__
 from Plotting_Functions import plot_rw_speeds, plot_magfield, plot_imu
 from FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
-from scipy.spatial.transform import Rotation as R # to create nadir pointing quaternion
 import Quaternions as quat
 from pathlib import Path
 from sys import exit
@@ -69,7 +65,7 @@ def sim_main(config):
     oe.i = 30 * macros.D2R # inclination [rad]
     oe.Omega = 0.0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
     oe.omega = 0.0 * macros.D2R  # argument of periapsis [rad]
-    oe.f = 0 * macros.D2R       # true anomaly [rad]
+    oe.f = 50 * macros.D2R       # true anomaly [rad]
     
     rN, vN = orbitalMotion.elem2rv(mu_earth, oe)
     oe = orbitalMotion.rv2elem(mu_earth, rN, vN)  # this stores consistent initial orbit elements, fixes numerical errors, particulary with perfectly circular orbits. Consult ChatGPT for detailed explanation.
@@ -252,8 +248,8 @@ def sim_main(config):
         time_axis = "seconds"
     elif (actuator_mode == "MAG"):
         time_axis = "orbits"
-        # TAMvalues = magSensorRec.tam_S
-        # plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
+        TAMvalues = magSensorRec.tam_S
+        plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
     
     imuValues = imuRec.AngVelPlatform
     error_angles.append(quat.error_angle(fsw.error[-1])) # append final value, as unlike RW's, the IMU is in the FSW task, rather than the dynamics task, so has array logic had to be modified
@@ -261,9 +257,10 @@ def sim_main(config):
     # plot_imu(plot_times, imuValues, orbital_period, config, time_axis, error_angles)
     
     print(f"\nSimulation completed in {end-start} seconds")
-    print(f"\nFinal target was: {fsw.q_target}")
-    print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
-    print(f"Final error: {quat.error_angle(fsw.error[-1]):.3f} degrees")
+    if config["mission_mode"] == "POINTING":
+        print(f"\nFinal target was: {fsw.q_target}")
+        print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
+        print(f"Final error: {quat.error_angle(fsw.error[-1]):.3f} degrees")
 
 if __name__ == "__main__":
     Jxx = 0.01650237
@@ -284,19 +281,19 @@ if __name__ == "__main__":
                   
     viz_filename = None # sim visualization savename
     print_states = False # print states in flight software
-    save_plots = False # save plots as PDF's to target folder
-    plot_basepath = Path(r"C:\Users\benne\OneDrive\Master's Thesis\OSGC Documents\OSGC_Poster_Template") # path to which graphs should be saved
+    save_plots = True # save plots as PDF's and PNG's to target folder
+    plot_basepath = Path(r"C:\Users\benne\OneDrive\Master's Thesis\Basilisk_Output") # path to which graphs should be saved
     
     # initial satellite states
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
-    omega_init_rpm = np.array([-1.0, -2.0, 0.2])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([3.0, 0.0, 0.7])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
     sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = 90
+    sat_rot_angle = 130
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "ST" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
@@ -306,12 +303,12 @@ if __name__ == "__main__":
     # q_target [0.5 0.5 0.5 0.5]
             
     if (actuator_mode == "MAG"): # realistic MAG sim setup
-        sim_time = 20000
+        sim_time = 30000
         dynamics_update_time = .1
         fsw_update_time = .1
 
     elif (actuator_mode == "RW"): # realistic RW sim setup
-        sim_time = 50
+        sim_time = 
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
 

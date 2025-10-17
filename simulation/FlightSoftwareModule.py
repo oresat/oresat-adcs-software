@@ -2,8 +2,8 @@ from Basilisk.architecture import sysModel, messaging
 from Basilisk.utilities import macros
 import numpy as np
 from ADCS_Discrete_State_Space_Calculator import get_RW_gain_matrix
-from MTB_LQR_Discrete_Gains_Calculator import get_MTB_gain_matrix
-import Quaternions as quat # quaternion operations
+# from MTB_LQR_Discrete_Gains_Calculator import get_MTB_gain_matrix
+import Quaternions as quat
 from Kalman_Filter import Extended_Kalman_Filter
 from sys import exit
 
@@ -42,7 +42,7 @@ class FlightSoftware(sysModel.SysModel):
         
         self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
-        self.bangbang_rate = 0.2 # max rotation rate of bang bang controller
+        self.bangbang_rate = 0.08 # max rotation rate of bang bang controller
         self.thermal_spin_rpm = 1.0 # thermal spin rate about the z-axis (body frame)
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
@@ -68,12 +68,18 @@ class FlightSoftware(sysModel.SysModel):
         self.CFC2B = quat.quat_conjugate(self.B2CFC) # Cirrus Flux Camera to body rotation (nominal right-multiply math notation would therefore be R_b_cfc)
         
         # Controller gains
-        Jmin = np.max(np.linalg.eigvals(self.satInertia)) # maximum principal moment of inertia (Markley & Crassidis defines this with the minimum principal moment of inertia, but maximum works better???)
+        Jmin = np.min(np.linalg.eigvals(self.satInertia)) # maximum principal moment of inertia (Markley & Crassidis defines this with the minimum principal moment of inertia, but maximum works better???)
         self.detumble_gain = 4*np.pi/config["orbital_period"]*(1+np.sin(config["orbital_inclination"]*2*np.pi/180))*Jmin # gain based on minimal principal moment of inertia as defined in Markley & Crassidis
         
-        # Kalman filter object to store filter
-        # EKF = Extended_Kalman_Filter()
-
+        # Kalman filter object to store filter states and sensor values
+        P_star_tracker_0 = 8.7e-6 # [rad^2] Initial attitude uncertainty
+        sigma_star_tracker = 2.4e-5 # [rad] Star tracker bias, sensor noise
+        
+        P_b0 = 1 * macros.D2R # [rad/s] initial gyro uncertainty
+        self.gyro_bias_drift_rate = 0.015 * macros.D2R # [rad/s/K] additional bias drift dependent on difference between current and reference (25 C) temperatures
+        sigma_gyro = 0.014 * macros.D2R # [rad/s/sqrt(Hz)]
+        # EKF = Extended_Kalman_Filter(self.updateTime, P_star_tracker_0, sigma_star_tracker, P_b0, sigma_gyro, sigma_bias)
+        
     def Reset(self, currentTimeNanos):
         print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
         
@@ -196,6 +202,12 @@ class FlightSoftware(sysModel.SysModel):
     
     def check_torque_vals(self, wheel_torque, rwSpeeds): # ensure torque does not exceed maxTorque and that wheel speed does not exceed maxSpeed by the beginning of next step
         
+        # for i, val in enumerate(wheel_torque):
+        #     if abs(val) < 1.2e-4:
+        #         wheel_torque[i] = 0
+        #     else:
+        #         wheel_torque[i] = val * 0.1
+    
         wheel_torque = wheel_torque * 0.1
         
         for i in range(len(self.torque_vals[:4])):
