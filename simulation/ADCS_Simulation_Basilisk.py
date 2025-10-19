@@ -238,13 +238,19 @@ def sim_main(config):
     end = time.time()
     
     plot_times = imuRec.times() * 1e-9
-    error_angles = [quat.error_angle(quaternion) for quaternion in fsw.error_true[:-1]]
-    error_expanded = np.repeat(error_angles, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
-    error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
+    error_angles_true = [quat.error_angle(quaternion) for quaternion in fsw.error_true[:-1]]
+    error_expanded_true = np.repeat(error_angles_true, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
+    error_expanded_true = np.append(error_expanded_true, quat.error_angle(fsw.error_true[-1])) # append final value
+    if(config["use_filter"]):
+        error_angles_filter = [quat.error_angle(quaternion) for quaternion in fsw.error_filter[:-1]]
+        error_expanded_filter = np.repeat(error_angles_filter, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
+        error_expanded_filter = np.append(error_expanded_filter, quat.error_angle(fsw.error_filter[-1])) # append final value
+    else:
+        error_expanded_filter = None
+    
     if (actuator_mode == "RW"):
         RW_plot_times = rwSpeedLog.times() * 1e-9
-        plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, config, error_expanded)
-        # plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW)
+        plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, config, error_expanded_true, error_expanded_filter)
         time_axis = "seconds"
     elif (actuator_mode == "MAG"):
         time_axis = "orbits"
@@ -252,7 +258,7 @@ def sim_main(config):
         plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
     
     imuValues = imuRec.AngVelPlatform
-    error_angles.append(quat.error_angle(fsw.error[-1])) # append final value, as unlike RW's, the IMU is in the FSW task, rather than the dynamics task, so has array logic had to be modified
+    error_angles_true.append(quat.error_angle(fsw.error_true[-1])) # append final value, as unlike RW's, the IMU is in the FSW task, rather than the dynamics task, so array logic had to be modified
     plot_imu(plot_times, imuValues, orbital_period, config, time_axis)
     # plot_imu(plot_times, imuValues, orbital_period, config, time_axis, error_angles)
     
@@ -260,7 +266,7 @@ def sim_main(config):
     if config["mission_mode"] == "POINTING":
         print(f"\nFinal target was: {fsw.q_target}")
         print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
-        print(f"Final error: {quat.error_angle(fsw.error[-1]):.3f} degrees")
+        print(f"Final error: {quat.error_angle(fsw.error_true[-1]):.3f} degrees")
     
     print("FINAL COUNT: ", fsw.tracker_count)
     print("TICK COUNT: ", fsw.ticks)
@@ -286,6 +292,7 @@ if __name__ == "__main__":
     print_states = False # print states in flight software
     save_plots = True # save plots as PDF's and PNG's to target folder
     plot_basepath = Path(r"C:\Users\benne\OneDrive\Master's Thesis\Basilisk_Output") # path to which graphs should be saved
+    use_filter = True
     
     # initial satellite states
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
@@ -303,8 +310,6 @@ if __name__ == "__main__":
     actuator_mode = "RW" # Valid modes are RW and MAG
     mission_mode = "POINTING" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
     
-    # q_target [0.5 0.5 0.5 0.5]
-            
     if (actuator_mode == "MAG"): # realistic MAG sim setup
         sim_time = 30000
         dynamics_update_time = .1
@@ -327,6 +332,6 @@ if __name__ == "__main__":
     config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,
               "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "actuator_mode":actuator_mode, "mission_mode":mission_mode,
               "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states,
-              "save_plots":save_plots, "plot_basepath":plot_basepath}
+              "save_plots":save_plots, "plot_basepath":plot_basepath, "use_filter":use_filter}
     
     sim_main(config)

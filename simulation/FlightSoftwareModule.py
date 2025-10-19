@@ -33,9 +33,10 @@ class FlightSoftware(sysModel.SysModel):
         self.satInertia = config["J"] # satellite inertia tensor (matrix)
         self.updateTime = config["fsw_update_time"]
         self.output_states = config["print_states"] # output state messages or not for debugging
+        self.use_filter = config["use_filter"]
         self.crashTheKernel = False # intentional exit to catch errors. Crashes the kernel because of SWIG. 
-        self.error = [] # used for tracking and graphing error
-        self.error_true = [] #used to track the "true" error without filtering and with perfect state information
+        self.error_filter = [] # used for tracking and graphing filter error
+        self.error_true = [] # used to track the "true" error without filtering and with perfect state information
         
         self.q_target = np.array([0,0,0,1]) # attribute initialization, set to real value in sim main
         omega_target_rpm = np.array([0.0, 0.0, 0.0])
@@ -48,8 +49,10 @@ class FlightSoftware(sysModel.SysModel):
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
-        LQR_max_error = 0.03
+        LQR_max_error = 0.03 # SLOWED TUNING
         LQR_max_rate = 0.002
+        # LQR_max_error = 0.01 # GOOD TUNING
+        # LQR_max_rate = 0.003
         self.K_RW = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, use_integrator)
         # self.K_MTB = get_MTB_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, config["orbital_period"])
         self.actuator_mode = config["actuator_mode"] # activates either Reaction Wheels ("RW") or Magnetorquers ("MAG")
@@ -104,25 +107,25 @@ class FlightSoftware(sysModel.SysModel):
             q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
             q_true = quat.quat_mult(self.q_90_rot, q_star_tracker)
         
-        # q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
-        if (currentTimeNanos == 0):
+        if self.use_filter:
+            if (currentTimeNanos == 0):
+                q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
+                self.EKF.q = q # initialize filter
+            # simulate asynchronous MEKF
+            # elif (self.ticks % 11 == 0): # account for star tracker update rate
+            elif(True):
+                # print("ENTERED STAR TRACKER")
+                self.tracker_count += 1
+                q_st_rotated = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
+                q = self.EKF.update(omega, q_st_rotated)
+            else: # else only propagate estimate with body rates if no star tracker update available
+                q = self.EKF.update(omega)
+        else:
             q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
-            self.EKF.q = q # convert star tracker output to nominal body frame (+z with selfie cam)
-        # simulate asynchronous MEKF
-        # elif (currentTimeNanos * macros.NANO2SEC % 1.1 == 0): # account for star tracker update rate
-        elif (self.ticks % 11 == 0): # account for star tracker update rate
-        # elif (abs(currentTimeNanos * macros.NANO2SEC % 1.1) < (1e-2)): # account for star tracker update rate
-        # elif(True):
-            # print("ENTERED STAR TRACKER")
-            self.tracker_count += 1
-            q_st_rotated = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
-            q = self.EKF.update(omega, q_st_rotated)
-        else: # else only propagate estimate with body rates if no star tracker update available
-            q = self.EKF.update(omega)
-        
+
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hermisphere boundaries
-        self.error.append(q_error) # required for plotting after conclusion of sim
+        self.error_filter.append(q_error) # required for plotting after conclusion of sim
         self.error_true.append(quat.hemi(quat.quat_error(self.q_target, q_true)))
         
         ######################### CONTROL LOGIC ###############################    

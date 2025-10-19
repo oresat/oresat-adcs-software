@@ -12,7 +12,7 @@ def getLineColor(idx, maxNum, offset = 0, colorlib = "viridis"):
     scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=colorMap)
     return scalarMap.to_rgba(values[idx + 1])
 
-def plot_rw_speeds(timeData, dataOmegaRW, numRW, config, errorArray=None):
+def plot_rw_speeds(timeData, dataOmegaRW, numRW, config, errorArray=None, filterError=None):
     """Plot the RW spin rates with optional error curve on right axis."""
     fig, ax1 = plt.subplots(figsize=(8,4))
 
@@ -28,7 +28,11 @@ def plot_rw_speeds(timeData, dataOmegaRW, numRW, config, errorArray=None):
     # --- Optional error line ---
     if errorArray is not None:
         ax2 = ax1.twinx()  # create second y-axis
-        ax2.plot(timeData, errorArray, 'r--', label='Error')
+        ax2.plot(timeData, errorArray, 'r--', label='True Error')
+        
+        if filterError is not None:
+            ax2.plot(timeData, filterError, 'b--', label="Filter Error")
+        
         ax2.set_ylabel('Error (deg)')
         # Add legend for error separately
         lines1, labels1 = ax1.get_legend_handles_labels()
