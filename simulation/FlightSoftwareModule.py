@@ -4,7 +4,7 @@ import numpy as np
 from ADCS_Discrete_State_Space_Calculator import get_RW_gain_matrix
 # from MTB_LQR_Discrete_Gains_Calculator import get_MTB_gain_matrix
 import Quaternions as quat
-from Kalman_Filter import Extended_Kalman_Filter
+from Kalman_Filter import Multiplicative_Extended_Kalman_Filter
 from sys import exit
 
 class FlightSoftware(sysModel.SysModel):
@@ -35,6 +35,7 @@ class FlightSoftware(sysModel.SysModel):
         self.output_states = config["print_states"] # output state messages or not for debugging
         self.crashTheKernel = False # intentional exit to catch errors. Crashes the kernel because of SWIG. 
         self.error = [] # used for tracking and graphing error
+        self.error_true = [] #used to track the "true" error without filtering and with perfect state information
         
         self.q_target = np.array([0,0,0,1]) # attribute initialization, set to real value in sim main
         omega_target_rpm = np.array([0.0, 0.0, 0.0])
@@ -47,8 +48,8 @@ class FlightSoftware(sysModel.SysModel):
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
-        LQR_max_error = 0.01
-        LQR_max_rate = 0.003
+        LQR_max_error = 0.03
+        LQR_max_rate = 0.002
         self.K_RW = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, use_integrator)
         # self.K_MTB = get_MTB_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, config["orbital_period"])
         self.actuator_mode = config["actuator_mode"] # activates either Reaction Wheels ("RW") or Magnetorquers ("MAG")
@@ -67,12 +68,15 @@ class FlightSoftware(sysModel.SysModel):
         
         # Kalman filter object to store filter states and sensor values
         P_star_tracker_0 = 8.7e-6 # [rad^2] Initial attitude uncertainty
-        sigma_star_tracker = 2.4e-5 # [rad] Star tracker bias, sensor noise
+        sigma_star_tracker = 2.4e-7 # [rad] Star tracker bias, sensor noise
         
         P_b0 = 1 * macros.D2R # [rad/s] initial gyro uncertainty
         self.gyro_bias_drift_rate = 0.015 * macros.D2R # [rad/s/K] additional bias drift dependent on difference between current and reference (25 C) temperatures
         sigma_gyro = 0.014 * macros.D2R # [rad/s/sqrt(Hz)]
-        # EKF = Extended_Kalman_Filter(self.updateTime, P_star_tracker_0, sigma_star_tracker, P_b0, sigma_gyro, sigma_bias)
+        sigma_bias = 1e-5
+        self.EKF = Multiplicative_Extended_Kalman_Filter(self.updateTime, P_star_tracker_0, sigma_star_tracker, P_b0, sigma_gyro, sigma_bias)
+        
+        self.tracker_count = 0
         
     def Reset(self, currentTimeNanos):
         print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
@@ -95,14 +99,27 @@ class FlightSoftware(sysModel.SysModel):
             self.starTrackerMsg = self.starTrackerMsgIn()
             q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
             q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
+            q_true = quat.quat_mult(self.q_90_rot, q_star_tracker)
         
-        q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
-            
-        #ADD FILTER HERE
+        # q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
+        if (currentTimeNanos == 0):
+            q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
+            self.EKF.q = q # convert star tracker output to nominal body frame (+z with selfie cam)
+        # simulate asynchronous MEKF
+        # elif (currentTimeNanos * macros.NANO2SEC % 1.1 == 0): # account for star tracker update rate
+        # elif (abs(currentTimeNanos * macros.NANO2SEC % 1.1) < 1e-2): # account for star tracker update rate
+        elif(True):
+            # print("ENTERED STAR TRACKER")
+            self.tracker_count += 1
+            q_st_rotated = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
+            q = self.EKF.update(omega, q_st_rotated)
+        else: # else only propagate estimate with body rates if no star tracker update available
+            q = self.EKF.update(omega)
         
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hermisphere boundaries
         self.error.append(q_error) # required for plotting after conclusion of sim
+        self.error_true.append(quat.hemi(quat.quat_error(self.q_target, q_true)))
         
         ######################### CONTROL LOGIC ###############################    
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime): # turn controller on at specified time and check control mode for either Reaction Wheel or Magnetorquer (MTB) control

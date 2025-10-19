@@ -1,9 +1,10 @@
 import numpy as np
 from Quaternions import quat_mult, axis_angle_to_quaternion, quat_conjugate, hemi
 
-class Extended_Kalman_Filter():
+class Multiplicative_Extended_Kalman_Filter():
     def __init__(self, dt, P_star_tracker_0, sigma_star, P_b0, sigma_gyro, sigma_bias):
         I3 = np.eye(3) # 3x3 unit matrix
+        self.I6 = np.eye(6) # 6x6 unit matrix. Computationally more efficient to define it once rather than create it multiple times each iteration in the correction step
         Z3 = np.zeros((3,3)) # 3x3 zeros matrix
         
         self.dt = dt # time between sensor updates (IMU in this case) for prediction step
@@ -29,7 +30,7 @@ class Extended_Kalman_Filter():
             self.correction(q_measured) # correct state
         return self.q
     
-    def prediction(self, omega): # predict next state based on IMU input. Also known as the propagation step.
+    def prediction(self, omega): # predict next state based on IMU input. Also known as the propagation or estimation step.
         omega = omega - self.b # correct omega with estimated gyro bias
         phi = phi_matrix(self.dt, omega)
         
@@ -56,13 +57,19 @@ class Extended_Kalman_Filter():
         
         # update quaternion
         theta = np.linalg.norm(d_theta)
+        if theta < 1e-12:
+            delta_q = np.array([0.0, 0.0, 0.0, 1.0])
+        else:
+            axis = d_theta/theta
+            delta_q = axis_angle_to_quaternion(axis, theta)  # scalar-last
+            
         axis = d_theta/theta
         delta_q = axis_angle_to_quaternion(axis, theta)
         self.q = hemi(quat_mult(delta_q, self.q))
         
         self.b += db # update gyro bias
-        I6 = np.eye(6)
-        self.P = (I6 - K @ self.H) @ self.P @ (I6 - K @ self.H).T + K @ self.R @ K.T # update covariance matrix
+        self.P = (self.I6 - K @ self.H) @ self.P @ (self.I6 - K @ self.H).T + K @ self.R @ K.T # update covariance matrix
+        self.P = 0.5*(self.P + self.P.T) # Enforce symmetry after the Joseph update to kill numerical skew
 
 def phi_matrix(dt, omega):
     skew_matrix = skew(omega)
@@ -96,3 +103,4 @@ if __name__ == "__main__":
     # ekf = Extended_Kalman_Filter()
     print(np.zeros((3,3)))
     print(0.014 * 2*np.pi/360)
+    print(np.eye(3,6))

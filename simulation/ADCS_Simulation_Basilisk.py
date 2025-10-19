@@ -238,7 +238,7 @@ def sim_main(config):
     end = time.time()
     
     plot_times = imuRec.times() * 1e-9
-    error_angles = [quat.error_angle(quaternion) for quaternion in fsw.error[:-1]]
+    error_angles = [quat.error_angle(quaternion) for quaternion in fsw.error_true[:-1]]
     error_expanded = np.repeat(error_angles, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
     error_expanded = np.append(error_expanded, quat.error_angle(fsw.error[-1])) # append final value
     if (actuator_mode == "RW"):
@@ -261,7 +261,9 @@ def sim_main(config):
         print(f"\nFinal target was: {fsw.q_target}")
         print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
         print(f"Final error: {quat.error_angle(fsw.error[-1]):.3f} degrees")
-
+    
+    print("FINAL COUNT: ", fsw.tracker_count)
+    
 if __name__ == "__main__":
     Jxx = 0.01650237
     Jxy = 0.00000711
@@ -288,7 +290,7 @@ if __name__ == "__main__":
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
-    omega_init_rpm = np.array([3.0, 0.0, 0.7])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
@@ -308,7 +310,7 @@ if __name__ == "__main__":
         fsw_update_time = .1
 
     elif (actuator_mode == "RW"): # realistic RW sim setup
-        sim_time = 100
+        sim_time = 200
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
 
