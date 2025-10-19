@@ -77,6 +77,7 @@ class FlightSoftware(sysModel.SysModel):
         self.EKF = Multiplicative_Extended_Kalman_Filter(self.updateTime, P_star_tracker_0, sigma_star_tracker, P_b0, sigma_gyro, sigma_bias)
         
         self.tracker_count = 0
+        self.ticks = 0
         
     def Reset(self, currentTimeNanos):
         print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
@@ -84,6 +85,8 @@ class FlightSoftware(sysModel.SysModel):
     def UpdateState(self, currentTimeNanos):
         if self.crashTheKernel == True: # This method allows error message printing  *jank intensifies*
             exit()
+            
+        self.ticks += 1
         
         ######### GATHER SYSTEM STATES AND CALCULATE ERROR QUATERNION #########
         if self.imuMsgIn.isWritten():
@@ -107,8 +110,9 @@ class FlightSoftware(sysModel.SysModel):
             self.EKF.q = q # convert star tracker output to nominal body frame (+z with selfie cam)
         # simulate asynchronous MEKF
         # elif (currentTimeNanos * macros.NANO2SEC % 1.1 == 0): # account for star tracker update rate
-        # elif (abs(currentTimeNanos * macros.NANO2SEC % 1.1) < 1e-2): # account for star tracker update rate
-        elif(True):
+        elif (self.ticks % 11 == 0): # account for star tracker update rate
+        # elif (abs(currentTimeNanos * macros.NANO2SEC % 1.1) < (1e-2)): # account for star tracker update rate
+        # elif(True):
             # print("ENTERED STAR TRACKER")
             self.tracker_count += 1
             q_st_rotated = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)

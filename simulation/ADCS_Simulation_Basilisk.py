@@ -263,6 +263,7 @@ def sim_main(config):
         print(f"Final error: {quat.error_angle(fsw.error[-1]):.3f} degrees")
     
     print("FINAL COUNT: ", fsw.tracker_count)
+    print("TICK COUNT: ", fsw.ticks)
     
 if __name__ == "__main__":
     Jxx = 0.01650237
