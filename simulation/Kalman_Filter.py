@@ -36,14 +36,26 @@ class Multiplicative_Extended_Kalman_Filter():
         phi = self.phi_matrix(self.dt, omega)
         
         # propagate estimated quaternion state based on body rates
-        omega_norm = np.linalg.norm(omega)
-        if omega_norm < 1e-12:
-            pass # do nothing, as we assume no angle change
-        else:
-            theta = omega_norm * self.dt
-            axis = omega / omega_norm
-            delta_q = axis_angle_to_quaternion(axis, theta)
-            self.q = hemi(quat_mult(delta_q, self.q))
+        theta = np.linalg.norm(omega)*self.dt
+        half = 0.5*theta
+        if theta > 1e-8:
+            s = np.sin(half)/theta
+        else:  # avoid precision loss
+            s = 0.5 - theta**2/48.0
+        c = np.cos(half)
+        delta_q = np.r_[s*omega*self.dt, c]
+        delta_q /= np.linalg.norm(delta_q)
+        self.q = hemi(quat_mult(delta_q, self.q))
+        
+        # propagate estimated quaternion state based on body rates
+        # omega_norm = np.linalg.norm(omega)
+        # if omega_norm < 1e-12:
+        #     pass # do nothing, as we assume no angle change
+        # else:
+        #     theta = omega_norm * self.dt
+        #     axis = omega / omega_norm
+        #     delta_q = axis_angle_to_quaternion(axis, theta)
+        #     self.q = hemi(quat_mult(delta_q, self.q))
         
         self.P = phi @ self.P @ phi.T + self.Q # update covariance matrix
         

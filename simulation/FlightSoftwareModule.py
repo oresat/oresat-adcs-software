@@ -112,8 +112,8 @@ class FlightSoftware(sysModel.SysModel):
                 q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
                 self.EKF.q = q # initialize filter
             # simulate asynchronous MEKF
-            # elif (self.ticks % 11 == 0): # account for star tracker update rate
-            elif(True):
+            elif (self.ticks % 11 == 0): # account for star tracker update rate
+            # elif(True):
                 # print("ENTERED STAR TRACKER")
                 self.tracker_count += 1
                 q_st_rotated = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
