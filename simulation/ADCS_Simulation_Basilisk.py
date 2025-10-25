@@ -4,12 +4,17 @@ from Basilisk.simulation import spacecraft, starTracker, imuSensor, reactionWhee
 from Basilisk.utilities import SimulationBaseClass, macros, vizSupport, simIncludeGravBody, orbitalMotion, simIncludeRW, unitTestSupport # import general simulation support files
 from Basilisk.architecture import messaging
 from Basilisk import __path__
+from Basilisk.utilities import RigidBodyKinematics as rbk
 from Plotting_Functions import plot_rw_speeds, plot_magfield, plot_imu
 from FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
 import Quaternions as quat
 from pathlib import Path
 from sys import exit
 bskPath = __path__[0]
+
+# EXAMPLE FOR READING BASILISK MESSAGING SYSTEM AND ATTRIBUTES. USED FOR DOCUMENTATION, DO NOT DELETE!!!
+# message = scObject.scStateOutMsg.read()   # works before or after ExecuteSimulation()
+# print(dir(message))
 
 def sim_main(config):
     # simulation variables
@@ -126,8 +131,8 @@ def sim_main(config):
     # rw_Inertia = 4.2946e-6      # [kg*m^2], moment of inertia about spin axis (old values from OreSat 0.5 wheels)
     rw_Inertia = 7.271e-6      # [kg*m^2], moment of inertia about spin axis
     
-    maxSpeed = 11000.0 # ridiculous speed so our controller does the work. 100k effectively removes limit, and allows fsw to limit manually.
-    maxTorque = 100000.0 # only used when useMaxTorque = True. 100k effectively removes limit, and allows fsw to limit manually.
+    maxSpeed = 11000.0 # ridiculous speed so our controller does the work. 100k effectively removes limit and allows fsw to limit manually.
+    maxTorque = 100000.0 # only used when useMaxTorque = True. 100k effectively removes limit and allows fsw to limit manually.
     
     varRWModel = messaging.BalancedWheels # define wheel type as balanced (jitter is also an option)
     RWFactory = simIncludeRW.rwFactory() # create reaction wheel generator
@@ -142,7 +147,7 @@ def sim_main(config):
             u_max = maxTorque,
             RWModel=varRWModel
         )
-    numRW = RWFactory.getNumOfDevices()
+    numRW = RWFactory.getNumOfDevices() # counts the number of registered reaction wheels
 
     # create RW object container and tie to spacecraft object
     rwStateEffector = reactionWheelStateEffector.ReactionWheelStateEffector()
@@ -207,12 +212,12 @@ def sim_main(config):
     print(f"Satellite initial pointing target: {fsw.q_target}\n")
     
     ############################## SIMULATION #################################
-    
+    # log reaction wheel behavior
     rwSpeedLog = rwStateEffector.rwSpeedOutMsg.recorder()
     sim.AddModelToTask("dynamicsTask", rwSpeedLog)
 
-    # add simulation recording
-    stateRec = scObject.scStateOutMsg.recorder(macros.sec2nano(dynamics_update_time)) # create recorder of dynamics
+    # add spacecraft state recording in order to read attitudes for plotting
+    stateRec = scObject.scStateOutMsg.recorder(macros.sec2nano(dynamics_update_time)) # create dynamics recorder
     sim.AddModelToTask("dynamicsTask", stateRec) # add recorder to dynamics simulation
     
     basePath = r"C:\Users\benne\OneDrive\Master's Thesis\Code\Viz_Archive"
@@ -221,12 +226,14 @@ def sim_main(config):
     else:
         fileName = __file__
     
+    current_dir = Path(__file__).parent.resolve() # find current working directory such that any system running code directly from git can use the simplified OreSat model
+    model_file_path = current_dir / "OreSat_Simplified_Model.obj"
     viz = vizSupport.enableUnityVisualization(sim, "dynamicsTask", scObject, saveFile=fileName, liveStream=False, # let Vizard visualize data
                                               rwEffectorList=rwStateEffector) # add reaction wheel list to visualization
     vizSupport.setActuatorGuiSetting(viz, viewRWPanel=True, viewRWHUD=True)
     vizSupport.createCustomModel(viz,
-                                 modelPath=r"C:\Users\benne\OneDrive\Master's Thesis\Code\OreSat_Simplified_Model.obj",
-                                 scale=[-7, 7, 7], # scale model and mirror on x-axis
+                                 modelPath=str(model_file_path), # Vizard expects filepath as a string
+                                 scale=[-7, 7, 7], # scale model and mirror on x-axis (don't know why the model is otherwise improperly mirrored)
                                  rotation=[0,np.pi/2,np.pi/2]) # rotate to properly align body axes with simulation axes
     
     # simulate:
@@ -237,10 +244,15 @@ def sim_main(config):
     sim.ExecuteSimulation() # execute simulation
     end = time.time()
     
+    ############################ POST PROCESSING ##############################
+    
+    # get true attitude error without sensor noise for graphing and filter comparison
+    sigma_BN = np.array(stateRec.sigma_BN) # collects recorded spacecraft attitudes in MRP form. Extra rotation not necessary (as with filtered error in fsw) as it uses the same body frame as our system.
+    q_scalar_first = [rbk.MRP2EP(attitude) for attitude in sigma_BN] # convert MRP's to scalar-first quaternions
+    q_scalar_last = [quat.to_scalar_last(q) for q in q_scalar_first] # convert quaternions to scalar-last convention
+    error_true = [quat.error_angle(quat.quat_error(fsw.q_target, q)) for q in q_scalar_last] # calculate angle error (degrees) over simulation
+    
     plot_times = imuRec.times() * 1e-9
-    error_angles_true = [quat.error_angle(quaternion) for quaternion in fsw.error_true[:-1]]
-    error_expanded_true = np.repeat(error_angles_true, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
-    error_expanded_true = np.append(error_expanded_true, quat.error_angle(fsw.error_true[-1])) # append final value
     if(config["use_filter"]):
         error_angles_filter = [quat.error_angle(quaternion) for quaternion in fsw.error_filter[:-1]]
         error_expanded_filter = np.repeat(error_angles_filter, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
@@ -250,7 +262,7 @@ def sim_main(config):
     
     if (actuator_mode == "RW"):
         RW_plot_times = rwSpeedLog.times() * 1e-9
-        plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, config, error_expanded_true, error_expanded_filter)
+        plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, config, error_true, error_expanded_filter)
         time_axis = "seconds"
     elif (actuator_mode == "MAG"):
         time_axis = "orbits"
@@ -258,18 +270,17 @@ def sim_main(config):
         plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
     
     imuValues = imuRec.AngVelPlatform
-    error_angles_true.append(quat.error_angle(fsw.error_true[-1])) # append final value, as unlike RW's, the IMU is in the FSW task, rather than the dynamics task, so array logic had to be modified
     plot_imu(plot_times, imuValues, orbital_period, config, time_axis)
-    # plot_imu(plot_times, imuValues, orbital_period, config, time_axis, error_angles)
+    # plot_imu(plot_times, imuValues, orbital_period, config, time_axis, error_true)
     
     print(f"\nSimulation completed in {end-start} seconds")
     if config["mission_mode"] == "POINTING":
         print(f"\nFinal target was: {fsw.q_target}")
         print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
-        print(f"Final error: {quat.error_angle(fsw.error_true[-1]):.3f} degrees")
+        print(f"Final error: {error_true[-1]:.3f} degrees")
     
-    print("FINAL COUNT: ", fsw.tracker_count)
-    print("TICK COUNT: ", fsw.ticks)
+    print("\nFILTER TOTAL COUNT:", fsw.ticks)
+    print("FILTER UPDATE COUNT:", fsw.tracker_count)
     
 if __name__ == "__main__":
     Jxx = 0.01650237
@@ -294,6 +305,14 @@ if __name__ == "__main__":
     plot_basepath = Path(r"C:\Users\benne\OneDrive\Master's Thesis\Basilisk_Output") # path to which graphs should be saved
     use_filter = True
     
+    # sensor noise parameters
+    sigma_gyro = 0.014 * macros.D2R # instantaneous white noise
+    sigma_bias = 1e-5 # slow random bias drift (random walk)
+    P_b0 = 1 * macros.D2R # [rad/s] initial gyro uncertainty
+    
+    sigma_ST = 2.4e-7 # [rad] measurement noise (instantaneous orientation error)
+    P_ST_0 = 8.7e-6 # [rad^2] initial star tracker attitude uncertainty
+    
     # initial satellite states
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
@@ -316,7 +335,7 @@ if __name__ == "__main__":
         fsw_update_time = .1
 
     elif (actuator_mode == "RW"): # realistic RW sim setup
-        sim_time = 500
+        sim_time = 10
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
 
@@ -332,6 +351,7 @@ if __name__ == "__main__":
     config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,
               "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "actuator_mode":actuator_mode, "mission_mode":mission_mode,
               "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states,
-              "save_plots":save_plots, "plot_basepath":plot_basepath, "use_filter":use_filter}
+              "save_plots":save_plots, "plot_basepath":plot_basepath, "use_filter":use_filter, "sigma_gyro":sigma_gyro, "sigma_bias":sigma_bias, "P_b0":P_b0,
+              "sigma_ST":sigma_ST, "P_ST_0":P_ST_0}
     
     sim_main(config)

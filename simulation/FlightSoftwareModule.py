@@ -36,7 +36,6 @@ class FlightSoftware(sysModel.SysModel):
         self.use_filter = config["use_filter"]
         self.crashTheKernel = False # intentional exit to catch errors. Crashes the kernel because of SWIG. 
         self.error_filter = [] # used for tracking and graphing filter error
-        self.error_true = [] # used to track the "true" error without filtering and with perfect state information
         
         self.q_target = np.array([0,0,0,1]) # attribute initialization, set to real value in sim main
         omega_target_rpm = np.array([0.0, 0.0, 0.0])
@@ -44,20 +43,27 @@ class FlightSoftware(sysModel.SysModel):
         
         self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
-        self.bangbang_rate = 0.08 # max rotation rate of bang bang controller
+        self.bangbang_rate = 0.07 # max rotation rate of bang bang controller (0.07 rad/s ~ 4 deg/s)
         self.thermal_spin_rpm = 1.0 # thermal spin rate about the z-axis (body frame)
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
-        LQR_max_error = 0.03 # SLOWED TUNING
-        LQR_max_rate = 0.002
-        # LQR_max_error = 0.01 # GOOD TUNING
-        # LQR_max_rate = 0.003
+        # LQR_max_error = 0.02 # SLOWED TUNING FOR ASNYCHRONOUS SENSOR FILTERING
+        # LQR_max_rate = 0.001
+        # LQR_max_error = 0.01 # SLOWED TUNING FOR ASNYCHRONOUS SENSOR FILTERING
+        # LQR_max_rate = 0.001
+        LQR_max_error = 0.01 # GOOD TUNING FOR STANDARD LQR WITHOUT FILTERING
+        LQR_max_rate = 0.003
         self.K_RW = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, use_integrator)
         # self.K_MTB = get_MTB_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, config["orbital_period"])
         self.actuator_mode = config["actuator_mode"] # activates either Reaction Wheels ("RW") or Magnetorquers ("MAG")
         self.mission_mode = config["mission_mode"]
         self.slewMode = "slew" # only used for sliding mode bang-bang controller. Can be "slew" for large-angle rotations or "precise" for fine-pointing operations
+        
+        # gains for variable-gain sliding mode controller
+        self.fastGain = get_RW_gain_matrix(self.satInertia, self.updateTime, 0.01, 0.003, use_integrator)
+        self.slowGain = get_RW_gain_matrix(self.satInertia, self.updateTime, 0.03, 0.001, use_integrator)
+        self.gainMode = "fast"
         
         # Select the spacecraft pointing reference (which axis/sensor defines boresight):
         # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), CFC (Cirrus Flux Camera, -z on body)    
@@ -70,14 +76,8 @@ class FlightSoftware(sysModel.SysModel):
         self.detumble_gain = 4*np.pi/config["orbital_period"]*(1+np.sin(config["orbital_inclination"]*2*np.pi/180))*Jmin # gain based on minimal principal moment of inertia as defined in Markley & Crassidis
         
         # Kalman filter object to store filter states and sensor values
-        P_star_tracker_0 = 8.7e-6 # [rad^2] Initial attitude uncertainty
-        sigma_star_tracker = 2.4e-7 # [rad] Star tracker bias, sensor noise
-        
-        P_b0 = 1 * macros.D2R # [rad/s] initial gyro uncertainty
         self.gyro_bias_drift_rate = 0.015 * macros.D2R # [rad/s/K] additional bias drift dependent on difference between current and reference (25 C) temperatures
-        sigma_gyro = 0.014 * macros.D2R # [rad/s/sqrt(Hz)]
-        sigma_bias = 1e-5
-        self.EKF = Multiplicative_Extended_Kalman_Filter(self.updateTime, P_star_tracker_0, sigma_star_tracker, P_b0, sigma_gyro, sigma_bias)
+        self.EKF = Multiplicative_Extended_Kalman_Filter(self.updateTime, config["P_ST_0"], config["sigma_ST"], config["P_b0"], config["sigma_gyro"], config["sigma_bias"])
         
         self.tracker_count = 0
         self.ticks = 0
@@ -105,35 +105,33 @@ class FlightSoftware(sysModel.SysModel):
             self.starTrackerMsg = self.starTrackerMsgIn()
             q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
             q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
-            q_true = quat.quat_mult(self.q_90_rot, q_star_tracker)
         
-        if self.use_filter:
+        # print(dir(self.imuMsg)
+        
+        if self.use_filter: # simulate asynchronous MEKF
             if (currentTimeNanos == 0):
                 q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
                 self.EKF.q = q # initialize filter
-            # simulate asynchronous MEKF
             elif (self.ticks % 11 == 0): # account for star tracker update rate
-            # elif(True):
-                # print("ENTERED STAR TRACKER")
                 self.tracker_count += 1
                 q_st_rotated = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
                 q = self.EKF.update(omega, q_st_rotated)
             else: # else only propagate estimate with body rates if no star tracker update available
                 q = self.EKF.update(omega)
-        else:
+        else: # send sensor data direct to the controller without filtering
             q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
 
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hermisphere boundaries
-        self.error_filter.append(q_error) # required for plotting after conclusion of sim
-        self.error_true.append(quat.hemi(quat.quat_error(self.q_target, q_true)))
+        self.error_filter.append(q_error) # save estimated (filtered) attitude error for plotting after conclusion of sim execution
         
         ######################### CONTROL LOGIC ###############################    
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime): # turn controller on at specified time and check control mode for either Reaction Wheel or Magnetorquer (MTB) control
             if self.actuator_mode == "RW":
                 if self.mission_mode == "POINTING":
-                    desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
-                    # desired_torque = self.sliding_bangbang_quat(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller (bang-bang sliding mode controller)
+                    # desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller (standard LQR controller)
+                    # desired_torque = self.sliding_bangbang_controller(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller (bang-bang sliding mode controller)
+                    desired_torque = self.variable_gain_controller(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller (sliding-mode variable gain controller)
                     wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
                     self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
                 elif self.mission_mode == "THERMAL_REORIENT": # can only be set by first part of passive thermal spin controller
@@ -222,7 +220,10 @@ class FlightSoftware(sysModel.SysModel):
         #         wheel_torque[i] = 0
         #     else:
         #         wheel_torque[i] = val * 0.1
-    
+        
+        # if self.gainMode == "fast":
+        #     wheel_torque = wheel_torque * 0.1
+        
         wheel_torque = wheel_torque * 0.1
         
         for i in range(len(self.torque_vals[:4])):
@@ -257,7 +258,7 @@ class FlightSoftware(sysModel.SysModel):
         axis_torque = self.satInertia @ omega_error/self.updateTime # tau = I*omega/dt
         return axis_torque # negate to account for reaction wheel opposite reactions
     
-    def sliding_bangbang_quat(self, q_error, omega, currentTimeNanos):            
+    def sliding_bangbang_controller(self, q_error, omega, currentTimeNanos):            
         error_angle_degrees = quat.error_angle(q_error) # get minimum error angle (in degrees)
         self.slew_mode_check(error_angle_degrees, currentTimeNanos) # switch modes based on current error
 
@@ -265,3 +266,20 @@ class FlightSoftware(sysModel.SysModel):
             return self.quaternion_controller(q_error, omega)
         elif self.slewMode == "slew":
             return self.bang_bang_controller(q_error, omega)
+        
+    def variable_gain_controller(self, q_error, omega, currentTimeNanos):
+        error_angle_degrees = quat.error_angle(q_error) # get minimum error angle (in degrees)
+        if (error_angle_degrees < 1 and self.gainMode == "fast"): # switch to precision guidance mode
+            self.gainMode = "slow"
+            print(f"Gain mode switched to slow with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
+        elif (error_angle_degrees > 10 and self.gainMode == "slow"): # switch to slew mode 
+            self.gainMode = "fast"
+            print(f"Gain mode switched to fast with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
+        
+        x = np.concatenate((q_error[:3], omega)) # assemble state vector
+        
+        if self.gainMode == "fast":
+            return -self.fastGain @ x # invert sign for control
+        elif self.gainMode == "slow":
+            return -self.slowGain @ x # invert sign for control
+        

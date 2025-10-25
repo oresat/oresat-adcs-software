@@ -35,27 +35,30 @@ class Multiplicative_Extended_Kalman_Filter():
         omega = omega - self.b # correct omega with estimated gyro bias
         phi = self.phi_matrix(self.dt, omega)
         
-        # propagate estimated quaternion state based on body rates
+        # propagate estimated quaternion state based on body rates using the exponential map integration of the quaternion kinematic equation
         theta = np.linalg.norm(omega)*self.dt
         half = 0.5*theta
         if theta > 1e-8:
             s = np.sin(half)/theta
-        else:  # avoid precision loss
+        else:  # avoid precision loss using series for small angles
             s = 0.5 - theta**2/48.0
         c = np.cos(half)
         delta_q = np.r_[s*omega*self.dt, c]
         delta_q /= np.linalg.norm(delta_q)
         self.q = hemi(quat_mult(delta_q, self.q))
         
-        # propagate estimated quaternion state based on body rates
+        # propagate estimated quaternion state based on body rates THIS METHOD DOES NOT WORK
         # omega_norm = np.linalg.norm(omega)
-        # if omega_norm < 1e-12:
-        #     pass # do nothing, as we assume no angle change
+        # theta = omega_norm * self.dt
+        # if theta < 1e-8:
+        #     # small-angle exponential map (no axis divide)
+        #     dth = omega * self.dt
+        #     delta_q = np.r_[0.5*dth, 1.0]
         # else:
-        #     theta = omega_norm * self.dt
         #     axis = omega / omega_norm
-        #     delta_q = axis_angle_to_quaternion(axis, theta)
-        #     self.q = hemi(quat_mult(delta_q, self.q))
+        #     delta_q = axis_angle_to_quaternion(axis, theta)  # must be scalar-last
+        # delta_q /= np.linalg.norm(delta_q)                   # critical
+        # self.q = hemi(quat_mult(delta_q, self.q))
         
         self.P = phi @ self.P @ phi.T + self.Q # update covariance matrix
         

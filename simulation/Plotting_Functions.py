@@ -28,10 +28,9 @@ def plot_rw_speeds(timeData, dataOmegaRW, numRW, config, errorArray=None, filter
     # --- Optional error line ---
     if errorArray is not None:
         ax2 = ax1.twinx()  # create second y-axis
-        ax2.plot(timeData, errorArray, 'r--', label='True Error')
-        
         if filterError is not None:
             ax2.plot(timeData, filterError, 'b--', label="Filter Error")
+        ax2.plot(timeData, errorArray, 'r--', label='True Error')
         
         ax2.set_ylabel('Error (deg)')
         # Add legend for error separately
