@@ -95,6 +95,14 @@ def sim_main(config):
     
     starTrackerSensor.scStateInMsg.subscribeTo(scObject.scStateOutMsg)
     starTrackerRec = starTrackerSensor.sensorOutMsg.recorder(macros.sec2nano(fsw_update_time))
+    
+    # configure Star Tracker noise
+    if config["use_filter"] == True:
+        P = np.eye(3)*config["sigma_ST"]**2
+        starTrackerSensor.PMatrix = P
+        ST_bounds = 0.5
+        starTrackerSensor.setWalkBounds([ST_bounds, ST_bounds, ST_bounds]) # bounds must be set in order to properly activate sensor noise
+    
     sim.AddModelToTask("fswTask", starTrackerSensor) # Add sensor to flight software task
     sim.AddModelToTask("fswTask", starTrackerRec) # Add recording to task
     
@@ -103,6 +111,14 @@ def sim_main(config):
     imu.ModelTag = "imu"
     imu.scStateInMsg.subscribeTo(scObject.scStateOutMsg)
     imuRec = imu.sensorOutMsg.recorder(macros.sec2nano(fsw_update_time)) # Record the output message
+    
+    # configure IMU noise
+    if config["use_filter"] == True:
+        P = np.eye(3)*config["sigma_gyro"]**2
+        imu.PMatrixGyro = P
+        imu_bounds = 5
+        imu.setErrorBoundsGyro([imu_bounds, imu_bounds, imu_bounds]) # bounds must be set in order to properly activate sensor noise
+    
     imu.UpdateState(0)  # Force IMU to process initial state, otherwise first value is set to zero for some reason
     sim.AddModelToTask("fswTask", imu) # Add sensor to flight software task
     sim.AddModelToTask("fswTask", imuRec) # Add recording to task
@@ -301,16 +317,17 @@ if __name__ == "__main__":
                   
     viz_filename = None # sim visualization savename
     print_states = False # print states in flight software
-    save_plots = True # save plots as PDF's and PNG's to target folder
+    save_pdf = True # save plots as PDF's to target folder
+    save_png = False # save plots as PNG's to target folder
     plot_basepath = Path(r"C:\Users\benne\OneDrive\Master's Thesis\Basilisk_Output") # path to which graphs should be saved
     use_filter = True
     
     # sensor noise parameters
-    sigma_gyro = 0.014 * macros.D2R # instantaneous white noise
+    sigma_gyro = 0.014 * macros.D2R # instantaneous white noise (datasheet gives value in degrees, convert to radians)
     sigma_bias = 1e-5 # slow random bias drift (random walk)
     P_b0 = 1 * macros.D2R # [rad/s] initial gyro uncertainty
     
-    sigma_ST = 2.4e-7 # [rad] measurement noise (instantaneous orientation error)
+    sigma_ST = 2.4e-6 # [rad] measurement noise (instantaneous orientation error)
     P_ST_0 = 8.7e-6 # [rad^2] initial star tracker attitude uncertainty
     
     # initial satellite states
@@ -335,7 +352,7 @@ if __name__ == "__main__":
         fsw_update_time = .1
 
     elif (actuator_mode == "RW"): # realistic RW sim setup
-        sim_time = 10
+        sim_time = 150
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
 
@@ -351,7 +368,7 @@ if __name__ == "__main__":
     config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,
               "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "actuator_mode":actuator_mode, "mission_mode":mission_mode,
               "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states,
-              "save_plots":save_plots, "plot_basepath":plot_basepath, "use_filter":use_filter, "sigma_gyro":sigma_gyro, "sigma_bias":sigma_bias, "P_b0":P_b0,
+              "save_pdf":save_pdf, "save_png":save_png, "plot_basepath":plot_basepath, "use_filter":use_filter, "sigma_gyro":sigma_gyro, "sigma_bias":sigma_bias, "P_b0":P_b0,
               "sigma_ST":sigma_ST, "P_ST_0":P_ST_0}
     
     sim_main(config)

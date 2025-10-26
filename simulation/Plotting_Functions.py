@@ -42,11 +42,12 @@ def plot_rw_speeds(timeData, dataOmegaRW, numRW, config, errorArray=None, filter
         plt.legend()
         plt.title("Reaction Wheel Speeds")
     
-    if config["save_plots"] == True:
+    
+    if config["save_pdf"] == True:
         pdf_path = config["plot_basepath"] / "RW_graph.pdf"
         plt.savefig(pdf_path, dpi=300)
         print(f"Plot saved as {pdf_path}")
-        
+    if config["save_png"] == True:
         png_path = config["plot_basepath"] / "RW_graph.png"
         plt.savefig(png_path, dpi=300)
         print(f"Plot saved as {png_path}")
@@ -79,11 +80,11 @@ def plot_magfield(times, TAMvalues, orbital_period, config, time_axis = "orbits"
     plt.legend()
     plt.title("3-Axis Magnetometer Measurements")
     
-    if config["save_plots"] == True:
+    if config["save_pdf"] == True:
         pdf_path = config["plot_basepath"] / "TAM.pdf"
         plt.savefig(pdf_path, dpi=300)
         print(f"Plot saved as {pdf_path}")
-        
+    if config["save_png"] == True:
         png_path = config["plot_basepath"] / "TAM.png"
         plt.savefig(png_path, dpi=300)
         print(f"Plot saved as {png_path}")
@@ -127,11 +128,11 @@ def plot_imu(times, imuValues, orbital_period, config, time_axis = "orbits", err
         plt.legend()
         plt.title("3-Axis Satellite Body Rates")
         
-    if config["save_plots"] == True:
+    if config["save_pdf"] == True:
         pdf_path = config["plot_basepath"] / "IMU.pdf"
         plt.savefig(pdf_path, dpi=300)
         print(f"Plot saved as {pdf_path}")
-    
+    if config["save_png"] == True:
         png_path = config["plot_basepath"] / "IMU.png"
         plt.savefig(png_path, dpi=300)
         print(f"Plot saved as {png_path}")

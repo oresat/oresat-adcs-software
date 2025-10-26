@@ -106,8 +106,6 @@ class FlightSoftware(sysModel.SysModel):
             q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
             q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
         
-        # print(dir(self.imuMsg)
-        
         if self.use_filter: # simulate asynchronous MEKF
             if (currentTimeNanos == 0):
                 q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
@@ -118,9 +116,9 @@ class FlightSoftware(sysModel.SysModel):
                 q = self.EKF.update(omega, q_st_rotated)
             else: # else only propagate estimate with body rates if no star tracker update available
                 q = self.EKF.update(omega)
-        else: # send sensor data direct to the controller without filtering
+        else: # send sensor data directly to the controller without filtering
             q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
-
+            
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hermisphere boundaries
         self.error_filter.append(q_error) # save estimated (filtered) attitude error for plotting after conclusion of sim execution
