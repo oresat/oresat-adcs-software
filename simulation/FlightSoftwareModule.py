@@ -48,10 +48,10 @@ class FlightSoftware(sysModel.SysModel):
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
         use_integrator = False # use gain matrix with integrator or without
-        # LQR_max_error = 0.02 # SLOWED TUNING FOR ASNYCHRONOUS SENSOR FILTERING
+        # LQR_max_error = 0.02 # VERY SLOWED TUNING FOR ASNYCHRONOUS SENSOR FILTERING
         # LQR_max_rate = 0.001
         # LQR_max_error = 0.01 # SLOWED TUNING FOR ASNYCHRONOUS SENSOR FILTERING
-        # LQR_max_rate = 0.001
+        # LQR_max_rate = 0.002
         LQR_max_error = 0.01 # GOOD TUNING FOR STANDARD LQR WITHOUT FILTERING
         LQR_max_rate = 0.003
         self.K_RW = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, use_integrator)
@@ -79,11 +79,13 @@ class FlightSoftware(sysModel.SysModel):
         self.gyro_bias_drift_rate = 0.015 * macros.D2R # [rad/s/K] additional bias drift dependent on difference between current and reference (25 C) temperatures
         self.EKF = Multiplicative_Extended_Kalman_Filter(self.updateTime, config["P_ST_0"], config["sigma_ST"], config["P_b0"], config["sigma_gyro"], config["sigma_bias"])
         
+        self.ST_rate_check = int(config["ST_update_rate"]/self.updateTime) # how many fsw 'ticks' between star tracker update
         self.tracker_count = 0
         self.ticks = 0
         
     def Reset(self, currentTimeNanos):
-        print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
+        pass
+        # print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
         
     def UpdateState(self, currentTimeNanos):
         if self.crashTheKernel == True: # This method allows error message printing  *jank intensifies*
@@ -110,12 +112,12 @@ class FlightSoftware(sysModel.SysModel):
             if (currentTimeNanos == 0):
                 q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
                 self.EKF.q = q # initialize filter
-            elif (self.ticks % 11 == 0): # account for star tracker update rate
+            elif (self.ticks % self.ST_rate_check == 0): # account for star tracker update rate
                 self.tracker_count += 1
                 q_st_rotated = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
-                q = self.EKF.update(omega, q_st_rotated)
+                q, omega = self.EKF.update(omega, q_st_rotated)
             else: # else only propagate estimate with body rates if no star tracker update available
-                q = self.EKF.update(omega)
+                q, omega= self.EKF.update(omega)
         else: # send sensor data directly to the controller without filtering
             q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
             
@@ -127,9 +129,9 @@ class FlightSoftware(sysModel.SysModel):
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime): # turn controller on at specified time and check control mode for either Reaction Wheel or Magnetorquer (MTB) control
             if self.actuator_mode == "RW":
                 if self.mission_mode == "POINTING":
-                    # desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller (standard LQR controller)
+                    desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller (standard LQR controller)
                     # desired_torque = self.sliding_bangbang_controller(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller (bang-bang sliding mode controller)
-                    desired_torque = self.variable_gain_controller(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller (sliding-mode variable gain controller)
+                    # desired_torque = self.variable_gain_controller(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller (sliding-mode variable gain controller)
                     wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
                     self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
                 elif self.mission_mode == "THERMAL_REORIENT": # can only be set by first part of passive thermal spin controller
@@ -213,16 +215,7 @@ class FlightSoftware(sysModel.SysModel):
     
     def check_torque_vals(self, wheel_torque, rwSpeeds): # ensure torque does not exceed maxTorque and that wheel speed does not exceed maxSpeed by the beginning of next step
         
-        # for i, val in enumerate(wheel_torque):
-        #     if abs(val) < 1.2e-4:
-        #         wheel_torque[i] = 0
-        #     else:
-        #         wheel_torque[i] = val * 0.1
-        
-        # if self.gainMode == "fast":
-        #     wheel_torque = wheel_torque * 0.1
-        
-        wheel_torque = wheel_torque * 0.1
+        wheel_torque = wheel_torque * 0.05
         
         for i in range(len(self.torque_vals[:4])):
             projected_speed = rwSpeeds[i] + (wheel_torque[i]/self.rwInertia) * self.updateTime # predicted speed at requested torque after next time step
@@ -270,7 +263,7 @@ class FlightSoftware(sysModel.SysModel):
         if (error_angle_degrees < 1 and self.gainMode == "fast"): # switch to precision guidance mode
             self.gainMode = "slow"
             print(f"Gain mode switched to slow with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
-        elif (error_angle_degrees > 10 and self.gainMode == "slow"): # switch to slew mode 
+        elif (error_angle_degrees > 5 and self.gainMode == "slow"): # switch to slew mode 
             self.gainMode = "fast"
             print(f"Gain mode switched to fast with remaining error of {error_angle_degrees} degrees at {currentTimeNanos*macros.NANO2SEC} seconds", flush = True)
         

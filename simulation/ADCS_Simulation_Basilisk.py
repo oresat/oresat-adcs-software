@@ -179,7 +179,7 @@ def sim_main(config):
     
     mtbConfigParams = messaging.MTBArrayConfigMsgPayload()
     mtbConfigParams.numMTB = 3
-    mtbConfigParams.GtMatrix_B = [1., 0., 0., # 3 x numMTB, row-major (X row, Y row, Z row)
+    mtbConfigParams.GtMatrix_B = [1., 0., 0., # expects single 1x(3*n) array
                                   0., 1., 0.,
                                   0., 0., 1.]
     mtbConfigParams.maxMtbDipoles = [0.5e-2, 0.5e-2, 0.75e-2] # individual rod Dipole limits. Currently set to max continuous limit, not burst limit [A·m^2]
@@ -224,8 +224,8 @@ def sim_main(config):
     q_rot = quat.axis_angle_to_quaternion(sat_rot_axis, sat_rot_angle)
     fsw.update_target(quat.quat_mult(q_rot, q_init))
     
-    print(f"\nSatellite view device is \"{fsw.pointing}\" with initial reference: {q_init}")
-    print(f"Satellite initial pointing target: {fsw.q_target}\n")
+    # print(f"\nSatellite view device is \"{fsw.pointing}\" with initial reference: {q_init}")
+    # print(f"Satellite initial pointing target: {fsw.q_target}\n")
     
     ############################## SIMULATION #################################
     # log reaction wheel behavior
@@ -292,11 +292,12 @@ def sim_main(config):
     print(f"\nSimulation completed in {end-start} seconds")
     if config["mission_mode"] == "POINTING":
         print(f"\nFinal target was: {fsw.q_target}")
-        print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, q_init))}")
+        print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, sat_q_init))}") # calculate orientation/angle change based on initial attitude
         print(f"Final error: {error_true[-1]:.3f} degrees")
     
     print("\nFILTER TOTAL COUNT:", fsw.ticks)
     print("FILTER UPDATE COUNT:", fsw.tracker_count)
+    print(f"MAX ERROR AFTER {config["error_time_check"]} SECONDS:", max(error_true[int(config["error_time_check"] / config["dynamics_update_time"]):])) # this just checks for maximum error after a certain sim time (i.e. if large oscillations occur after steady-state should have been reached)
     
 if __name__ == "__main__":
     Jxx = 0.01650237
@@ -321,28 +322,31 @@ if __name__ == "__main__":
     save_png = False # save plots as PNG's to target folder
     plot_basepath = Path(r"C:\Users\benne\OneDrive\Master's Thesis\Basilisk_Output") # path to which graphs should be saved
     use_filter = True
+    error_time_check = 30 # time after which maximum error is considered for evaluation
     
     # sensor noise parameters
-    sigma_gyro = 0.014 * macros.D2R # instantaneous white noise (datasheet gives value in degrees, convert to radians)
+    sigma_gyro = 0.1 * macros.D2R # instantaneous white noise (datasheet gives value in degrees, convert to radians)
     sigma_bias = 1e-5 # slow random bias drift (random walk)
     P_b0 = 1 * macros.D2R # [rad/s] initial gyro uncertainty
     
     sigma_ST = 2.4e-6 # [rad] measurement noise (instantaneous orientation error)
-    P_ST_0 = 8.7e-6 # [rad^2] initial star tracker attitude uncertainty
+    P_ST_0 = 8.7e-7 # [rad^2] initial star tracker attitude uncertainty
+    ST_update_rate = 1.1 # defined in seconds
     
     # initial satellite states
     init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
-    omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin velocties [RPM]
+    # omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
     sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = 130
+    sat_rot_angle = 10
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
-    pointing_reference = "ST" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
+    pointing_reference = "CFC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     actuator_mode = "RW" # Valid modes are RW and MAG
     mission_mode = "POINTING" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
     
@@ -363,12 +367,12 @@ if __name__ == "__main__":
             print("\nERROR: reaction wheels only support 'POINTING' mission mode\nExiting sim")
             exit()
     
-    print(f"\nActuator Mode: {actuator_mode}\nMission Mode: {mission_mode}")
+    print(f"\nActuator Mode: {actuator_mode}\nMission Mode: {mission_mode}\nView Device: \"{pointing_reference}\"\n")
     
     config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,
               "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "actuator_mode":actuator_mode, "mission_mode":mission_mode,
               "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states,
               "save_pdf":save_pdf, "save_png":save_png, "plot_basepath":plot_basepath, "use_filter":use_filter, "sigma_gyro":sigma_gyro, "sigma_bias":sigma_bias, "P_b0":P_b0,
-              "sigma_ST":sigma_ST, "P_ST_0":P_ST_0}
+              "sigma_ST":sigma_ST, "P_ST_0":P_ST_0, "ST_update_rate":ST_update_rate, "error_time_check":error_time_check}
     
     sim_main(config)

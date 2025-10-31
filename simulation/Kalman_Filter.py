@@ -23,13 +23,14 @@ class Multiplicative_Extended_Kalman_Filter():
         self.Q = np.block([[Q11, Q12],
                            [Q12, Q22]])        
         self.R = sigma_star**2 * self.I3 # R: measurement noise covariance [rad]
-        self.H = np.eye(3, 6) # H: matrix (Jacobian of measurement model)
+        self.H = 0.3*np.eye(3, 6) # H: matrix (Jacobian of measurement model)
+        # self.H = np.eye(3, 6) # H: matrix (Jacobian of measurement model)
         
     def update(self, omega, q_measured=None): # update Kalman filter and return output
         self.prediction(omega) # predict state
         if (q_measured is not None): # if star tracker sensor measurement exists, perform correction step as well
             self.correction(q_measured) # correct state
-        return self.q
+        return self.q, (omega-self.b) # return filtered attitude estimate and bias-correct rate measurement
     
     def prediction(self, omega): # predict next state based on IMU input. Also known as the propagation or estimation step.
         omega = omega - self.b # correct omega with estimated gyro bias
@@ -78,23 +79,35 @@ class Multiplicative_Extended_Kalman_Filter():
         else:
             axis = d_theta/theta
             delta_q = axis_angle_to_quaternion(axis, theta)  # scalar-last
-            
-        axis = d_theta/theta
-        delta_q = axis_angle_to_quaternion(axis, theta)
         self.q = hemi(quat_mult(delta_q, self.q))
-        
-        self.b += db # update gyro bias
-        self.P = (self.I6 - K @ self.H) @ self.P @ (self.I6 - K @ self.H).T + K @ self.R @ K.T # update covariance matrix
-        self.P = 0.5*(self.P + self.P.T) # Enforce symmetry after the Joseph update to kill numerical skew
 
+        self.b += db # update gyro bias (bias correction)
+        
+        # covariance Joseph update
+        I6H = (self.I6 - K @ self.H)
+        self.P = I6H @ self.P @ I6H.T + K @ self.R @ K.T # update covariance matrix
+        self.P = 0.5*(self.P + self.P.T) # Enforce symmetry after the Joseph update to kill numerical skew
+        
+        # MEKF reset mapping (new error coordinates)
+        # Gamma ~ I - 0.5*[d_theta]x <- skew matrix built from d_theta
+        theta_skew = skew(d_theta)
+        Gamma = self.I3 - 0.5*theta_skew
+        G = np.block([[Gamma, self.Z3],
+                      [self.Z3, self.I3]])
+        self.P = G @ self.P @ G.T
+        
     def phi_matrix(self, dt, omega):
         skew_matrix = skew(omega)
         S2 = skew_matrix @ skew_matrix
         norm = np.linalg.norm(omega)
-        w1, w2, w3 = norm, norm**2, norm**3
         
-        phi11 = self.I3 - skew_matrix * np.sin(w1*dt)/w1 + S2 * (1-np.cos(w1*dt))/w2
-        phi12 = skew_matrix *(1-np.cos(w1*dt))/w2 - self.I3*dt - S2 * (w1*dt - np.sin(w1*dt))/w3
+        if norm < 1e-6:
+            phi11 = self.I3 - skew_matrix*dt + 0.5*S2*dt**2
+            phi12 = -self.I3*dt + 0.5*skew_matrix*dt**2 - (1.0/6.0)*S2*dt**3
+        else:
+            w1, w2, w3 = norm, norm**2, norm**3
+            phi11 = self.I3 - skew_matrix * np.sin(w1*dt)/w1 + S2 * (1-np.cos(w1*dt))/w2
+            phi12 = skew_matrix *(1-np.cos(w1*dt))/w2 - self.I3*dt - S2 * (w1*dt - np.sin(w1*dt))/w3
         
         phi = np.block([[phi11, phi12],
                         [self.Z3, self.I3]])
