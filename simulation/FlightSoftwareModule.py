@@ -34,8 +34,10 @@ class FlightSoftware(sysModel.SysModel):
         self.updateTime = config["fsw_update_time"]
         self.output_states = config["print_states"] # output state messages or not for debugging
         self.use_filter = config["use_filter"]
+        self.target_tracking = config["tracking_mode_active"] # True or False, set tracking mode to slowly slew satellite over time to emulate target tracking mode
         self.crashTheKernel = False # intentional exit to catch errors. Crashes the kernel because of SWIG. 
-        self.error_filter = [] # used for tracking and graphing filter error
+        self.error_filter = [] # used for tracking and graphing filter error (estimated error based on filter state estimates)
+        self.target_history = [] # only used if self.target_tracking = True
         
         self.q_target = np.array([0,0,0,1]) # attribute initialization, set to real value in sim main
         omega_target_rpm = np.array([0.0, 0.0, 0.0])
@@ -52,8 +54,10 @@ class FlightSoftware(sysModel.SysModel):
         # LQR_max_rate = 0.001
         # LQR_max_error = 0.01 # SLOWED TUNING FOR ASNYCHRONOUS SENSOR FILTERING
         # LQR_max_rate = 0.002
-        LQR_max_error = 0.01 # GOOD TUNING FOR STANDARD LQR WITHOUT FILTERING
-        LQR_max_rate = 0.003
+        # LQR_max_error = 0.01 # GOOD TUNING FOR STANDARD LQR WITHOUT FILTERING
+        # LQR_max_rate = 0.003
+        LQR_max_error = 0.001 # FAST TUNING FOR TRACKING
+        LQR_max_rate = 0.1
         self.K_RW = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, use_integrator)
         # self.K_MTB = get_MTB_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, config["orbital_period"])
         self.actuator_mode = config["actuator_mode"] # activates either Reaction Wheels ("RW") or Magnetorquers ("MAG")
@@ -83,15 +87,21 @@ class FlightSoftware(sysModel.SysModel):
         self.tracker_count = 0
         self.ticks = 0
         
+        self.rotate = quat.axis_angle_to_quaternion([0,1,0], -0.02)
+        
     def Reset(self, currentTimeNanos):
         pass
-        # print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s")
+        # print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.NANO2SEC:.2f} s") # commented out to remove unnecessary printing every execution
         
     def UpdateState(self, currentTimeNanos):
         if self.crashTheKernel == True: # This method allows error message printing  *jank intensifies*
             exit()
             
         self.ticks += 1
+        
+        if self.target_tracking == True:
+            self.q_target = quat.quat_mult(self.rotate, self.q_target)
+            self.target_history.append(self.q_target)
         
         ######### GATHER SYSTEM STATES AND CALCULATE ERROR QUATERNION #########
         if self.imuMsgIn.isWritten():

@@ -69,20 +69,12 @@ def error_angle(q_error):
     return 2*np.acos(abs(q_error[3])) * 180/ np.pi
 
 if __name__ == "__main__":
-    qtarget = axis_angle_to_quaternion([1,1,0], 90)
-    print(qtarget)
-    qcurrent = [0,0,0,1]
-    q_error = quat_error(qtarget, qcurrent)
-    print(error_angle(q_error))
+    r1 = axis_angle_to_quaternion([1,0,0], -90)
+    r2 = axis_angle_to_quaternion([0,1,0], 60)
     
-    qtarget = axis_angle_to_quaternion([1,1,0], 90)
-    print(qtarget)
-    qcurrent = axis_angle_to_quaternion([1,0,0], 45)
-    # q_error = quat_error(qtarget, qcurrent)
-    # print(q_error, error_angle(q_error))
-    q_error = quat_error(qtarget, qcurrent)
-    print(q_error, error_angle(q_error))
+    r_tot = quat_mult(r2, r1)
+    axis = quat_to_axis(r_tot)
+    angle = error_angle(quat_error(r_tot, [0,0,0,1]))
     
-    print(quat_conjugate(axis_angle_to_quaternion([0,1,0], 180)))
     
     

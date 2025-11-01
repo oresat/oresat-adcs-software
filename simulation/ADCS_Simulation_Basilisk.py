@@ -67,7 +67,7 @@ def sim_main(config):
     oe = orbitalMotion.ClassicElements()
     oe.a = (415+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
     oe.e = 0 # eccentricity
-    oe.i = 30 * macros.D2R # inclination [rad]
+    oe.i = 0 * macros.D2R # inclination [rad]
     oe.Omega = 0.0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
     oe.omega = 0.0 * macros.D2R  # argument of periapsis [rad]
     oe.f = 90 * macros.D2R       # true anomaly [rad]
@@ -76,7 +76,6 @@ def sim_main(config):
     oe = orbitalMotion.rv2elem(mu_earth, rN, vN)  # this stores consistent initial orbit elements, fixes numerical errors, particulary with perfectly circular orbits. Consult ChatGPT for detailed explanation.
     orbital_period = 2*np.pi*np.sqrt(oe.a**3/mu_earth) # define orbital period for plotting
     orbital_inclination = oe.i # used for readable argument passing when defining FSW
-    
     # To set the spacecraft initial conditions, the following initial position and velocity variables are set:
     scObject.hub.r_CN_NInit = rN  # r_BN_N [m]
     scObject.hub.v_CN_NInit = vN  # v_BN_N [m/s]
@@ -261,14 +260,26 @@ def sim_main(config):
     end = time.time()
     
     ############################ POST PROCESSING ##############################
+    '''
+    Data arrays are defined differently in this section depending on whether
+    the data originates from a dynamics process or an fsw process, which
+    typically run at different rates in the simulation. As such, their lengths
+    must be adapted to be plottable by upsampling the shorter array.
+    '''
     
     # get true attitude error without sensor noise for graphing and filter comparison
     sigma_BN = np.array(stateRec.sigma_BN) # collects recorded spacecraft attitudes in MRP form. Extra rotation not necessary (as with filtered error in fsw) as it uses the same body frame as our system.
     q_scalar_first = [rbk.MRP2EP(attitude) for attitude in sigma_BN] # convert MRP's to scalar-first quaternions
     q_scalar_last = [quat.to_scalar_last(q) for q in q_scalar_first] # convert quaternions to scalar-last convention
-    error_true = [quat.error_angle(quat.quat_error(fsw.q_target, q)) for q in q_scalar_last] # calculate angle error (degrees) over simulation
     
-    plot_times = imuRec.times() * 1e-9
+    # Target tracking mode requires special error calculations as we are dealing with step changes in target, which happens in fsw, not dynamics
+    if config["tracking_mode_active"] == True:
+        tracking_error = [quat.error_angle(quat.quat_error(q_target, q)) for (q_target, q) in zip(fsw.target_history, q_scalar_last[::int(fsw_update_time/dynamics_update_time)])] # calculate step-errors for tracking mode
+        error_true = np.repeat(tracking_error[:-1], fsw_update_time/dynamics_update_time, axis=0) # expand to match plotting times
+        error_true = np.append(error_true, tracking_error[-1])
+    else:
+        error_true = [quat.error_angle(quat.quat_error(fsw.q_target, q)) for q in q_scalar_last] # calculate angle error (degrees) over simulation
+    
     if(config["use_filter"]):
         error_angles_filter = [quat.error_angle(quaternion) for quaternion in fsw.error_filter[:-1]]
         error_expanded_filter = np.repeat(error_angles_filter, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
@@ -276,8 +287,9 @@ def sim_main(config):
     else:
         error_expanded_filter = None
     
+    plot_times = imuRec.times() * 1e-9
     if (actuator_mode == "RW"):
-        RW_plot_times = rwSpeedLog.times() * 1e-9
+        RW_plot_times = rwSpeedLog.times() * 1e-9 # dynamics process intervals
         plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, config, error_true, error_expanded_filter)
         time_axis = "seconds"
     elif (actuator_mode == "MAG"):
@@ -297,7 +309,7 @@ def sim_main(config):
     
     print("\nFILTER TOTAL COUNT:", fsw.ticks)
     print("FILTER UPDATE COUNT:", fsw.tracker_count)
-    print(f"MAX ERROR AFTER {config["error_time_check"]} SECONDS:", max(error_true[int(config["error_time_check"] / config["dynamics_update_time"]):])) # this just checks for maximum error after a certain sim time (i.e. if large oscillations occur after steady-state should have been reached)
+    # print(f"MAX ERROR AFTER {config["error_time_check"]} SECONDS:", max(error_true[int(config["error_time_check"] / config["dynamics_update_time"]):])) # this just checks for maximum error after a certain sim time (i.e. if large oscillations occur after steady-state should have been reached)
     
 if __name__ == "__main__":
     Jxx = 0.01650237
@@ -334,21 +346,28 @@ if __name__ == "__main__":
     ST_update_rate = 1.1 # defined in seconds
     
     # initial satellite states
-    init_rot_axis = [0, 1, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
-    init_rot_angle = 0
-    temp = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle)
+    init_rot_axis = [1, 0, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
+    init_rot_angle = -90
+    
+    init_rot_axis = [-7.745966692414834043e-01,
+4.472135954999578722e-01,
+-4.472135954999578722e-01
+]
+    init_rot_angle = 104.5
+    
     # omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin velocties [RPM]
     omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
     sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = 10
+    sat_rot_angle = 0
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "CFC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     actuator_mode = "RW" # Valid modes are RW and MAG
     mission_mode = "POINTING" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
+    tracking_mode_active = True # emulate tracking a point by constantly shifting target orientation in FSW
     
     if (actuator_mode == "MAG"): # realistic MAG sim setup
         sim_time = 30000
@@ -356,7 +375,7 @@ if __name__ == "__main__":
         fsw_update_time = .1
 
     elif (actuator_mode == "RW"): # realistic RW sim setup
-        sim_time = 150
+        sim_time = 916
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
 
@@ -373,6 +392,6 @@ if __name__ == "__main__":
               "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "actuator_mode":actuator_mode, "mission_mode":mission_mode,
               "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states,
               "save_pdf":save_pdf, "save_png":save_png, "plot_basepath":plot_basepath, "use_filter":use_filter, "sigma_gyro":sigma_gyro, "sigma_bias":sigma_bias, "P_b0":P_b0,
-              "sigma_ST":sigma_ST, "P_ST_0":P_ST_0, "ST_update_rate":ST_update_rate, "error_time_check":error_time_check}
+              "sigma_ST":sigma_ST, "P_ST_0":P_ST_0, "ST_update_rate":ST_update_rate, "error_time_check":error_time_check, "tracking_mode_active":tracking_mode_active}
     
     sim_main(config)
