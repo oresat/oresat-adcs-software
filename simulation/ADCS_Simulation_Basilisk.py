@@ -309,7 +309,8 @@ def sim_main(config):
     
     print("\nFILTER TOTAL COUNT:", fsw.ticks)
     print("FILTER UPDATE COUNT:", fsw.tracker_count)
-    # print(f"MAX ERROR AFTER {config["error_time_check"]} SECONDS:", max(error_true[int(config["error_time_check"] / config["dynamics_update_time"]):])) # this just checks for maximum error after a certain sim time (i.e. if large oscillations occur after steady-state should have been reached)
+    if (config["sim_time"] >= config["error_time_check"]):
+        print(f"MAX ERROR AFTER {config["error_time_check"]} SECONDS:", max(error_true[int(config["error_time_check"] / config["dynamics_update_time"]):])) # this just checks for maximum error after a certain sim time (i.e. if large oscillations occur after steady-state should have been reached)
     
 if __name__ == "__main__":
     Jxx = 0.01650237
@@ -347,13 +348,13 @@ if __name__ == "__main__":
     
     # initial satellite states
     init_rot_axis = [1, 0, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
-    init_rot_angle = -90
+    init_rot_angle = 0
     
-    init_rot_axis = [-7.745966692414834043e-01,
-4.472135954999578722e-01,
--4.472135954999578722e-01
-]
-    init_rot_angle = 104.5
+#     init_rot_axis = [-7.745966692414834043e-01,
+# 4.472135954999578722e-01,
+# -4.472135954999578722e-01
+# ]
+#     init_rot_angle = 104.5
     
     # omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin velocties [RPM]
     omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
@@ -361,7 +362,7 @@ if __name__ == "__main__":
     
     # command rotations relative to initial orientation
     sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = 0
+    sat_rot_angle = 90
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "CFC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
@@ -375,7 +376,7 @@ if __name__ == "__main__":
         fsw_update_time = .1
 
     elif (actuator_mode == "RW"): # realistic RW sim setup
-        sim_time = 916
+        sim_time = 200
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
 

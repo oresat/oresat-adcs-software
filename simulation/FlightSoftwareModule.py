@@ -54,10 +54,10 @@ class FlightSoftware(sysModel.SysModel):
         # LQR_max_rate = 0.001
         # LQR_max_error = 0.01 # SLOWED TUNING FOR ASNYCHRONOUS SENSOR FILTERING
         # LQR_max_rate = 0.002
-        # LQR_max_error = 0.01 # GOOD TUNING FOR STANDARD LQR WITHOUT FILTERING
-        # LQR_max_rate = 0.003
-        LQR_max_error = 0.001 # FAST TUNING FOR TRACKING
-        LQR_max_rate = 0.1
+        LQR_max_error = 0.01 # GOOD TUNING FOR STANDARD LQR WITHOUT FILTERING
+        LQR_max_rate = 0.003
+        # LQR_max_error = 0.001 # LOW DAMPING TUNING FOR TRACKING
+        # LQR_max_rate = 0.1
         self.K_RW = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, use_integrator)
         # self.K_MTB = get_MTB_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, config["orbital_period"])
         self.actuator_mode = config["actuator_mode"] # activates either Reaction Wheels ("RW") or Magnetorquers ("MAG")
@@ -87,7 +87,7 @@ class FlightSoftware(sysModel.SysModel):
         self.tracker_count = 0
         self.ticks = 0
         
-        self.rotate = quat.axis_angle_to_quaternion([0,1,0], -0.02)
+        self.rotate = quat.axis_angle_to_quaternion([0,1,0], -0.02) # for target tracking emulation
         
     def Reset(self, currentTimeNanos):
         pass
@@ -100,6 +100,7 @@ class FlightSoftware(sysModel.SysModel):
         self.ticks += 1
         
         if self.target_tracking == True:
+            q_last = self.q_target # save for tracking rate calculations
             self.q_target = quat.quat_mult(self.rotate, self.q_target)
             self.target_history.append(self.q_target)
         
@@ -134,6 +135,14 @@ class FlightSoftware(sysModel.SysModel):
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hermisphere boundaries
         self.error_filter.append(q_error) # save estimated (filtered) attitude error for plotting after conclusion of sim execution
+        
+        # feed-forward term for target tracking to avoid overdamping
+        if self.target_tracking == True:
+            rotation_quat = quat.quat_error(q_last, self.q_target) # flipped order because of frame conventions for proper signage (body -> target)
+            rot_axis = quat.quat_to_axis(rotation_quat)
+            rot_angle = quat.error_angle(rotation_quat) * np.pi/180
+            rate_offset = rot_axis*(rot_angle/self.updateTime)
+            omega = omega-rate_offset
         
         ######################### CONTROL LOGIC ###############################    
         if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime): # turn controller on at specified time and check control mode for either Reaction Wheel or Magnetorquer (MTB) control

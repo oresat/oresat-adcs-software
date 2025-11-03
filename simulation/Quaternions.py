@@ -30,7 +30,7 @@ def quat_mult(q_rot, q_init): # Shuster quaternion multiplication
     ]
     return normalize(q_new)
 
-def quat_error(q_target, q_current): #error defined by Markley & Crassidis.
+def quat_error(q_target, q_current): # error defined by Markley & Crassidis.
     return quat_mult(q_current, quat_conjugate(q_target)) # returns normalized quaternion. Sanitization happens in quat_mult function
 
 def to_scalar_last(q): # convert quaternion to scalar-last convention
