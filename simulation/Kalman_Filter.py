@@ -8,6 +8,9 @@ class Multiplicative_Extended_Kalman_Filter():
         self.Z3 = np.zeros((3,3)) # 3x3 zeros matrix
         self.I6 = np.eye(6) # 6x6 unit matrix.
         
+        self.sigma_gyro = sigma_gyro # save values for variable Q matrix definition
+        self.sigma_bias = sigma_bias
+        
         self.dt = dt # time between sensor updates (IMU in this case) for prediction step
         self.q = None # estimated quaternion. Must be updated to initial measured quaternion in flight software
         self.b = np.zeros(3) # estimated gyro bias (3x1)
@@ -17,11 +20,6 @@ class Multiplicative_Extended_Kalman_Filter():
         self.P = np.block([[P_theta, self.Z3], # P: 6x6 covariance matrix
                            [self.Z3, P_omega]])
         
-        Q11 = (sigma_gyro**2 * dt + (sigma_bias**2) * dt**3 / 3.0) * self.I3
-        Q12 = (-(sigma_bias**2 * dt**2 / 2.0)) * self.I3
-        Q22 = (sigma_bias**2 * dt) * self.I3
-        self.Q = np.block([[Q11, Q12],
-                           [Q12, Q22]])        
         self.R = sigma_star**2 * self.I3 # R: measurement noise covariance [rad]
         self.H = 0.3*np.eye(3, 6) # H: matrix (Jacobian of measurement model)
         # self.H = np.eye(3, 6) # H: matrix (Jacobian of measurement model)
@@ -48,20 +46,8 @@ class Multiplicative_Extended_Kalman_Filter():
         delta_q /= np.linalg.norm(delta_q)
         self.q = hemi(quat_mult(delta_q, self.q))
         
-        # propagate estimated quaternion state based on body rates THIS METHOD DOES NOT WORK
-        # omega_norm = np.linalg.norm(omega)
-        # theta = omega_norm * self.dt
-        # if theta < 1e-8:
-        #     # small-angle exponential map (no axis divide)
-        #     dth = omega * self.dt
-        #     delta_q = np.r_[0.5*dth, 1.0]
-        # else:
-        #     axis = omega / omega_norm
-        #     delta_q = axis_angle_to_quaternion(axis, theta)  # must be scalar-last
-        # delta_q /= np.linalg.norm(delta_q)                   # critical
-        # self.q = hemi(quat_mult(delta_q, self.q))
-        
-        self.P = phi @ self.P @ phi.T + self.Q # update covariance matrix
+        Q = self.Q_matrix(0.1)
+        self.P = phi @ self.P @ phi.T + Q # update covariance matrix
         
     def correction(self, q_measured): # correct/update filter based on measurement input from star tracker. Also known as the innovation or update step.
         q = hemi(quat_mult(q_measured, quat_conjugate(self.q))) # calculate the innovation quaternion (measurement residual)
@@ -90,14 +76,14 @@ class Multiplicative_Extended_Kalman_Filter():
         
         # MEKF reset mapping (new error coordinates)
         # Gamma ~ I - 0.5*[d_theta]x <- skew matrix built from d_theta
-        theta_skew = skew(d_theta)
+        theta_skew = self.skew(d_theta)
         Gamma = self.I3 - 0.5*theta_skew
         G = np.block([[Gamma, self.Z3],
                       [self.Z3, self.I3]])
         self.P = G @ self.P @ G.T
         
     def phi_matrix(self, dt, omega):
-        skew_matrix = skew(omega)
+        skew_matrix = self.skew(omega)
         S2 = skew_matrix @ skew_matrix
         norm = np.linalg.norm(omega)
         
@@ -112,18 +98,25 @@ class Multiplicative_Extended_Kalman_Filter():
         phi = np.block([[phi11, phi12],
                         [self.Z3, self.I3]])
         return phi
-
-def skew(omega):
-    """
-    Return the 3x3 skew-symmetric matrix (cross-product matrix)
-    of a 3-element angular velocity vector omega.
-    """
-    wx, wy, wz = omega
-    return np.array([
-        [0,   -wz,  wy],
-        [wz,   0,  -wx],
-        [-wy, wx,   0]
-    ])
+    
+    def Q_matrix(self, dt):
+        Q11 = (self.sigma_gyro**2 * dt + (self.sigma_bias**2) * dt**3 / 3.0) * self.I3
+        Q12 = (-(self.sigma_bias**2 * dt**2 / 2.0)) * self.I3
+        Q22 = (self.sigma_bias**2 * dt) * self.I3
+        return np.block([[Q11, Q12],
+                         [Q12, Q22]])   
+        
+    def skew(self, omega):
+        """
+        Return the 3x3 skew-symmetric matrix (cross-product matrix)
+        of a 3-element angular velocity vector omega.
+        """
+        wx, wy, wz = omega
+        return np.array([
+            [0,   -wz,  wy],
+            [wz,   0,  -wx],
+            [-wy, wx,   0]
+        ])
 
 if __name__ == "__main__":
     omega = [1,2,3]

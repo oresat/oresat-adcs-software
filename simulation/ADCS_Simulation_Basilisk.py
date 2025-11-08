@@ -376,7 +376,7 @@ if __name__ == "__main__":
         fsw_update_time = .1
 
     elif (actuator_mode == "RW"): # realistic RW sim setup
-        sim_time = 200
+        sim_time = 100
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
 
