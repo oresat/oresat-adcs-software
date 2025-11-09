@@ -42,12 +42,11 @@ def add_integrators(A, B, C):
 
     return A_aug, B_aug
 
-def get_RW_gain_matrix(J, timestep, max_error, max_rate, use_integrator = False):
+def get_RW_gain_matrix(J, timestep, max_error, max_rate, max_input, use_integrator = False):
     #----------------- LQR matrices--------------------------------------------
     max_error = max_error # q_vec error
     max_velocity = max_rate # ω_sat
     max_integrator = 0.1 # integrator term in Q matrix, integrator state, accumulated error (shouldnt exceed Q values for quaternion error)
-    max_input = 0.04 # max torque (N·m)
     
     Q = np.diag([1/max_error**2, 1/max_error**2, 1/max_error**2, 1/max_velocity**2, 1/max_velocity**2, 1/max_velocity**2, 1/max_integrator**2, 1/max_integrator**2, 1/max_integrator**2])
     R = np.diag([1/max_input**2, 1/max_input**2, 1/max_input**2])

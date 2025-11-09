@@ -356,8 +356,8 @@ if __name__ == "__main__":
 # ]
 #     init_rot_angle = 104.5
     
-    # omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin velocties [RPM]
-    omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([3.0, 0.0, 0.0])  # initial spin velocties [RPM]
+    # omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
@@ -368,7 +368,7 @@ if __name__ == "__main__":
     pointing_reference = "CFC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     actuator_mode = "RW" # Valid modes are RW and MAG
     mission_mode = "POINTING" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
-    tracking_mode_active = True # emulate tracking a point by constantly shifting target orientation in FSW
+    tracking_mode_active = False # emulate tracking a point by constantly shifting target orientation in FSW
     
     if (actuator_mode == "MAG"): # realistic MAG sim setup
         sim_time = 30000

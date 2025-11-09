@@ -2,17 +2,18 @@ import numpy as np
 from Quaternions import quat_mult, axis_angle_to_quaternion, quat_conjugate, hemi
 
 class Multiplicative_Extended_Kalman_Filter():
-    def __init__(self, dt, P_star_tracker_0, sigma_star, P_b0, sigma_gyro, sigma_bias):
+    def __init__(self, P_star_tracker_0, sigma_star, P_b0, sigma_gyro, sigma_bias):
         # Computationally more efficient to define these once rather than create them multiple times each iteration
         self.I3 = np.eye(3) # 3x3 unit matrix
         self.Z3 = np.zeros((3,3)) # 3x3 zeros matrix
         self.I6 = np.eye(6) # 6x6 unit matrix.
         
-        self.sigma_gyro = sigma_gyro # save values for variable Q matrix definition
+        # save values for variable Q matrix definition
+        self.sigma_gyro = sigma_gyro 
         self.sigma_bias = sigma_bias
         
-        self.dt = dt # time between sensor updates (IMU in this case) for prediction step
         self.q = None # estimated quaternion. Must be updated to initial measured quaternion in flight software
+        self.last_omega = None # last gyro measurement to perform prediction using body rates of last update step omega_{k-1}. Must be updated to initial measured rate in flight software
         self.b = np.zeros(3) # estimated gyro bias (3x1)
         
         P_theta = P_star_tracker_0 * self.I3
@@ -24,29 +25,46 @@ class Multiplicative_Extended_Kalman_Filter():
         self.H = 0.3*np.eye(3, 6) # H: matrix (Jacobian of measurement model)
         # self.H = np.eye(3, 6) # H: matrix (Jacobian of measurement model)
         
-    def update(self, omega, q_measured=None): # update Kalman filter and return output
-        self.prediction(omega) # predict state
+        self.last_time = 0 # time of last prediction step execution
+        self.prev_event_used_IMU = True # track whether IMU data was part of last step for decision on ZOH or Midpoint Rule usage
+        
+    def update(self, current_time, omega = None, q_measured=None): # update Kalman filter and return output
+        dt = current_time - self.last_time
+
+        if (omega is not None): # improve accuracy of prediction if new omega is available in order to form midpoint rate
+            if self.prev_event_used_IMU:
+                self.prediction(dt, 0.5*(self.last_omega + omega)) # predict state using midpoint rule if last prediction didn't use ZOH
+            else:
+                self.prediction(dt, self.last_omega) # predict state using ZOH
+            self.last_omega = omega # if gyro sensor measurement exists, we update the saved gyro values for the next step
+            self.prev_event_used_IMU = True
+        else:
+            self.prediction(dt, self.last_omega) # predict state using ZOH
+            self.prev_event_used_IMU = False
+            
         if (q_measured is not None): # if star tracker sensor measurement exists, perform correction step as well
-            self.correction(q_measured) # correct state
-        return self.q, (omega-self.b) # return filtered attitude estimate and bias-correct rate measurement
+            self.correction(q_measured)
+        
+        self.last_time = current_time # update last time a prediction was performed
+        return self.q, (self.last_omega-self.b) # return filtered attitude estimate and bias-correct rate measurement
     
-    def prediction(self, omega): # predict next state based on IMU input. Also known as the propagation or estimation step.
+    def prediction(self, dt, omega): # predict next state based on IMU input. Also known as the propagation or estimation step.
         omega = omega - self.b # correct omega with estimated gyro bias
-        phi = self.phi_matrix(self.dt, omega)
+        phi = self.phi_matrix(dt, omega)
         
         # propagate estimated quaternion state based on body rates using the exponential map integration of the quaternion kinematic equation
-        theta = np.linalg.norm(omega)*self.dt
+        theta = np.linalg.norm(omega)*dt
         half = 0.5*theta
         if theta > 1e-8:
             s = np.sin(half)/theta
         else:  # avoid precision loss using series for small angles
             s = 0.5 - theta**2/48.0
         c = np.cos(half)
-        delta_q = np.r_[s*omega*self.dt, c]
+        delta_q = np.r_[s*omega*dt, c]
         delta_q /= np.linalg.norm(delta_q)
         self.q = hemi(quat_mult(delta_q, self.q))
         
-        Q = self.Q_matrix(0.1)
+        Q = self.Q_matrix(dt)
         self.P = phi @ self.P @ phi.T + Q # update covariance matrix
         
     def correction(self, q_measured): # correct/update filter based on measurement input from star tracker. Also known as the innovation or update step.
@@ -72,10 +90,10 @@ class Multiplicative_Extended_Kalman_Filter():
         # covariance Joseph update
         I6H = (self.I6 - K @ self.H)
         self.P = I6H @ self.P @ I6H.T + K @ self.R @ K.T # update covariance matrix
-        self.P = 0.5*(self.P + self.P.T) # Enforce symmetry after the Joseph update to kill numerical skew
+        self.P = 0.5*(self.P + self.P.T) # enforce symmetry after the Joseph update to kill numerical skew
         
         # MEKF reset mapping (new error coordinates)
-        # Gamma ~ I - 0.5*[d_theta]x <- skew matrix built from d_theta
+        # Gamma ~ I - 0.5*[d_theta]X <- skew matrix built from d_theta
         theta_skew = self.skew(d_theta)
         Gamma = self.I3 - 0.5*theta_skew
         G = np.block([[Gamma, self.Z3],
