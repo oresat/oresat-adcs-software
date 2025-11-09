@@ -368,7 +368,7 @@ if __name__ == "__main__":
     pointing_reference = "CFC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     actuator_mode = "RW" # Valid modes are RW and MAG
     mission_mode = "POINTING" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
-    tracking_mode_active = False # emulate tracking a point by constantly shifting target orientation in FSW
+    tracking_mode_active = True # emulate tracking a point by constantly shifting target orientation in FSW
     
     if (actuator_mode == "MAG"): # realistic MAG sim setup
         sim_time = 30000
@@ -387,7 +387,10 @@ if __name__ == "__main__":
             print("\nERROR: reaction wheels only support 'POINTING' mission mode\nExiting sim")
             exit()
     
-    print(f"\nActuator Mode: {actuator_mode}\nMission Mode: {mission_mode}\nView Device: \"{pointing_reference}\"\n")
+    print(f"\nActuator Mode: \"{actuator_mode}\"")
+    print(f"Mission Mode: \"{mission_mode}\"")
+    print(f"View Device: \"{pointing_reference}\"")
+    print(f"Tracking Mode: {tracking_mode_active}\n")
     
     config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,
               "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "actuator_mode":actuator_mode, "mission_mode":mission_mode,
