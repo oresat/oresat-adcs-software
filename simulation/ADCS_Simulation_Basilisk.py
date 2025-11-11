@@ -305,13 +305,13 @@ def sim_main(config):
     if config["mission_mode"] == "POINTING":
         print(f"\nFinal target was: {fsw.q_target}")
         print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, sat_q_init))}") # calculate orientation/angle change based on initial attitude
+        if (config["sim_time"] >= config["error_time_check"]):
+            print(f"Max error after {config["error_time_check"]} seconds:", max(error_true[int(config["error_time_check"] / config["dynamics_update_time"]):])) # this just checks for maximum error after a certain sim time (i.e. if large oscillations occur after steady-state should have been reached)
         print(f"Final error: {error_true[-1]:.3f} degrees")
-    
-    print("\nFILTER TOTAL COUNT:", fsw.ticks)
-    print("FILTER UPDATE COUNT:", fsw.tracker_count)
-    if (config["sim_time"] >= config["error_time_check"]):
-        print(f"MAX ERROR AFTER {config["error_time_check"]} SECONDS:", max(error_true[int(config["error_time_check"] / config["dynamics_update_time"]):])) # this just checks for maximum error after a certain sim time (i.e. if large oscillations occur after steady-state should have been reached)
-    
+    if config["use_filter"] == True:
+        print("\nFilter updates:", fsw.ticks)
+        print("Filter corrections:", fsw.tracker_count)
+        
 if __name__ == "__main__":
     Jxx = 0.01650237
     Jxy = 0.00000711
@@ -335,7 +335,7 @@ if __name__ == "__main__":
     save_png = False # save plots as PNG's to target folder
     plot_basepath = Path(r"C:\Users\benne\OneDrive\Master's Thesis\Basilisk_Output") # path to which graphs should be saved
     use_filter = True
-    error_time_check = 30 # time after which maximum error is considered for evaluation
+    error_time_check = 40 # time after which maximum error is considered for evaluation
     
     # sensor noise parameters
     sigma_gyro = 0.1 * macros.D2R # instantaneous white noise (datasheet gives value in degrees, convert to radians)
@@ -356,7 +356,7 @@ if __name__ == "__main__":
 # ]
 #     init_rot_angle = 104.5
     
-    omega_init_rpm = np.array([3.0, 0.0, 0.0])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin velocties [RPM]
     # omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
@@ -387,9 +387,9 @@ if __name__ == "__main__":
             print("\nERROR: reaction wheels only support 'POINTING' mission mode\nExiting sim")
             exit()
     
-    print(f"\nActuator Mode: \"{actuator_mode}\"")
-    print(f"Mission Mode: \"{mission_mode}\"")
-    print(f"View Device: \"{pointing_reference}\"")
+    print(f"\nActuator Mode: {actuator_mode}")
+    print(f"Mission Mode: {mission_mode}")
+    print(f"View Device: {pointing_reference}")
     print(f"Tracking Mode: {tracking_mode_active}\n")
     
     config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,

@@ -28,11 +28,12 @@ class FlightSoftware(sysModel.SysModel):
         self.magTorquePayload = messaging.MTBCmdMsgPayload()
         self.mag_torques = np.zeros(36) # initialize MTB torque input array
         
-        self.G_pinv = -np.linalg.pinv(config["G"]) # pseudo inverse matrix for torque calculations. Negated because of Basilisk conventions (I think)
+        self.G = config["G"]
+        self.G_pinv = -np.linalg.pinv(self.G) # pseudo inverse matrix for torque calculations. Negated because of Basilisk conventions (I think)
         self.rwInertia = config["rw_Inertia"] # reaction wheel inertia (scalar)
         self.satInertia = config["J"] # satellite inertia tensor (matrix)
         self.updateTime = config["fsw_update_time"]
-        self.output_states = config["print_states"] # output state messages or not for debugging
+        self.output_states = config["print_states"] # output state messages (or not) for debugging
         self.use_filter = config["use_filter"]
         self.target_tracking = config["tracking_mode_active"] # True or False, set tracking mode to slowly slew satellite over time to emulate target tracking mode
         self.crashTheKernel = False # intentional exit to catch errors. Crashes the kernel because of SWIG. 
@@ -49,10 +50,15 @@ class FlightSoftware(sysModel.SysModel):
         self.thermal_spin_rpm = 1.0 # thermal spin rate about the z-axis (body frame)
         self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
         
-        max_input = 0.00005 # QUALITATIVE value for max torque used by LQR tuning ONLY
+        max_input = 0.00003 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error = 0.01 # GOOD TUNING FOR STANDARD LQR WITHOUT FILTERING
-        LQR_max_rate = 0.003
+        LQR_max_rate = 0.002
         self.K_RW = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
+        
+        # max_input = 0.00003 # QUALITATIVE value for max torque used by LQR tuning ONLY
+        # LQR_max_error = 0.01 # GOOD TUNING FOR STANDARD LQR WITHOUT FILTERING
+        # LQR_max_rate = 0.002
+        # self.K_RW_Tracking = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
         # self.K_MTB = get_MTB_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, config["orbital_period"])
         self.actuator_mode = config["actuator_mode"] # activates either Reaction Wheels ("RW") or Magnetorquers ("MAG")
         self.mission_mode = config["mission_mode"]
@@ -77,6 +83,8 @@ class FlightSoftware(sysModel.SysModel):
         self.ticks = 0
         
         self.rotate = quat.axis_angle_to_quaternion([0,1,0], -0.02) # for target tracking emulation
+        
+        self.omega_desired_prev = np.zeros(3)
         
     def Reset(self, currentTimeNanos):
         pass
@@ -126,78 +134,67 @@ class FlightSoftware(sysModel.SysModel):
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hermisphere boundaries
         self.error_filter.append(q_error) # save estimated (filtered) attitude error for plotting after conclusion of sim execution
         
-        # feed-forward term for target tracking to avoid overdamping
+        # feed-forward terms for target tracking to avoid overdamping and to account for gyroscopic effects 
         if self.target_tracking == True:
+            # feed forward term for angular rate bias
             rotation_quat = quat.quat_error(q_last, self.q_target) # flipped order because of frame conventions for proper signage (body -> target)
             rot_axis = quat.quat_to_axis(rotation_quat)
             rot_angle = quat.error_angle(rotation_quat) * np.pi/180
-            rate_offset = rot_axis*(rot_angle/self.updateTime)
-            omega = omega-rate_offset
+            omega_desired = rot_axis*(rot_angle/self.updateTime) # set rotation rate for tracking maneuver
+            
+            # feed forward term for stored angular momentum
+            alpha_d_B = (omega_desired - self.omega_desired_prev) / self.updateTime # desired acceleration in body frame
+            self.omega_desired_prev = omega_desired.copy() # update previous target rate
+            H_wheels = self.rwInertia * np.asarray(wheelSpeeds[:4]) @ self.G.T # calculate stored wheel momentum in body frame
+            tau_ff = self.satInertia @ alpha_d_B + np.cross(omega, self.satInertia @ omega + H_wheels) # total feed-forward torque accounting for gyroscopic coupling
+        
+            omega = omega-omega_desired # set biased omega after using true value to calculate feed forward term
+        else:
+            tau_ff = 0
         
         ######################### CONTROL LOGIC ###############################    
-        if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime): # turn controller on at specified time and check control mode for either Reaction Wheel or Magnetorquer (MTB) control
-            if self.actuator_mode == "RW":
-                if self.mission_mode == "POINTING":
-                    desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller (standard LQR controller)
-                    # desired_torque = self.sliding_bangbang_controller(q_error, omega, currentTimeNanos) # compute desired 3-axis torque from controller (bang-bang sliding mode controller)
-                    wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
-                    self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
-                elif self.mission_mode == "THERMAL_REORIENT": # can only be set by first part of passive thermal spin controller
-                    desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
-                    wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
-                    self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
-                    if (quat.error_angle(q_error) <= 0.1 and np.all(np.abs(omega) < 1e-6)):
-                        #zero wheel speeds?
-                        self.actuator_mode = "MAG" # switch to MTB's for spinup
-                        self.mission_mode = "SPINUP" 
-                        print(f"SWITCHING TO MAGNETORQUER SPINUP AT {currentTimeNanos*macros.NANO2SEC} SECONDS, {omega}")
-                else:
-                    print("ERROR: Unknown mission mode specified", flush = True)
-                    self.crashTheKernel = True
+        if (currentTimeNanos * macros.NANO2SEC >= self.controllerStartTime): # turn controller on at specified time
+            if self.mission_mode == "POINTING":
+                desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller (standard LQR controller)
+                desired_torque += tau_ff
+                wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
+                self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
+            elif self.mission_mode == "THERMAL_REORIENT": # can only be set by first part of passive thermal spin controller
+                desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
+                wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
+                self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
+                if (quat.error_angle(q_error) <= 0.1 and np.all(np.abs(omega) < 1e-6)):
+                    #zero wheel speeds?
+                    self.actuator_mode = "MAG" # switch to MTB's for spinup
+                    self.mission_mode = "SPINUP"
+                    print(f"SWITCHING TO MAGNETORQUER SPINUP AT {currentTimeNanos*macros.NANO2SEC} SECONDS, {omega}")
+            elif self.mission_mode == "DETUMBLE":
+                desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
+                self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
+            elif self.mission_mode == "THERMAL_SPIN":
+                desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
+                self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
+                if (np.all(np.abs(omega) < 1e-4)):
+                    self.actuator_mode = "RW" # switch to reaction wheels for thermal reorientation
+                    self.mission_mode = "THERMAL_REORIENT"
+                    print(f"SWITCHING TO REACTION WHEEL REORIENTATION AT {currentTimeNanos*macros.NANO2SEC} SECONDS")
+            # elif self.mission_mode ==  "POINTING":
+            #     # body_torques = self.mag_LQR_controller(q_error, omega) # calculate body-frame torques
+            #     # desired_torque = np.cross(b_field, body_torques)/np.linalg.norm(b_field)**2 #project torques into dipole moments
+            #     # self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
+            #     tau_des = self.mag_LQR_controller(q_error, omega)          # torque request
+            #     B2 = B @ B
+            #     m_cmd = np.zeros(3) if B2 < (5e-6)**2 else np.cross(B, tau_des) / B2  # A·m²
+            #     self.command_MTB_torques(m_cmd, currentTimeNanos)
+            elif self.mission_mode == "SPINUP": # spinup satellite for thermal spin about the axis
+                if (omega[2] < self.thermal_spin_rpm*2*np.pi/60): # while satellite is spinning slower than set rate about the z axis, spin up
+                    tau_des = [0,0,1] # spin about the z axis
+                    m = np.cross(B, tau_des) / (B @ B)
+                    self.command_MTB_torques(m, currentTimeNanos)
+            else:
+                print("ERROR: Unknown mission mode specified", flush = True)
+                self.crashTheKernel = True
             
-            elif self.actuator_mode == "MAG":
-                if self.mission_mode == "DETUMBLE":
-                    desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
-                    self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
-                elif self.mission_mode == "THERMAL_SPIN":
-                    desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
-                    self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
-                    if (np.all(np.abs(omega) < 1e-4)):
-                        self.actuator_mode = "RW" # switch to reaction wheels for thermal reorientation
-                        self.mission_mode = "THERMAL_REORIENT"
-                        print(f"SWITCHING TO REACTION WHEEL REORIENTATION AT {currentTimeNanos*macros.NANO2SEC} SECONDS")
-                # elif self.mission_mode ==  "POINTING":
-                #     # body_torques = self.mag_LQR_controller(q_error, omega) # calculate body-frame torques
-                #     # desired_torque = np.cross(b_field, body_torques)/np.linalg.norm(b_field)**2 #project torques into dipole moments
-                #     # self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
-                #     tau_des = self.mag_LQR_controller(q_error, omega)          # torque request
-                #     B2 = B @ B
-                #     m_cmd = np.zeros(3) if B2 < (5e-6)**2 else np.cross(B, tau_des) / B2  # A·m²
-                #     self.command_MTB_torques(m_cmd, currentTimeNanos)
-                elif self.mission_mode == "SPINUP": # spinup satellite for thermal spin about the axis
-                    if (omega[2] < self.thermal_spin_rpm*2*np.pi/60): # while satellite is spinning slower than set rate about the z axis, spin up
-                        tau_des = [0,0,1] # spin about the z axis
-                        m = np.cross(B, tau_des) / (B @ B)
-                        self.command_MTB_torques(m, currentTimeNanos)
-                else:
-                    print("ERROR: Unknown mission mode specified", flush = True)
-                    self.crashTheKernel = True
-            
-        if self.output_states:
-            q_reconstruct = quat.quat_mult(quat.quat_conjugate(q_error), q)
-            print("\nTime: ", currentTimeNanos * macros.NANO2SEC)
-            print("Current quaternion: ", q)
-            print("Raw Star Tracker output: ", q_star_tracker)
-            print("Error quaternion: ", q_error)
-            print("Axis of rotation: ", quat.quat_to_axis(q_error))
-            print("Current angle error: ", quat.error_angle(q_error))
-            print("Reconstructed target: ", q_reconstruct)
-            print("Actual target:        ", self.q_target) # this checks that the error quaternion is properly defined (it is)
-            print("Current wheel speeds: ", wheelSpeeds[:4])
-            print("Body rates: ", omega)
-            print("Desired torque: ", desired_torque)
-            print("Wheel Torque: ", wheel_torque)
-    
     def update_target(self, target_quat):
         if self.pointing == "ST":
             self.q_target = quat.quat_mult(self.q_90_rot, target_quat) # define target in body coordinates
@@ -222,6 +219,7 @@ class FlightSoftware(sysModel.SysModel):
         return self.G_pinv @ torque_array
     
     def check_torque_vals(self, wheel_torque, rwSpeeds): # ensure torque does not exceed maxTorque and that wheel speed does not exceed maxSpeed by the beginning of next step
+        
         for i in range(len(self.torque_vals[:4])):
             projected_speed = rwSpeeds[i] + (wheel_torque[i]/self.rwInertia) * self.updateTime # predicted speed at requested torque after next time step
             if abs(projected_speed) > self.maxSpeed: # Clamp torque if it would cause overspeed
@@ -234,3 +232,12 @@ class FlightSoftware(sysModel.SysModel):
     def quaternion_controller(self, q_error, omega):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector
         return -self.K_RW @ x # invert sign for control
+    
+    # def quaternion_controller(self, q_error, omega):
+    #     if self.target_tracking == True: # select gain matrix
+    #         K = self.K_RW_Tracking
+    #     else:
+    #         K = self.K_RW_Pointing
+        
+    #     x = np.concatenate((q_error[:3], omega)) # assemble state vector
+    #     return -K @ x # invert sign for control
