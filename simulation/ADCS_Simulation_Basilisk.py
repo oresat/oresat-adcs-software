@@ -67,7 +67,7 @@ def sim_main(config):
     oe = orbitalMotion.ClassicElements()
     oe.a = (415+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
     oe.e = 0 # eccentricity
-    oe.i = 0 * macros.D2R # inclination [rad]
+    oe.i = 50 * macros.D2R # inclination [rad]
     oe.Omega = 0.0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
     oe.omega = 0.0 * macros.D2R  # argument of periapsis [rad]
     oe.f = 90 * macros.D2R       # true anomaly [rad]
@@ -181,7 +181,9 @@ def sim_main(config):
     mtbConfigParams.GtMatrix_B = [1., 0., 0., # expects single 1x(3*n) array
                                   0., 1., 0.,
                                   0., 0., 1.]
-    mtbConfigParams.maxMtbDipoles = [0.5e-2, 0.5e-2, 0.75e-2] # individual rod Dipole limits. Currently set to max continuous limit, not burst limit [A·m^2]
+    # mtbConfigParams.maxMtbDipoles = [0.5e-2, 0.5e-2, 0.75e-2] # individual rod Dipole limits. Currently set to max continuous limit, not burst limit [A·m^2] (OLD LIMIT, WRONG VALUES???)
+    mtbConfigParams.maxMtbDipoles = [1, 1, 0.4] # individual rod Dipole limits [A·m^2]
+
     mtbCfgMsg = messaging.MTBArrayConfigMsg().write(mtbConfigParams)
     
     mtbCmd = messaging.MTBCmdMsgPayload()
@@ -301,8 +303,8 @@ def sim_main(config):
     plot_imu(plot_times, imuValues, orbital_period, config, time_axis)
     # plot_imu(plot_times, imuValues, orbital_period, config, time_axis, error_true)
     
-    print(f"\nSimulation completed in {end-start} seconds")
-    if config["mission_mode"] == "POINTING":
+    print(f"\nSimulation completed in {end-start:.2} seconds\nSimulated time of flight: {config["sim_time"]} seconds")
+    if config["mission_mode"] == "RW_POINTING" or config["mission_mode"] == "MTB_POINTING":
         print(f"\nFinal target was: {fsw.q_target}")
         print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, sat_q_init))}") # calculate orientation/angle change based on initial attitude
         if (config["sim_time"] >= config["error_time_check"]):
@@ -334,11 +336,16 @@ if __name__ == "__main__":
     save_pdf = True # save plots as PDF's to target folder
     save_png = False # save plots as PNG's to target folder
     plot_basepath = Path(r"C:\Users\benne\OneDrive\Master's Thesis\Basilisk_Output") # path to which graphs should be saved
-    use_filter = True
-    error_time_check = 40 # time after which maximum error is considered for evaluation
+    use_filter = True # whether to use perfect state information or simulate with sensor noise and state estimation (MEKF)
+    error_time_check = 100 # time after which maximum error is considered for evaluation
     
     # sensor noise parameters
-    sigma_gyro = 0.1 * macros.D2R # instantaneous white noise (datasheet gives value in degrees, convert to radians)
+    # Keep two separate parameters
+    # sigma_gyro_density = 0.014 * D2R (for MEKF Q_matrix)
+    # sigma_gyro_rms = 0.1 * D2R (for Basilisk imu.PMatrixGyro)
+    
+    # sigma_gyro = 0.1 * macros.D2R # instantaneous white noise (datasheet gives value in degrees, convert to radians) (not sure which to use)
+    sigma_gyro = 0.014 * macros.D2R # instantaneous white noise (datasheet gives value in degrees, convert to radians) (not sure which to use)
     sigma_bias = 1e-5 # slow random bias drift (random walk)
     P_b0 = 1 * macros.D2R # [rad/s] initial gyro uncertainty
     
@@ -350,40 +357,34 @@ if __name__ == "__main__":
     init_rot_axis = [1, 0, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     
-#     init_rot_axis = [-7.745966692414834043e-01,
-# 4.472135954999578722e-01,
-# -4.472135954999578722e-01
-# ]
-#     init_rot_angle = 104.5
-    
     omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin velocties [RPM]
     # omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
     sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = 90
+    sat_rot_angle = -30
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "CFC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     actuator_mode = "RW" # Valid modes are RW and MAG
-    mission_mode = "POINTING" # Valid modes are DETUMBLE, POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
-    tracking_mode_active = True # emulate tracking a point by constantly shifting target orientation in FSW
+    mission_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
+    tracking_mode_active = False # emulate tracking a point by constantly shifting target orientation in FSW
     
     if (actuator_mode == "MAG"): # realistic MAG sim setup
-        sim_time = 30000
+        sim_time = 6000
         dynamics_update_time = .1
         fsw_update_time = .1
 
     elif (actuator_mode == "RW"): # realistic RW sim setup
-        sim_time = 100
+        sim_time = 300
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
 
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
             exit()
-        if (mission_mode != "POINTING"): # warn about nonexistent control mode for reaction wheels
+        if (mission_mode != "RW_POINTING"): # warn about nonexistent control mode for reaction wheels
             print("\nERROR: reaction wheels only support 'POINTING' mission mode\nExiting sim")
             exit()
     

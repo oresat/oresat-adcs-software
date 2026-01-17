@@ -22,15 +22,18 @@ class Multiplicative_Extended_Kalman_Filter():
                            [self.Z3, P_omega]])
         
         self.R = sigma_star**2 * self.I3 # R: measurement noise covariance [rad]
-        self.H = 0.3*np.eye(3, 6) # H: matrix (Jacobian of measurement model)
-        # self.H = np.eye(3, 6) # H: matrix (Jacobian of measurement model)
+        # self.H = 0.1*np.eye(3, 6) # H: matrix (Jacobian of measurement model)
+        # self.H = 0.3*np.eye(3, 6) # H: matrix (Jacobian of measurement model)
+        self.H = np.eye(3, 6) # H: matrix (Jacobian of measurement model)
         
-        self.last_time = 0 # time of last prediction step execution
-        self.prev_event_used_IMU = True # track whether IMU data was part of last step for decision on ZOH or Midpoint Rule usage
+        self.last_time = 0 # time of last prediction step execution (needs to be reinitialized to current time whenever state estimation is switched from inactive to active)
+        self.prev_event_used_IMU = True # track whether IMU data was part of last step for decision on Zero-Order_Hold (ZOH) or Midpoint Rule usage
         
-    def update(self, current_time, omega = None, q_measured=None): # update Kalman filter and return output
+        self.last_star_tracker_measurement = 0
+        
+    def update(self, current_time, omega = None, q_measured=None): # update Kalman filter and return output (event based function)
         dt = current_time - self.last_time
-
+        
         if (omega is not None): # improve accuracy of prediction if new omega is available in order to form midpoint rate
             if self.prev_event_used_IMU:
                 self.prediction(dt, 0.5*(self.last_omega + omega)) # predict state using midpoint rule if last prediction didn't use ZOH
@@ -62,14 +65,26 @@ class Multiplicative_Extended_Kalman_Filter():
         c = np.cos(half)
         delta_q = np.r_[s*omega*dt, c]
         delta_q /= np.linalg.norm(delta_q)
-        self.q = hemi(quat_mult(delta_q, self.q))
+        # self.q = hemi(quat_mult(delta_q, self.q))
+        self.q = quat_mult(delta_q, self.q)
         
         Q = self.Q_matrix(dt)
         self.P = phi @ self.P @ phi.T + Q # update covariance matrix
         
     def correction(self, q_measured): # correct/update filter based on measurement input from star tracker. Also known as the innovation or update step.
-        q = hemi(quat_mult(q_measured, quat_conjugate(self.q))) # calculate the innovation quaternion (measurement residual)
+        # q = hemi(quat_mult(q_measured, quat_conjugate(self.q))) # calculate the innovation quaternion (measurement residual)
+        q = quat_mult(q_measured, quat_conjugate(self.q))
         y = 2 * q[:3] # small-angle innovation vector
+        
+        # LOGARITHM MAP (NO IMPROVEMENT)
+        # v = q[:3] # quaternion vector component
+        # vn = np.linalg.norm(v) # norm of quaternion vector component
+        # s = q[3] # scalar component of quaternion
+        # if vn < 1e-12: # small angle protection
+        #     y = 2*v
+        # else:
+        #     rotation_angle = 2*np.atan2(vn, s)
+        #     y = rotation_angle/vn*v
         
         K = self.P @ self.H.T @ np.linalg.inv(self.H @ self.P @ self.H.T + self.R) # define Kalman gain
         dx = K @ y
