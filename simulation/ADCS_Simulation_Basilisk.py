@@ -47,7 +47,7 @@ def sim_main(config):
     
     ########################## ORBITAL ENVIRONMENT ############################
     
-    # create gravitational bodies (earth in this case, but might add moon later as well)
+    # create gravitational bodies (Earth in this case, but might add moon later as well)
     gravFactory = simIncludeGravBody.gravBodyFactory()
     earth = gravFactory.createEarth()
     earth.isCentralBody = True  # must be central for orbital motion
@@ -182,7 +182,7 @@ def sim_main(config):
                                   0., 1., 0.,
                                   0., 0., 1.]
     # mtbConfigParams.maxMtbDipoles = [0.5e-2, 0.5e-2, 0.75e-2] # individual rod Dipole limits. Currently set to max continuous limit, not burst limit [A·m^2] (OLD LIMIT, WRONG VALUES???)
-    mtbConfigParams.maxMtbDipoles = [1, 1, 0.4] # individual rod Dipole limits [A·m^2]
+    mtbConfigParams.maxMtbDipoles = [1, 1, 1] # individual rod Dipole limits [A·m^2]
 
     mtbCfgMsg = messaging.MTBArrayConfigMsg().write(mtbConfigParams)
     
@@ -290,11 +290,11 @@ def sim_main(config):
         error_expanded_filter = None
     
     plot_times = imuRec.times() * 1e-9
-    if (actuator_mode == "RW"):
+    if ("RW" in config["mission_mode"]):
         RW_plot_times = rwSpeedLog.times() * 1e-9 # dynamics process intervals
         plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, config, error_true, error_expanded_filter)
         time_axis = "seconds"
-    elif (actuator_mode == "MAG"):
+    else:
         time_axis = "orbits"
         TAMvalues = magSensorRec.tam_S
         plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
@@ -303,7 +303,7 @@ def sim_main(config):
     plot_imu(plot_times, imuValues, orbital_period, config, time_axis)
     # plot_imu(plot_times, imuValues, orbital_period, config, time_axis, error_true)
     
-    print(f"\nSimulation completed in {end-start:.2} seconds\nSimulated time of flight: {config["sim_time"]} seconds")
+    print(f"\nSimulation completed in {end-start:.2f} seconds\nSimulated time of flight: {config["sim_time"]} seconds")
     if config["mission_mode"] == "RW_POINTING" or config["mission_mode"] == "MTB_POINTING":
         print(f"\nFinal target was: {fsw.q_target}")
         print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, sat_q_init))}") # calculate orientation/angle change based on initial attitude
@@ -363,38 +363,35 @@ if __name__ == "__main__":
     
     # command rotations relative to initial orientation
     sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = -30
+    sat_rot_angle = -90
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "CFC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    actuator_mode = "RW" # Valid modes are RW and MAG
     mission_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
     tracking_mode_active = False # emulate tracking a point by constantly shifting target orientation in FSW
     
-    if (actuator_mode == "MAG"): # realistic MAG sim setup
-        sim_time = 6000
-        dynamics_update_time = .1
-        fsw_update_time = .1
-
-    elif (actuator_mode == "RW"): # realistic RW sim setup
-        sim_time = 300
+    if ("RW" in mission_mode): # realistic RW sim setup
+        sim_time = 100
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
-
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
             exit()
         if (mission_mode != "RW_POINTING"): # warn about nonexistent control mode for reaction wheels
             print("\nERROR: reaction wheels only support 'POINTING' mission mode\nExiting sim")
             exit()
+            
+    else: # realistic MTB sim setup
+        sim_time = 6000
+        dynamics_update_time = .1
+        fsw_update_time = .1
     
-    print(f"\nActuator Mode: {actuator_mode}")
     print(f"Mission Mode: {mission_mode}")
     print(f"View Device: {pointing_reference}")
     print(f"Tracking Mode: {tracking_mode_active}\n")
     
     config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,
-              "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "actuator_mode":actuator_mode, "mission_mode":mission_mode,
+              "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "mission_mode":mission_mode,
               "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states,
               "save_pdf":save_pdf, "save_png":save_png, "plot_basepath":plot_basepath, "use_filter":use_filter, "sigma_gyro":sigma_gyro, "sigma_bias":sigma_bias, "P_b0":P_b0,
               "sigma_ST":sigma_ST, "P_ST_0":P_ST_0, "ST_update_rate":ST_update_rate, "error_time_check":error_time_check, "tracking_mode_active":tracking_mode_active}
