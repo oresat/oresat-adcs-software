@@ -86,9 +86,9 @@ class FlightSoftware(sysModel.SysModel):
         
         self.omega_desired_prev = np.zeros(3)
         
-        max_input_mag = 0.000003 # QUALITATIVE value for max torque used by LQR tuning ONLY
-        LQR_max_error_mag = 0.1
-        LQR_max_rate_mag = 0.00002
+        max_input_mag = 0.03 # QUALITATIVE value for max torque used by LQR tuning ONLY
+        LQR_max_error_mag = 0.05
+        LQR_max_rate_mag = 0.000002
         self.K_MAG = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error_mag, LQR_max_rate_mag, max_input_mag)
         
     def Reset(self, currentTimeNanos):
@@ -160,12 +160,12 @@ class FlightSoftware(sysModel.SysModel):
         ######################### CONTROL LOGIC ###############################
         if (currentTimeNanos * 1e-9 >= self.controllerStartTime): # turn controller on at specified time
             if self.mission_mode == "RW_POINTING":
-                desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller (standard LQR controller)
+                desired_torque = self.RW_controller(q_error, omega) # compute desired 3-axis torque from controller (standard LQR controller)
                 desired_torque += tau_ff # feedforward torque, only non-zero for tracking mode
                 wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
             elif self.mission_mode == "THERMAL_REORIENT": # can only be set by first part of passive thermal spin controller
-                desired_torque = self.quaternion_controller(q_error, omega) # compute desired 3-axis torque from controller
+                desired_torque = self.RW_controller(q_error, omega) # compute desired 3-axis torque from controller
                 wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
                 if (quat.error_angle(q_error) <= 0.1 and np.all(np.abs(omega) < 1e-6)):
@@ -187,13 +187,12 @@ class FlightSoftware(sysModel.SysModel):
                     m = np.cross(B, tau_des) / (B @ B)
                     self.command_MTB_torques(m, currentTimeNanos)
             elif self.mission_mode == "MTB_POINTING": # Magentorquer fine pointing controller (experimental)
-                # body_torques = self.mag_LQR_controller(q_error, omega) # calculate body-frame torques
-                # desired_torque = np.cross(b_field, body_torques)/np.linalg.norm(b_field)**2 #project torques into dipole moments
-                # self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
                 tau_des = self.mag_LQR_controller(q_error, omega) # desired 3-axis torque in body frame
                 B2 = B @ B # twice as fast as alternate: np.linalg.norm(B)**2
-                m_cmd = np.zeros(3) if B2 < (5e-6)**2 else np.cross(B, tau_des) / B2 # A·m²
+                m_cmd = np.zeros(3) if B2 < (5e-6)**2 else np.cross(B, tau_des) / B2 # project torques onto magnetic field
                 self.command_MTB_torques(m_cmd, currentTimeNanos)
+            elif self.mission_mode == "ORBITS":
+                pass # mode to simply visualize orbits with large timespans
             else:
                 print("ERROR: Unknown mission mode specified", flush = True)
                 self.crashTheKernel = True
@@ -232,18 +231,10 @@ class FlightSoftware(sysModel.SysModel):
             else:  # Otherwise clamp to max torque bounds
                 self.torque_vals[i] = max(-self.maxTorque, min(wheel_torque[i], self.maxTorque))
     
-    def quaternion_controller(self, q_error, omega):
+    def RW_controller(self, q_error, omega):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector
         return -self.K_RW @ x # invert sign for control
     
     def mag_LQR_controller(self, q_error, omega):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector
         return -self.K_MAG @ x # invert sign for control
-    # def quaternion_controller(self, q_error, omega):
-    #     if self.target_tracking == True: # select gain matrix
-    #         K = self.K_RW_Tracking
-    #     else:
-    #         K = self.K_RW_Pointing
-        
-    #     x = np.concatenate((q_error[:3], omega)) # assemble state vector
-    #     return -K @ x # invert sign for control

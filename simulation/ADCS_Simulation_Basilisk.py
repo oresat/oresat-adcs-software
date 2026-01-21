@@ -43,7 +43,6 @@ def sim_main(config):
     initial_MRP = (np.array(init_rot_axis)/np.linalg.norm(np.array(init_rot_axis))) * np.tan(init_rot_angle*macros.D2R/4.0) # MRP set to customize initial inertial attitude
     scObject.hub.sigma_BNInit = initial_MRP
     scObject.hub.omega_BN_BInit = omega_init_rad
-    sim.AddModelToTask("dynamicsTask", scObject) # add spacecraft to the dynamics simulation
     
     ########################## ORBITAL ENVIRONMENT ############################
     
@@ -79,6 +78,20 @@ def sim_main(config):
     # To set the spacecraft initial conditions, the following initial position and velocity variables are set:
     scObject.hub.r_CN_NInit = rN  # r_BN_N [m]
     scObject.hub.v_CN_NInit = vN  # v_BN_N [m/s]
+    
+    timeInitString = "2015 February 10, 00:00:00.0 TDB"
+    
+    spiceObject = gravFactory.createSpiceInterface(bskPath + "/supportData/EphemerisData/", time=timeInitString, epochInMsg=True) # create SPICE object and point to ephemeris data
+    spiceObject.addPlanetNames(["earth"])
+    
+    earth.planetBodyInMsg.subscribeTo(spiceObject.planetStateOutMsgs[0])
+    
+    # Task ordering: SPICE before modules that consume its outputs. Need spice to run before spacecraft module.
+    sim.AddModelToTask("dynamicsTask", spiceObject)
+    sim.AddModelToTask("dynamicsTask", scObject)
+
+    # spiceObject.planetStateOutMsgs[0]
+
     
     ############################### SENSORS ###################################
     
@@ -363,11 +376,11 @@ if __name__ == "__main__":
     
     # command rotations relative to initial orientation
     sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = -90
+    sat_rot_angle = 0
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "CFC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    mission_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
+    mission_mode = "ORBITS" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
     tracking_mode_active = False # emulate tracking a point by constantly shifting target orientation in FSW
     
     if ("RW" in mission_mode): # realistic RW sim setup
@@ -380,7 +393,12 @@ if __name__ == "__main__":
         if (mission_mode != "RW_POINTING"): # warn about nonexistent control mode for reaction wheels
             print("\nERROR: reaction wheels only support 'POINTING' mission mode\nExiting sim")
             exit()
-            
+    elif mission_mode == "ORBITS":
+        sim_time = 20000
+        dynamics_update_time = 10
+        fsw_update_time = 10
+        use_filter = False
+        omega_init_rad = np.array([0.0, 0.0, 0.0])
     else: # realistic MTB sim setup
         sim_time = 6000
         dynamics_update_time = .1
