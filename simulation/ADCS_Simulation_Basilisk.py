@@ -67,9 +67,9 @@ def sim_main(config):
     oe.a = (415+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
     oe.e = 0 # eccentricity
     oe.i = 50 * macros.D2R # inclination [rad]
-    oe.Omega = 0.0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
+    oe.Omega = 0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
     oe.omega = 0.0 * macros.D2R  # argument of periapsis [rad]
-    oe.f = 90 * macros.D2R       # true anomaly [rad]
+    oe.f = 10 * macros.D2R       # true anomaly [rad]
     
     rN, vN = orbitalMotion.elem2rv(mu_earth, oe)
     oe = orbitalMotion.rv2elem(mu_earth, rN, vN)  # this stores consistent initial orbit elements, fixes numerical errors, particulary with perfectly circular orbits. Consult ChatGPT for detailed explanation.
@@ -90,9 +90,9 @@ def sim_main(config):
     sim.AddModelToTask("dynamicsTask", spiceObject)
     sim.AddModelToTask("dynamicsTask", scObject)
 
-    # spiceObject.planetStateOutMsgs[0]
+    earthRec = spiceObject.planetStateOutMsgs[0].recorder() # used to record ECEF coordinates
+    sim.AddModelToTask("dynamicsTask", earthRec)
 
-    
     ############################### SENSORS ###################################
     
     # Create and configure a star tracker
@@ -380,8 +380,12 @@ if __name__ == "__main__":
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "CFC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    mission_mode = "ORBITS" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN. Reaction wheels only use POINTING mode
-    tracking_mode_active = False # emulate tracking a point by constantly shifting target orientation in FSW
+    mission_mode = "ORBITS" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
+
+    tracking_mode_active = False # Track specified target on Earth's surface
+    target_lat = 39.608251
+    target_lon = -104.895788
+    target_height = 1716 # [m]
     
     if ("RW" in mission_mode): # realistic RW sim setup
         sim_time = 100
@@ -389,9 +393,6 @@ if __name__ == "__main__":
         fsw_update_time = 0.1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
-            exit()
-        if (mission_mode != "RW_POINTING"): # warn about nonexistent control mode for reaction wheels
-            print("\nERROR: reaction wheels only support 'POINTING' mission mode\nExiting sim")
             exit()
     elif mission_mode == "ORBITS":
         sim_time = 20000
