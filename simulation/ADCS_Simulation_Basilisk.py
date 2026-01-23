@@ -79,8 +79,8 @@ def sim_main(config):
     scObject.hub.r_CN_NInit = rN  # r_BN_N [m]
     scObject.hub.v_CN_NInit = vN  # v_BN_N [m/s]
     
+    # Add spice object for planet rotation and ECEF coordinate simulation. Necessary for guidance algorithms.
     timeInitString = "2015 February 10, 00:00:00.0 TDB"
-    
     spiceObject = gravFactory.createSpiceInterface(bskPath + "/supportData/EphemerisData/", time=timeInitString, epochInMsg=True) # create SPICE object and point to ephemeris data
     spiceObject.addPlanetNames(["earth"])
     
