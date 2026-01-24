@@ -4,7 +4,9 @@ import numpy as np
 from ADCS_Discrete_State_Space_Calculator import get_RW_gain_matrix
 # from MTB_LQR_Discrete_Gains_Calculator import get_MTB_gain_matrix
 import Quaternions as quat
+# import Guidance_Functions as guidance
 from Kalman_Filter import Multiplicative_Extended_Kalman_Filter
+from skyfield.api import load
 from sys import exit
 
 class FlightSoftware(sysModel.SysModel):
@@ -12,11 +14,13 @@ class FlightSoftware(sysModel.SysModel):
         super(FlightSoftware, self).__init__()
         self.ModelTag = "flight_software"
 
-        # Create readers for the star tracker, IMU, magnetometer, and reaction wheel messages
+        # Create readers for the star tracker, IMU, magnetometer, reaction wheel messages and spacecraft positioning. Spacecraft positioning used to emulate GPS input
         self.starTrackerMsgIn = messaging.STSensorMsgReader() 
         self.imuMsgIn = messaging.IMUSensorMsgReader()
         self.rwSpeedMsgIn = messaging.RWSpeedMsgReader()
-        self.magMsgIn = messaging.TAMSensorMsgReader()
+        self.magMsgIn = messaging.TAMSensorMsgReader() # Three-Axis Magnetometer
+        self.scStateIn = messaging.SCStatesMsgReader()
+        self.earthStateInMsg = messaging.SpicePlanetStateMsgReader()
         
         # setup reaction wheel output messages
         self.rwMotorTorqueOutMsg = messaging.ArrayMotorTorqueMsg()
@@ -42,8 +46,20 @@ class FlightSoftware(sysModel.SysModel):
         self.target_history = [] # only used if self.target_tracking = True
         
         self.q_target = np.array([0,0,0,1]) # attribute initialization, set to real value in sim main
-        omega_target_rpm = np.array([0.0, 0.0, 0.0])
-        self.omega_target = omega_target_rpm * 2*np.pi/60 # convert to rad/s
+        omega_target_rpm = np.array([0.0, 0.0, 0.0]) # [RPM]
+        self.omega_target = omega_target_rpm * 2*np.pi/60 # convert to [rad/s]
+        
+        # constants used for GPS-to-ECEF conversion
+        a = 6378137.0 # WGS-84 constant: a = semi-major axis
+        e2 = 0.0066943799901413165 # WGS-84 constant: e^2 = flattening
+        target_lat = config["target_lat"]
+        target_lon = config["target_lon"]
+        target_height = config["target_height"]
+        self.ECEF_target = self.GPS_to_ECEF(target_lat, target_lon, target_height, a, e2) # convert GPS coordinates to ECEF coordinates
+        
+        self.skyfield_timescale = load.timescale()
+        self.skyfield_ephemeris = load('de440s.bsp') # UPDATE THIS TO POINT TO ACTUAL FILE || NOT TOO SENSITIVE TO STALE FILES
+        self.skyfield_EOP = load()
         
         self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
@@ -56,11 +72,6 @@ class FlightSoftware(sysModel.SysModel):
         LQR_max_rate = 0.002
         self.K_RW = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
         
-        # max_input = 0.00003 # QUALITATIVE value for max torque used by LQR tuning ONLY
-        # LQR_max_error = 0.01 # GOOD TUNING FOR STANDARD LQR WITHOUT FILTERING
-        # LQR_max_rate = 0.002
-        # self.K_RW_Tracking = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
-        # self.K_MTB = get_MTB_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, config["orbital_period"])
         self.mission_mode = config["mission_mode"]
         self.slewMode = "slew" # only used for sliding mode bang-bang controller. Can be "slew" for large-angle rotations or "precise" for fine-pointing operations
         
@@ -82,7 +93,7 @@ class FlightSoftware(sysModel.SysModel):
         self.tracker_count = 0
         self.ticks = 0
         
-        self.rotate = quat.axis_angle_to_quaternion([0,1,0], -0.02) # for target tracking emulation
+        self.rotate = quat.axis_angle_to_quaternion([0,1,0], -0.02) # for target tracking emulation REMOVE
         
         self.omega_desired_prev = np.zeros(3)
         
@@ -91,9 +102,9 @@ class FlightSoftware(sysModel.SysModel):
         LQR_max_rate_mag = 0.000002
         self.K_MAG = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error_mag, LQR_max_rate_mag, max_input_mag)
         
-    def Reset(self, currentTimeNanos):
+    def Reset(self, currentTimeNanos): # required by Basilisk even if Reset does nothing
         pass
-        # print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.1e-9:.2f} s") # commented out to remove unnecessary printing every execution
+        # print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.1e-9:.2f} s") # commented out to remove unnecessary printing every simulation
         
     def UpdateState(self, currentTimeNanos):
         if self.crashTheKernel == True: # This method allows error message printing  *jank intensifies*
@@ -115,6 +126,12 @@ class FlightSoftware(sysModel.SysModel):
             self.starTrackerMsg = self.starTrackerMsgIn()
             q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
             q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
+        if self.scStateIn.isWritten():
+            scState = self.scStateIn()
+            r_BN_N = scState.r_BN_N # spacecraft inertial vector (position) from origin in ECI frame
+        if self.earthStateInMsg.isWritten():
+            earthState = self.earthStateInMsg()
+            ECI_2_ECEF = earthState.J20002Pfix # transform matrix from ECI to ECEF frame
         
         if self.use_filter: # simulate asynchronous MEKF
             if (currentTimeNanos == 0):
@@ -132,7 +149,13 @@ class FlightSoftware(sysModel.SysModel):
         
         if self.target_tracking == True:
             q_last = self.q_target # save for tracking rate calculations
-            self.q_target = quat.quat_mult(self.rotate, self.q_target)
+            r_ECEF = ECI_2_ECEF @ np.array(r_BN_N) # convert current position to ECEF (emulates getting GPS positioning data for satellite)
+            
+            # target_vector = r_ECEF-self.ECEF_target # get pointing vector in ECEF from spacecraft to 
+            # target_vector = target_vector/np.linalg.norm(target_vector) # normalize for conversion to quaternion
+            self.update_tracking_quat(r_ECEF, self.ECEF_target)
+            # self.q_target = quat.quat_mult(self.rotate, self.q_target)
+        
             self.target_history.append(self.q_target)
         
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
@@ -238,3 +261,30 @@ class FlightSoftware(sysModel.SysModel):
     def mag_LQR_controller(self, q_error, omega):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector
         return -self.K_MAG @ x # invert sign for control
+    
+    def GPS_to_ECEF(self, lat, lon, height, a, e2):
+        sin_lat = np.sin(lat)
+        cos_lat = np.cos(lat)
+        
+        N = a/np.sqrt(1-e2*sin_lat**2) # lattitude must be signed for WGS-84
+        x = (N+height)*cos_lat*np.cos(lon)
+        y = (N+height)*cos_lat*np.sin(lon)
+        z = (N*(1-e2)+height)*sin_lat
+
+        return np.asarray([x, y, z])
+
+    def update_tracking_quat(self, current_gps, target_gps): # function for tracking a static target during overpasses
+        cartesian_target_vector = target_gps - current_gps # calculate target vector in ECEF cartesian coordinates
+        cartesian_target_vector = cartesian_target_vector/np.linalg.norm(cartesian_target_vector) # normalize to unit vector
+        
+        DONT MIX SKYFIELD AND BASILISK.
+        START WITH JUST BASILISK.
+        APPLY SKYFIELD LATER ONCE MATH IS VERIFIED
+        
+        t  = self.skyfield_timescale.utc(2025, 11, 16, 12, 0, 0) # REPLACE WITH REAL GPS OR ONBOARD TIME IN WHATEVER FORMAT IS GIVEN
+        R_EN = self.skyfield_EOP.rotation_at(t).matrix # inertial → ECEF rotation matrix
+        R_NE = R_EN.T # ECEF → inertial rotation matrix
+        
+        target_N = R_NE @ cartesian_target_vector # convert target vector to ECI coordinates with rotation matrix (still in cartesian at this point)
+        target_quat = quat.quat_from_cartesian_vector(target_N) # convert cartesian vector to quaternion
+        self.update_target(target_quat) # update target      
