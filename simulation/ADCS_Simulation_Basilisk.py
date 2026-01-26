@@ -378,7 +378,7 @@ if __name__ == "__main__":
     
     # command rotations relative to initial orientation
     sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = 90
+    sat_rot_angle = 180
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "CFC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
@@ -390,7 +390,7 @@ if __name__ == "__main__":
     target_height = 1716 # [m]
     
     if ("RW" in mission_mode): # realistic RW sim setup
-        sim_time = 3
+        sim_time = 200
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME

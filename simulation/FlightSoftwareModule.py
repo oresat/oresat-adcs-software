@@ -57,9 +57,9 @@ class FlightSoftware(sysModel.SysModel):
         target_height = config["target_height"]
         self.ECEF_target = self.GPS_to_ECEF(target_lat, target_lon, target_height, a, e2) # convert GPS coordinates to ECEF coordinates
         
-        self.skyfield_timescale = load.timescale()
-        self.skyfield_ephemeris = load('de440s.bsp') # UPDATE THIS TO POINT TO ACTUAL FILE || NOT TOO SENSITIVE TO STALE FILES
-        self.skyfield_EOP = load()
+        # self.skyfield_timescale = load.timescale()
+        # self.skyfield_ephemeris = load('de440s.bsp') # UPDATE THIS TO POINT TO ACTUAL FILE || NOT TOO SENSITIVE TO STALE FILES
+        # self.skyfield_EOP = load()
         
         self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
@@ -153,7 +153,7 @@ class FlightSoftware(sysModel.SysModel):
             
             # target_vector = r_ECEF-self.ECEF_target # get pointing vector in ECEF from spacecraft to 
             # target_vector = target_vector/np.linalg.norm(target_vector) # normalize for conversion to quaternion
-            self.update_tracking_quat(r_ECEF, self.ECEF_target)
+            self.update_tracking_quat(r_ECEF, self.ECEF_target, ECI_2_ECEF)
             # self.q_target = quat.quat_mult(self.rotate, self.q_target)
         
             self.target_history.append(self.q_target)
@@ -244,7 +244,6 @@ class FlightSoftware(sysModel.SysModel):
         return self.G_pinv @ torque_array
     
     def check_torque_vals(self, wheel_torque, rwSpeeds): # ensure torque does not exceed maxTorque and that wheel speed does not exceed maxSpeed by the beginning of next step
-        
         for i in range(len(self.torque_vals[:4])):
             projected_speed = rwSpeeds[i] + (wheel_torque[i]/self.rwInertia) * self.updateTime # predicted speed at requested torque after next time step
             if abs(projected_speed) > self.maxSpeed: # Clamp torque if it would cause overspeed
@@ -273,17 +272,19 @@ class FlightSoftware(sysModel.SysModel):
 
         return np.asarray([x, y, z])
 
-    def update_tracking_quat(self, current_gps, target_gps): # function for tracking a static target during overpasses
+    def update_tracking_quat(self, current_gps, target_gps, eci2ecef): # function for tracking a static target during overpasses
         cartesian_target_vector = target_gps - current_gps # calculate target vector in ECEF cartesian coordinates
         cartesian_target_vector = cartesian_target_vector/np.linalg.norm(cartesian_target_vector) # normalize to unit vector
         
-        DONT MIX SKYFIELD AND BASILISK.
-        START WITH JUST BASILISK.
-        APPLY SKYFIELD LATER ONCE MATH IS VERIFIED
+        R_NE = eci2ecef.T
         
-        t  = self.skyfield_timescale.utc(2025, 11, 16, 12, 0, 0) # REPLACE WITH REAL GPS OR ONBOARD TIME IN WHATEVER FORMAT IS GIVEN
-        R_EN = self.skyfield_EOP.rotation_at(t).matrix # inertial → ECEF rotation matrix
-        R_NE = R_EN.T # ECEF → inertial rotation matrix
+        # DONT MIX SKYFIELD AND BASILISK.
+        # START WITH JUST BASILISK.
+        # APPLY SKYFIELD LATER ONCE MATH IS VERIFIED
+        
+        # t  = self.skyfield_timescale.utc(2025, 11, 16, 12, 0, 0) # REPLACE WITH REAL GPS OR ONBOARD TIME IN WHATEVER FORMAT IS GIVEN
+        # R_EN = self.skyfield_EOP.rotation_at(t).matrix # inertial → ECEF rotation matrix
+        # R_NE = R_EN.T # ECEF → inertial rotation matrix
         
         target_N = R_NE @ cartesian_target_vector # convert target vector to ECI coordinates with rotation matrix (still in cartesian at this point)
         target_quat = quat.quat_from_cartesian_vector(target_N) # convert cartesian vector to quaternion
