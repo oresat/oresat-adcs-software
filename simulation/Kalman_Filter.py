@@ -72,8 +72,8 @@ class Multiplicative_Extended_Kalman_Filter():
         self.P = phi @ self.P @ phi.T + Q # update covariance matrix
         
     def correction(self, q_measured): # correct/update filter based on measurement input from star tracker. Also known as the innovation or update step.
-        # q = hemi(quat_mult(q_measured, quat_conjugate(self.q))) # calculate the innovation quaternion (measurement residual)
-        q = quat_mult(q_measured, quat_conjugate(self.q))
+        q = hemi(quat_mult(q_measured, quat_conjugate(self.q))) # calculate the innovation quaternion (measurement residual) REQUIRES HEMI FUNCTION. Without hemi, massive errors arise
+        # q = quat_mult(q_measured, quat_conjugate(self.q))
         y = 2 * q[:3] # small-angle innovation vector
         
         # LOGARITHM MAP (NO IMPROVEMENT)
