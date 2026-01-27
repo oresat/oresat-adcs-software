@@ -131,7 +131,7 @@ class FlightSoftware(sysModel.SysModel):
             r_BN_N = scState.r_BN_N # spacecraft inertial vector (position) from origin in ECI frame
         if self.earthStateInMsg.isWritten():
             earthState = self.earthStateInMsg()
-            ECI_2_ECEF = earthState.J20002Pfix # transform matrix from ECI to ECEF frame
+            ECI_2_ECEF = np.asarray(earthState.J20002Pfix) # transform matrix from ECI to ECEF frame
         
         if self.use_filter: # simulate asynchronous MEKF
             if (currentTimeNanos == 0):
@@ -150,6 +150,21 @@ class FlightSoftware(sysModel.SysModel):
         if self.target_tracking == True:
             q_last = self.q_target # save for tracking rate calculations
             r_ECEF = ECI_2_ECEF @ np.array(r_BN_N) # convert current position to ECEF (emulates getting GPS positioning data for satellite)
+            
+            
+            # spacecraft inertial position (likely barycentric/ephemeris-centered in this setup)
+            r_BN_N = np.asarray(scState.r_BN_N)
+            
+            # Earth inertial position from SPICE planet state message (confirm exact field name)
+            r_EN_N = np.asarray(earthState.PositionVector)   # or earthState.r_BN_N / earthState.r_N... depending on payload
+            
+            # Earth-centered inertial spacecraft position
+            r_BE_N = r_BN_N - r_EN_N
+            
+            # Convert Earth-centered inertial to ECEF
+            r_ECEF = ECI_2_ECEF @ r_BE_N
+            print("||r_BN_N||", np.linalg.norm(r_BN_N))
+            print("||r_BE_N||", np.linalg.norm(r_BE_N), "\n")
             
             # target_vector = r_ECEF-self.ECEF_target # get pointing vector in ECEF from spacecraft to 
             # target_vector = target_vector/np.linalg.norm(target_vector) # normalize for conversion to quaternion
@@ -262,21 +277,21 @@ class FlightSoftware(sysModel.SysModel):
         return -self.K_MAG @ x # invert sign for control
     
     def GPS_to_ECEF(self, lat, lon, height, a, e2):
-        sin_lat = np.sin(lat)
-        cos_lat = np.cos(lat)
+        sin_lat = np.sin(lat * macros.D2R)
+        cos_lat = np.cos(lat * macros.D2R)
         
         N = a/np.sqrt(1-e2*sin_lat**2) # lattitude must be signed for WGS-84
-        x = (N+height)*cos_lat*np.cos(lon)
-        y = (N+height)*cos_lat*np.sin(lon)
+        x = (N+height)*cos_lat*np.cos(lon * macros.D2R)
+        y = (N+height)*cos_lat*np.sin(lon * macros.D2R)
         z = (N*(1-e2)+height)*sin_lat
 
         return np.asarray([x, y, z])
 
-    def update_tracking_quat(self, current_gps, target_gps, eci2ecef): # function for tracking a static target during overpasses
+    def update_tracking_quat(self, current_gps, target_gps, ECI_2_ECEF): # function for tracking a static target during overpasses
         cartesian_target_vector = target_gps - current_gps # calculate target vector in ECEF cartesian coordinates
         cartesian_target_vector = cartesian_target_vector/np.linalg.norm(cartesian_target_vector) # normalize to unit vector
         
-        R_NE = eci2ecef.T
+        R_NE = ECI_2_ECEF.T
         
         # DONT MIX SKYFIELD AND BASILISK.
         # START WITH JUST BASILISK.
@@ -289,3 +304,4 @@ class FlightSoftware(sysModel.SysModel):
         target_N = R_NE @ cartesian_target_vector # convert target vector to ECI coordinates with rotation matrix (still in cartesian at this point)
         target_quat = quat.quat_from_cartesian_vector(target_N) # convert cartesian vector to quaternion
         self.update_target(target_quat) # update target      
+        # print(cartesian_target_vector)
