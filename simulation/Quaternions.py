@@ -126,11 +126,9 @@ def quat_from_cartesian_vector(target, eps=1e-8):
         axis = axis / np.linalg.norm(axis)
         return np.array([axis[0], axis[1], axis[2], 0.0])
 
-    c = np.cross(target, z)
+    c = np.cross(z, target)
     s = np.sqrt((1.0 + d) * 2.0)
     q_xyz = c / s
     q_w   = 0.5 * s
     q = np.array([q_xyz[0], q_xyz[1], q_xyz[2], q_w])
     return q / np.linalg.norm(q)
-    
-    

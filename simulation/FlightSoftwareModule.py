@@ -163,8 +163,8 @@ class FlightSoftware(sysModel.SysModel):
             
             # Convert Earth-centered inertial to ECEF
             r_ECEF = ECI_2_ECEF @ r_BE_N
-            print("||r_BN_N||", np.linalg.norm(r_BN_N))
-            print("||r_BE_N||", np.linalg.norm(r_BE_N), "\n")
+            # print("||r_BN_N||", np.linalg.norm(r_BN_N))
+            # print("||r_BE_N||", np.linalg.norm(r_BE_N), "\n")
             
             # target_vector = r_ECEF-self.ECEF_target # get pointing vector in ECEF from spacecraft to 
             # target_vector = target_vector/np.linalg.norm(target_vector) # normalize for conversion to quaternion
@@ -304,4 +304,3 @@ class FlightSoftware(sysModel.SysModel):
         target_N = R_NE @ cartesian_target_vector # convert target vector to ECI coordinates with rotation matrix (still in cartesian at this point)
         target_quat = quat.quat_from_cartesian_vector(target_N) # convert cartesian vector to quaternion
         self.update_target(target_quat) # update target      
-        # print(cartesian_target_vector)

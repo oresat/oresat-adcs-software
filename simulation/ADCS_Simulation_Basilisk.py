@@ -382,15 +382,15 @@ if __name__ == "__main__":
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "CFC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    mission_mode = "ORBITS" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
+    mission_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
 
     tracking_mode_active = True # Track specified target on Earth's surface
     target_lat = 39.608251
     target_lon = -104.895788
     target_height = 1716 # [m]
-    
+        
     if ("RW" in mission_mode): # realistic RW sim setup
-        sim_time = 300
+        sim_time = 1000
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
