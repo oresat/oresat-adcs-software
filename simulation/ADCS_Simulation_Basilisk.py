@@ -37,7 +37,7 @@ def sim_main(config):
     
     # create spacecraft object
     scObject = spacecraft.Spacecraft() # initialize object
-    scObject.ModelTag = "OreSat" # name object
+    scObject.ModelTag = config["satellite"] # name object
     scObject.hub.mHub = mass  # [kg], not sure this is required given inertial space, but should be realistic
     scObject.hub.IHubPntBc_B = J # assign OreSat inertia matrix
     initial_MRP = (np.array(init_rot_axis)/np.linalg.norm(np.array(init_rot_axis))) * np.tan(init_rot_angle*macros.D2R/4.0) # MRP set to customize initial inertial attitude
@@ -258,14 +258,16 @@ def sim_main(config):
     else:
         fileName = __file__
     
-    current_dir = Path(__file__).parent.resolve() # find current working directory such that any system running code directly from git can use the simplified OreSat model
-    model_file_path = current_dir / "OreSat_Simplified_Model.obj"
+    current_dir = Path(__file__).parent.resolve() # find current working directory such that any system running code directly from git can use the simplified model
+    model_file_path = current_dir / config["sat_3D_file"]
+
     viz = vizSupport.enableUnityVisualization(sim, "dynamicsTask", scObject, saveFile=fileName, liveStream=False, # let Vizard visualize data
                                               rwEffectorList=rwStateEffector) # add reaction wheel list to visualization
     vizSupport.setActuatorGuiSetting(viz, viewRWPanel=True, viewRWHUD=True)
+    s_factor = config["viz_scaling"] # 3D-model scaling factor
     vizSupport.createCustomModel(viz,
                                  modelPath=str(model_file_path), # Vizard expects filepath as a string
-                                 scale=[-7, 7, 7], # scale model and mirror on x-axis (don't know why the model is otherwise improperly mirrored)
+                                 scale=[-s_factor, s_factor, s_factor], # scale model and mirror on x-axis (don't know why the model is otherwise improperly mirrored)
                                  rotation=[0,np.pi/2,np.pi/2]) # rotate to properly align body axes with simulation axes
     
     # simulate:
@@ -330,15 +332,39 @@ def sim_main(config):
         print("Filter corrections:", fsw.tracker_count)
         
 if __name__ == "__main__":
-    Jxx = 0.01650237
-    Jxy = 0.00000711
-    Jxz = 0.00004547
-    Jyx = Jxy
-    Jyy = 0.015962
-    Jyz = 0.00003107
-    Jzx = Jxz
-    Jzy = Jyz
-    Jzz = 0.00651814
+    # select satellite model attributes
+    # satellite = "OreSat1"
+    satellite = "SENTINEL"
+    
+    # select 3D model file
+    if satellite == "SENTINEL":
+        sat_3D_file = "3U_Simplified_Model.obj"
+        viz_scaling = 5 # 3D-model scaling factor
+    
+        # Inertia tensor data
+        Jxx = 0.01650237
+        Jxy = 0.00000711
+        Jxz = 0.00004547
+        Jyx = Jxy
+        Jyy = 0.015962
+        Jyz = 0.00003107
+        Jzx = Jxz
+        Jzy = Jyz
+        Jzz = 0.00651814
+    else:
+        sat_3D_file = "OreSat_Simplified_Model.obj"
+        viz_scaling = 7 # 3D-model scaling factor
+        
+        # Inertia tensor data
+        Jxx = 0.01650237
+        Jxy = 0.00000711
+        Jxz = 0.00004547
+        Jyx = Jxy
+        Jyy = 0.015962
+        Jyz = 0.00003107
+        Jzx = Jxz
+        Jzy = Jyz
+        Jzz = 0.00651814
     
     J = np.array([[Jxx, Jxy, Jxz], # satellite inertia matrix
                   [Jyx, Jyy, Jyz], 
@@ -390,7 +416,7 @@ if __name__ == "__main__":
     target_height = 1716 # [m]
         
     if ("RW" in mission_mode): # realistic RW sim setup
-        sim_time = 1000
+        sim_time = 100
         dynamics_update_time = 0.01
         fsw_update_time = 0.1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
@@ -407,15 +433,16 @@ if __name__ == "__main__":
         dynamics_update_time = .1
         fsw_update_time = .1
     
+    print(f"Satellite: {satellite}")
     print(f"Mission Mode: {mission_mode}")
     print(f"View Device: {pointing_reference}")
     print(f"Tracking Mode: {tracking_mode_active}\n")
     
     config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,
-              "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "mission_mode":mission_mode,
+              "satellite":satellite, "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "mission_mode":mission_mode,
               "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states,
               "save_pdf":save_pdf, "save_png":save_png, "plot_basepath":plot_basepath, "use_filter":use_filter, "sigma_gyro":sigma_gyro, "sigma_bias":sigma_bias, "P_b0":P_b0,
               "sigma_ST":sigma_ST, "P_ST_0":P_ST_0, "ST_update_rate":ST_update_rate, "error_time_check":error_time_check, "tracking_mode_active":tracking_mode_active,
-              "target_lat":target_lat, "target_lon":target_lon, "target_height":target_height}
+              "target_lat":target_lat, "target_lon":target_lon, "target_height":target_height, "sat_3D_file":sat_3D_file, "viz_scaling":viz_scaling}
     
     sim_main(config)
