@@ -128,10 +128,13 @@ class FlightSoftware(sysModel.SysModel):
             q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
         if self.scStateIn.isWritten():
             scState = self.scStateIn()
-            r_BN_N = scState.r_BN_N # spacecraft inertial vector (position) from origin in ECI frame
+            r_CN_N = scState.r_CN_N # spacecraft inertial vector (position from COM) from origin in ECI frame. Origin is sun in Basilisk
+            v_CN_N = scState.v_CN_N # spacecraft velocity vector (position from COM) from origin in ECI frame. Origin is sun in Basilisk
         if self.earthStateInMsg.isWritten():
             earthState = self.earthStateInMsg()
             ECI_2_ECEF = np.asarray(earthState.J20002Pfix) # transform matrix from ECI to ECEF frame
+            r_EN_N = np.asarray(earthState.PositionVector) # Earth position vector from sun (inertial frame)
+            v_EN_N = np.asarray(earthState.VelocityVector) # Earth velocity vector from sun (inertial frame)
         
         if self.use_filter: # simulate asynchronous MEKF
             if (currentTimeNanos == 0):
@@ -149,28 +152,13 @@ class FlightSoftware(sysModel.SysModel):
         
         if self.target_tracking == True:
             q_last = self.q_target # save for tracking rate calculations
-            r_ECEF = ECI_2_ECEF @ np.array(r_BN_N) # convert current position to ECEF (emulates getting GPS positioning data for satellite)
+             
+            r_BE_N = r_CN_N - r_EN_N # Earth-centered inertial spacecraft position (converted from Sun-centered)
+            r_ECEF = ECI_2_ECEF @ r_BE_N # Convert Earth-centered inertial to ECEF
+            # print("||r_BN_N||", np.linalg.norm(r_ECEF))
+            # print("||r_BE_N||", np.linalg.norm(r_ECEF), "\n")
             
-            
-            # spacecraft inertial position (likely barycentric/ephemeris-centered in this setup)
-            r_BN_N = np.asarray(scState.r_BN_N)
-            
-            # Earth inertial position from SPICE planet state message (confirm exact field name)
-            r_EN_N = np.asarray(earthState.PositionVector)   # or earthState.r_BN_N / earthState.r_N... depending on payload
-            
-            # Earth-centered inertial spacecraft position
-            r_BE_N = r_BN_N - r_EN_N
-            
-            # Convert Earth-centered inertial to ECEF
-            r_ECEF = ECI_2_ECEF @ r_BE_N
-            # print("||r_BN_N||", np.linalg.norm(r_BN_N))
-            # print("||r_BE_N||", np.linalg.norm(r_BE_N), "\n")
-            
-            # target_vector = r_ECEF-self.ECEF_target # get pointing vector in ECEF from spacecraft to 
-            # target_vector = target_vector/np.linalg.norm(target_vector) # normalize for conversion to quaternion
             self.update_tracking_quat(r_ECEF, self.ECEF_target, ECI_2_ECEF)
-            # self.q_target = quat.quat_mult(self.rotate, self.q_target)
-        
             self.target_history.append(self.q_target)
         
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
