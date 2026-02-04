@@ -40,10 +40,10 @@ class FlightSoftware(sysModel.SysModel):
         self.updateTime = config["fsw_update_time"]
         self.output_states = config["print_states"] # output state messages (or not) for debugging
         self.use_filter = config["use_filter"]
-        self.target_tracking = config["tracking_mode_active"] # True or False, set tracking mode to slowly slew satellite over time to emulate target tracking mode
+        self.tracking_mode = config["tracking_mode"] # True or False, set tracking mode to slowly slew satellite over time to emulate target tracking mode
         self.crashTheKernel = False # intentional exit to catch errors. Crashes the kernel because of SWIG. 
         self.error_filter = [] # used for tracking and graphing filter error (estimated error based on filter state estimates)
-        self.target_history = [] # only used if self.target_tracking = True
+        self.target_history = [] # only used if self.tracking_mode is not None
         
         self.q_target = np.array([0,0,0,1]) # attribute initialization, set to real value in sim main
         omega_target_rpm = np.array([0.0, 0.0, 0.0]) # [RPM]
@@ -133,7 +133,7 @@ class FlightSoftware(sysModel.SysModel):
         if self.earthStateInMsg.isWritten():
             earthState = self.earthStateInMsg()
             ECI_2_ECEF = np.asarray(earthState.J20002Pfix) # transform matrix from ECI to ECEF frame
-            r_EN_N = np.asarray(earthState.PositionVector) # Earth position vector from sun (inertial frame)
+            r_EN_N = np.asarray(earthState.PositionVector) # Earth position vector from sun (inertial frame) 
             v_EN_N = np.asarray(earthState.VelocityVector) # Earth velocity vector from sun (inertial frame)
         
         if self.use_filter: # simulate asynchronous MEKF
@@ -150,15 +150,18 @@ class FlightSoftware(sysModel.SysModel):
         else: # send sensor data directly to the controller without filtering
             q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
         
-        if self.target_tracking == True:
+        if self.tracking_mode is not None:
             q_last = self.q_target # save for tracking rate calculations
-             
-            r_BE_N = r_CN_N - r_EN_N # Earth-centered inertial spacecraft position (converted from Sun-centered)
-            r_ECEF = ECI_2_ECEF @ r_BE_N # Convert Earth-centered inertial to ECEF
-            # print("||r_BN_N||", np.linalg.norm(r_ECEF))
-            # print("||r_BE_N||", np.linalg.norm(r_ECEF), "\n")
+            r_CE_N = r_CN_N - r_EN_N # Earth-centered inertial spacecraft position (converted from Sun-centered) allows for emulation of ECEF-vector-converted-GPS coordinates 
+
+            if self.tracking_mode == "TRACKING": # Tracking a static target on the surface of the earth via GPS coordinates        
+                r_ECEF = ECI_2_ECEF @ r_CE_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
+                self.static_tracking_quat(r_ECEF, self.ECEF_target, ECI_2_ECEF)
+            elif self.tracking_mode == "RAM": # Continually face ram direction in flight (+x in ram, +z in opposite of nadir)
+                nadir_ECEF = ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
+                v_ECEF = ECI_2_ECEF @ (v_CN_N-v_EN_N) # Earth-centered inertial spacecraft position (converted from Sun-centered). Convert to ECEF to emulate GPS data.
+                self.ram_tracking_quat(nadir_ECEF, v_ECEF, ECI_2_ECEF)
             
-            self.update_tracking_quat(r_ECEF, self.ECEF_target, ECI_2_ECEF)
             self.target_history.append(self.q_target)
         
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
@@ -166,14 +169,14 @@ class FlightSoftware(sysModel.SysModel):
         self.error_filter.append(q_error) # save estimated (filtered) attitude error for plotting after conclusion of sim execution
         
         # feed-forward terms for target tracking to avoid overdamping and to account for gyroscopic effects 
-        if self.target_tracking == True:
+        if self.tracking_mode is not None:
             # feed forward term for angular rate bias
             rotation_quat = quat.quat_error(q_last, self.q_target) # flipped order because of frame conventions for proper signage (body -> target)
             rot_axis = quat.quat_to_axis(rotation_quat)
             rot_angle = quat.error_angle(rotation_quat) * np.pi/180
             omega_desired = rot_axis*(rot_angle/self.updateTime) # set rotation rate for tracking maneuver
             
-            # feed forward term for stored angular momentum
+            # feed forward term to account for stored angular momentum
             alpha_d_B = (omega_desired - self.omega_desired_prev) / self.updateTime # desired acceleration in body frame
             self.omega_desired_prev = omega_desired.copy() # update previous target rate
             H_wheels = self.rwInertia * np.asarray(wheelSpeeds[:4]) @ self.G.T # calculate stored wheel momentum in body frame (resulting in a 3x1 vector of angular momentum axis elements in body frame)
@@ -275,11 +278,11 @@ class FlightSoftware(sysModel.SysModel):
 
         return np.asarray([x, y, z])
 
-    def update_tracking_quat(self, current_gps, target_gps, ECI_2_ECEF): # function for tracking a static target during overpasses
+    def static_tracking_quat(self, current_gps, target_gps, ECI_2_ECEF): # function for tracking a static target during overpasses
         cartesian_target_vector = target_gps - current_gps # calculate target vector in ECEF cartesian coordinates
         cartesian_target_vector = cartesian_target_vector/np.linalg.norm(cartesian_target_vector) # normalize to unit vector
         
-        R_NE = ECI_2_ECEF.T
+        R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI
         
         # DONT MIX SKYFIELD AND BASILISK.
         # START WITH JUST BASILISK.
@@ -291,4 +294,25 @@ class FlightSoftware(sysModel.SysModel):
         
         target_N = R_NE @ cartesian_target_vector # convert target vector to ECI coordinates with rotation matrix (still in cartesian at this point)
         target_quat = quat.quat_from_cartesian_vector(target_N) # convert cartesian vector to quaternion
-        self.update_target(target_quat) # update target      
+        self.update_target(target_quat) # update target
+
+    def ram_tracking_quat(self, nadir, v_ECEF, ECI_2_ECEF):
+        R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI
+        nadir_ECI = R_NE @ (nadir/np.linalg.norm(nadir)) # norm nadir vector and convert to ECI
+        v_ECI = R_NE @ (v_ECEF/np.linalg.norm(v_ECEF)) # norm velocity vector and convert to ECI
+        
+        zvec = nadir_ECI # helical should always point nadir and defines orientation
+        
+        xvec = v_ECI - np.dot(v_ECI, zvec) * zvec # remove component parallel to nadir vector to determine ram-facing x-vector
+        xvec = xvec/np.linalg.norm(xvec) # norm
+
+        yvec = np.cross(zvec, xvec)
+        yvec = yvec/np.linalg.norm(yvec) # norm
+        
+        # xvec = np.cross(yvec, zvec) # Re-orthogonalize zB to avoid numerical drift
+        # xvec = xvec/np.linalg.norm(xvec) # norm
+        
+        C_BN = np.vstack((xvec, yvec, zvec)) # Create DCM
+        
+        target_quat = quat.quat_from_dcm_scalar_last(C_BN)
+        self.update_target(target_quat)

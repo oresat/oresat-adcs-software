@@ -68,47 +68,48 @@ def error_angle(q_error):
     
     return 2*np.acos(abs(q_error[3])) * 180/ np.pi
 
-def quat_from_dcm_scalar_last(self, C_BN):
+def quat_from_dcm_scalar_last(m):
     """
-    C_BN: DCM mapping inertial → body using numerically stable methods which
+    m (C_BN matrix): DCM mapping inertial -> body using numerically stable methods which
     avoid singularities and square roots of negative values
     Returns scalar-last quaternion
     
     qw represents scalar component of quaternion, as s is already used as
     intermediate variable
+    
+    Conversion definition taken based on work in:
+    "Quaternion to DCM and Back Again" by Kurt A. Motekew
     """
-    m = C_BN
     trace = np.trace(m)
-
-    if trace > 0.0: # if trace is greater than zero, start with scalar component
-        s = 0.5 / np.sqrt(trace + 1.0)
-        qw = 0.25 / s
-        qx = (m[2,1] - m[1,2]) * s
-        qy = (m[0,2] - m[2,0]) * s
-        qz = (m[1,0] - m[0,1]) * s
+    
+    if ((trace > m[0, 0]) and (trace > m[1, 1]) and (trace > m[2, 2])):
+        qs = np.sqrt((1.0 + m[0,0] + m[1,1] + m[2,2])/4)
+        qx = (m[1, 2] - m[2, 1])/(4*qs)
+        qy = (m[2, 0] - m[0, 2])/(4*qs)
+        qz = (m[0, 1] - m[1, 0])/(4*qs)
+        
+    elif ((m[0, 0] > m[1, 1]) and (m[0, 0] > m[2, 2])):
+        qx = np.sqrt((1.0 + m[0,0] - m[1,1] - m[2,2])/4)
+        qs = (m[1, 2] - m[2, 1])/(4*qx)
+        qz = (m[2, 0] + m[0, 2])/(4*qx)
+        qy = (m[0, 1] + m[1, 0])/(4*qx)
+        
+    elif ((m[1, 1] > m[2, 2])):
+        qy = np.sqrt((1.0 - m[0,0] + m[1,1] - m[2,2])/4)
+        qz = (m[1, 2] + m[2, 1])/(4*qy)
+        qs = (m[2, 0] - m[0, 2])/(4*qy)
+        qx = (m[0, 1] + m[1, 0])/(4*qy)
+        
     else:
-        if m[0,0] > m[1,1] and m[0,0] > m[2,2]:
-            s = 2.0 * np.sqrt(1.0 + m[0,0] - m[1,1] - m[2,2])
-            qw = (m[2,1] - m[1,2]) / s
-            qx = 0.25 * s
-            qy = (m[0,1] + m[1,0]) / s
-            qz = (m[0,2] + m[2,0]) / s
-        elif m[1,1] > m[2,2]:
-            s = 2.0 * np.sqrt(1.0 + m[1,1] - m[0,0] - m[2,2])
-            qw = (m[0,2] - m[2,0]) / s
-            qx = (m[0,1] + m[1,0]) / s
-            qy = 0.25 * s
-            qz = (m[1,2] + m[2,1]) / s
-        else:
-            s = 2.0 * np.sqrt(1.0 + m[2,2] - m[0,0] - m[1,1])
-            qw = (m[1,0] - m[0,1]) / s
-            qx = (m[0,2] + m[2,0]) / s
-            qy = (m[1,2] + m[2,1]) / s
-            qz = 0.25 * s
-
-    q = np.array([qx, qy, qz, qw])
+        qz = np.sqrt((1.0 - m[0,0] - m[1,1] + m[2,2])/4)
+        qy = (m[1, 2] + m[2, 1])/(4*qz)
+        qx = (m[2, 0] + m[0, 2])/(4*qz)
+        qs = (m[0, 1] - m[1, 0])/(4*qz)
+    
+    q = np.array([qx, qy, qz, qs])
     q = q / np.linalg.norm(q)
     return q
+
 
 def quat_from_cartesian_vector(target, eps=1e-8):
     target = target / np.linalg.norm(target) # normalize target vector just in case rotation introduced numerical noise
