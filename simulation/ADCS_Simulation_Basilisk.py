@@ -410,15 +410,15 @@ if __name__ == "__main__":
     pointing_reference = "SC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     mission_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
 
-    tracking_mode = "RAM" # Valid modes are TRACKING, RAM, or None. Track specified target on Earth's surface or ram direction.
+    tracking_mode = "TRACKING" # Valid modes are TRACKING, RAM, or None. Track specified target on Earth's surface or ram direction.
     target_lat = 39.608251
     target_lon = -104.895788
     target_height = 1716 # [m]
         
     if ("RW" in mission_mode): # realistic RW sim setup
-        sim_time = 2000
-        dynamics_update_time = .1
-        fsw_update_time = .1
+        sim_time = 6000
+        dynamics_update_time = .4
+        fsw_update_time = .4
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
             exit()

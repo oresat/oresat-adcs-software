@@ -153,15 +153,16 @@ class FlightSoftware(sysModel.SysModel):
         if self.tracking_mode is not None:
             q_last = self.q_target # save for tracking rate calculations
             r_CE_N = r_CN_N - r_EN_N # Earth-centered inertial spacecraft position (converted from Sun-centered) allows for emulation of ECEF-vector-converted-GPS coordinates 
+            v_ECEF = ECI_2_ECEF @ (v_CN_N-v_EN_N) # Earth-centered inertial spacecraft position (converted from Sun-centered). Convert to ECEF to emulate GPS data.
 
             if self.tracking_mode == "TRACKING": # Tracking a static target on the surface of the earth via GPS coordinates        
                 r_ECEF = ECI_2_ECEF @ r_CE_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
-                self.static_tracking_quat(r_ECEF, self.ECEF_target, ECI_2_ECEF)
+                target_ECEF = self.ECEF_target - r_ECEF # calculate target vector in ECEF cartesian coordinates
+                target_ECEF = target_ECEF/np.linalg.norm(target_ECEF) # normalize to unit vector
             elif self.tracking_mode == "RAM": # Continually face ram direction in flight (+x in ram, +z in opposite of nadir)
-                nadir_ECEF = ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                v_ECEF = ECI_2_ECEF @ (v_CN_N-v_EN_N) # Earth-centered inertial spacecraft position (converted from Sun-centered). Convert to ECEF to emulate GPS data.
-                self.ram_tracking_quat(nadir_ECEF, v_ECEF, ECI_2_ECEF)
-            
+                target_ECEF = ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
+                
+            self.ram_tracking_quat(target_ECEF, v_ECEF, ECI_2_ECEF)
             self.target_history.append(self.q_target)
         
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
@@ -278,32 +279,14 @@ class FlightSoftware(sysModel.SysModel):
 
         return np.asarray([x, y, z])
 
-    def static_tracking_quat(self, current_gps, target_gps, ECI_2_ECEF): # function for tracking a static target during overpasses
-        cartesian_target_vector = target_gps - current_gps # calculate target vector in ECEF cartesian coordinates
-        cartesian_target_vector = cartesian_target_vector/np.linalg.norm(cartesian_target_vector) # normalize to unit vector
-        
+    def ram_tracking_quat(self, target_vector, v_ECEF, ECI_2_ECEF):
         R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI
-        
-        # DONT MIX SKYFIELD AND BASILISK.
-        # START WITH JUST BASILISK.
-        # APPLY SKYFIELD LATER ONCE MATH IS VERIFIED
-        
-        # t  = self.skyfield_timescale.utc(2025, 11, 16, 12, 0, 0) # REPLACE WITH REAL GPS OR ONBOARD TIME IN WHATEVER FORMAT IS GIVEN
-        # R_EN = self.skyfield_EOP.rotation_at(t).matrix # inertial → ECEF rotation matrix
-        # R_NE = R_EN.T # ECEF → inertial rotation matrix
-        
-        target_N = R_NE @ cartesian_target_vector # convert target vector to ECI coordinates with rotation matrix (still in cartesian at this point)
-        target_quat = quat.quat_from_cartesian_vector(target_N) # convert cartesian vector to quaternion
-        self.update_target(target_quat) # update target
-
-    def ram_tracking_quat(self, nadir, v_ECEF, ECI_2_ECEF):
-        R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI
-        nadir_ECI = R_NE @ (nadir/np.linalg.norm(nadir)) # norm nadir vector and convert to ECI
+        target_vector_ECI = R_NE @ (target_vector/np.linalg.norm(target_vector)) # norm target vector and convert to ECI
         v_ECI = R_NE @ (v_ECEF/np.linalg.norm(v_ECEF)) # norm velocity vector and convert to ECI
         
-        zvec = nadir_ECI # helical should always point nadir and defines orientation
+        zvec = target_vector_ECI # z axis of the spacecraft should always be pointing along target vector
         
-        xvec = v_ECI - np.dot(v_ECI, zvec) * zvec # remove component parallel to nadir vector to determine ram-facing x-vector
+        xvec = v_ECI - np.dot(v_ECI, zvec) * zvec # remove component parallel to nadir vector from velocity vector to determine ram-facing x-vector
         xvec = xvec/np.linalg.norm(xvec) # norm
 
         yvec = np.cross(zvec, xvec)

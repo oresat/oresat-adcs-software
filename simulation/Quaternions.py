@@ -109,27 +109,3 @@ def quat_from_dcm_scalar_last(m):
     q = np.array([qx, qy, qz, qs])
     q = q / np.linalg.norm(q)
     return q
-
-
-def quat_from_cartesian_vector(target, eps=1e-8):
-    target = target / np.linalg.norm(target) # normalize target vector just in case rotation introduced numerical noise
-    z = [0.0, 0.0, 1.0] # target facing of satellite will be z vector (to be rotated by control software later if Cirrus Flux Camera is used instead of Selfie Camera)
-    d = np.dot(target, z)
-
-    if d > 1.0 - eps:
-        return np.array([0.0, 0.0, 0.0, 1.0])
-
-    if d < -1.0 + eps:
-        ortho = np.array([1.0, 0.0, 0.0])
-        if abs(target[0]) > 0.9:
-            ortho = np.array([0.0, 1.0, 0.0])
-        axis = np.cross(target, ortho)
-        axis = axis / np.linalg.norm(axis)
-        return np.array([axis[0], axis[1], axis[2], 0.0])
-
-    c = np.cross(z, target)
-    s = np.sqrt((1.0 + d) * 2.0)
-    q_xyz = c / s
-    q_w   = 0.5 * s
-    q = np.array([q_xyz[0], q_xyz[1], q_xyz[2], q_w])
-    return q / np.linalg.norm(q)
