@@ -57,9 +57,11 @@ class FlightSoftware(sysModel.SysModel):
         target_height = config["target_height"]
         self.ECEF_target = self.GPS_to_ECEF(target_lat, target_lon, target_height, a, e2) # convert GPS coordinates to ECEF coordinates
         
-        # self.skyfield_timescale = load.timescale()
-        # self.skyfield_ephemeris = load('de440s.bsp') # UPDATE THIS TO POINT TO ACTUAL FILE || NOT TOO SENSITIVE TO STALE FILES
-        # self.skyfield_EOP = load()
+        self.use_skyfield = config["use_skyfield"]
+        if self.use_skyfield:
+            self.skyfield_timescale = load.timescale()
+            self.skyfield_ephemeris = load('de440s.bsp') # UPDATE THIS TO POINT TO ACTUAL FILE || NOT TOO SENSITIVE TO STALE FILES
+            self.skyfield_EOP = load()
         
         self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
@@ -155,11 +157,11 @@ class FlightSoftware(sysModel.SysModel):
             r_CE_N = r_CN_N - r_EN_N # Earth-centered inertial spacecraft position (converted from Sun-centered) allows for emulation of ECEF-vector-converted-GPS coordinates 
             v_ECEF = ECI_2_ECEF @ (v_CN_N-v_EN_N) # Earth-centered inertial spacecraft position (converted from Sun-centered). Convert to ECEF to emulate GPS data.
 
-            if self.tracking_mode == "TRACKING": # Tracking a static target on the surface of the earth via GPS coordinates        
+            if self.tracking_mode == "TARGET": # Tracking a static target on the surface of the earth via GPS coordinates        
                 r_ECEF = ECI_2_ECEF @ r_CE_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
                 target_ECEF = self.ECEF_target - r_ECEF # calculate target vector in ECEF cartesian coordinates
                 target_ECEF = target_ECEF/np.linalg.norm(target_ECEF) # normalize to unit vector
-            elif self.tracking_mode == "RAM": # Continually face ram direction in flight (+x in ram, +z in opposite of nadir)
+            elif self.tracking_mode == "NADIR": # Continually face ram direction in flight (+x in ram, +z in opposite of nadir)
                 target_ECEF = ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
                 
             self.ram_tracking_quat(target_ECEF, v_ECEF, ECI_2_ECEF)
@@ -280,7 +282,13 @@ class FlightSoftware(sysModel.SysModel):
         return np.asarray([x, y, z])
 
     def ram_tracking_quat(self, target_vector, v_ECEF, ECI_2_ECEF):
-        R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI
+        if self.use_skyfield:
+            print("USING SKYFIELD ERROR")
+            t = self.skyfield_timescale.utc(2025, 11, 16, 12, 0, 0) # REPLACE WITH REAL GPS OR ONBOARD TIME
+            R_EN = self.skyfield_EOP.rotation_at(t).matrix # inertial -> ECEF rotation matrix
+            R_NE = R_EN.T # ECEF -> inertial rotation matrix
+        else:
+            R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI
         target_vector_ECI = R_NE @ (target_vector/np.linalg.norm(target_vector)) # norm target vector and convert to ECI
         v_ECI = R_NE @ (v_ECEF/np.linalg.norm(v_ECEF)) # norm velocity vector and convert to ECI
         

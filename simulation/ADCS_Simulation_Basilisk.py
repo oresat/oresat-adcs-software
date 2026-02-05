@@ -410,15 +410,16 @@ if __name__ == "__main__":
     pointing_reference = "SC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     mission_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
 
-    tracking_mode = "TRACKING" # Valid modes are TRACKING, RAM, or None. Track specified target on Earth's surface or ram direction.
+    tracking_mode = "NADIR" # Valid modes are TARGET, NADIR, or None. Track specified target on Earth's surface or nadir vector. Both with ram facing.
+    use_skyfield = True
     target_lat = 39.608251
     target_lon = -104.895788
     target_height = 1716 # [m]
         
     if ("RW" in mission_mode): # realistic RW sim setup
-        sim_time = 6000
-        dynamics_update_time = .4
-        fsw_update_time = .4
+        sim_time = 100
+        dynamics_update_time = .1
+        fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
             exit()
@@ -442,7 +443,7 @@ if __name__ == "__main__":
               "satellite":satellite, "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "mission_mode":mission_mode,
               "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states,
               "save_pdf":save_pdf, "save_png":save_png, "plot_basepath":plot_basepath, "use_filter":use_filter, "sigma_gyro":sigma_gyro, "sigma_bias":sigma_bias, "P_b0":P_b0,
-              "sigma_ST":sigma_ST, "P_ST_0":P_ST_0, "ST_update_rate":ST_update_rate, "error_time_check":error_time_check, "tracking_mode":tracking_mode,
-              "target_lat":target_lat, "target_lon":target_lon, "target_height":target_height, "sat_3D_file":sat_3D_file, "viz_scaling":viz_scaling}
+              "sigma_ST":sigma_ST, "P_ST_0":P_ST_0, "ST_update_rate":ST_update_rate, "error_time_check":error_time_check, "tracking_mode":tracking_mode, 
+              "target_lat":target_lat, "target_lon":target_lon, "target_height":target_height, "sat_3D_file":sat_3D_file, "viz_scaling":viz_scaling, "use_skyfield":use_skyfield}
     
     sim_main(config)

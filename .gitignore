@@ -140,6 +140,7 @@ dmypy.json
 *.o
 *.ko
 *.elf
+*.bsp
 
 # Linker output
 *.ilk
