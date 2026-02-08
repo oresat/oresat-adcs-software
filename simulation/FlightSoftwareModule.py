@@ -2,11 +2,12 @@ from Basilisk.architecture import sysModel, messaging
 from Basilisk.utilities import macros
 import numpy as np
 from ADCS_Discrete_State_Space_Calculator import get_RW_gain_matrix
-# from MTB_LQR_Discrete_Gains_Calculator import get_MTB_gain_matrix
 import Quaternions as quat
 # import Guidance_Functions as guidance
 from Kalman_Filter import Multiplicative_Extended_Kalman_Filter
 from skyfield.api import load
+from skyfield.framelib import itrs
+from datetime import datetime, timezone, timedelta
 from sys import exit
 
 class FlightSoftware(sysModel.SysModel):
@@ -44,6 +45,7 @@ class FlightSoftware(sysModel.SysModel):
         self.crashTheKernel = False # intentional exit to catch errors. Crashes the kernel because of SWIG. 
         self.error_filter = [] # used for tracking and graphing filter error (estimated error based on filter state estimates)
         self.target_history = [] # only used if self.tracking_mode is not None
+        self.time_zero = 0 # initialized in sim main, used to keep track of GPS time
         
         self.q_target = np.array([0,0,0,1]) # attribute initialization, set to real value in sim main
         omega_target_rpm = np.array([0.0, 0.0, 0.0]) # [RPM]
@@ -60,8 +62,8 @@ class FlightSoftware(sysModel.SysModel):
         self.use_skyfield = config["use_skyfield"]
         if self.use_skyfield:
             self.skyfield_timescale = load.timescale()
-            self.skyfield_ephemeris = load('de440s.bsp') # UPDATE THIS TO POINT TO ACTUAL FILE || NOT TOO SENSITIVE TO STALE FILES
-            self.skyfield_EOP = load()
+            # self.skyfield_ephemeris = load('de440s.bsp') # UPDATE THIS TO POINT TO ACTUAL FILE || NOT TOO SENSITIVE TO STALE FILES
+            self.skyfield_EOP = itrs
         
         self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
@@ -74,7 +76,7 @@ class FlightSoftware(sysModel.SysModel):
         LQR_max_rate = 0.002
         self.K_RW = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
         
-        self.mission_mode = config["mission_mode"]
+        self.control_mode = config["control_mode"]
         self.slewMode = "slew" # only used for sliding mode bang-bang controller. Can be "slew" for large-angle rotations or "precise" for fine-pointing operations
         
         # Select the spacecraft pointing reference (which axis/sensor defines boresight):
@@ -170,9 +172,9 @@ class FlightSoftware(sysModel.SysModel):
                 target_ECEF = self.ram_quaternion(self.tracking_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
             
             if self.use_skyfield: # if using skyfield, override the sim-internal frame-transformation matrix with skyfield's
-                print("USING SKYFIELD ERROR")
-                t = self.skyfield_timescale.utc(2025, 11, 16, 12, 0, 0) # REPLACE WITH REAL GPS OR ONBOARD TIME
-                ECI_2_ECEF = self.skyfield_EOP.rotation_at(t).matrix # inertial -> ECEF rotation matrix
+                dt = self.time_zero + timedelta(seconds=currentTimeNanos * 1e-9)
+                t = self.skyfield_timescale.from_datetime(dt)
+                ECI_2_ECEF = self.skyfield_EOP.rotation_at(t) # inertial -> ECEF rotation matrix
             
             self.target_history.append(self.q_target)
         
@@ -200,39 +202,39 @@ class FlightSoftware(sysModel.SysModel):
         
         ######################### CONTROL LOGIC ###############################
         if (currentTimeNanos * 1e-9 >= self.controllerStartTime): # turn controller on at specified time
-            if self.mission_mode == "RW_POINTING":
+            if self.control_mode == "RW_POINTING":
                 desired_torque = self.RW_controller(q_error, omega) # compute desired 3-axis torque from controller (standard LQR controller)
                 desired_torque += tau_ff # feedforward torque, only non-zero for tracking mode
                 wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
-            elif self.mission_mode == "THERMAL_REORIENT": # can only be set by first part of passive thermal spin controller
+            elif self.control_mode == "THERMAL_REORIENT": # can only be set by first part of passive thermal spin controller
                 desired_torque = self.RW_controller(q_error, omega) # compute desired 3-axis torque from controller
                 wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
                 if (quat.error_angle(q_error) <= 0.1 and np.all(np.abs(omega) < 1e-6)):
                     #zero wheel speeds?
-                    self.mission_mode = "SPINUP"
+                    self.control_mode = "SPINUP"
                     print(f"SWITCHING TO MAGNETORQUER SPINUP AT {currentTimeNanos*1e-9} SECONDS, {omega}")
-            elif self.mission_mode == "DETUMBLE":
+            elif self.control_mode == "DETUMBLE":
                 desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
                 self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
-            elif self.mission_mode == "THERMAL_SPIN":
+            elif self.control_mode == "THERMAL_SPIN":
                 desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
                 self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
                 if (np.all(np.abs(omega) < 1e-4)):
-                    self.mission_mode = "THERMAL_REORIENT"
+                    self.control_mode = "THERMAL_REORIENT"
                     print(f"SWITCHING TO REACTION WHEEL REORIENTATION AT {currentTimeNanos*1e-9} SECONDS")
-            elif self.mission_mode == "SPINUP": # spinup satellite for thermal spin about the axis
+            elif self.control_mode == "SPINUP": # spinup satellite for thermal spin about the axis
                 if (omega[2] < self.thermal_spin_rpm*2*np.pi/60): # while satellite is spinning slower than set rate about the z axis, spin up
                     tau_des = [0,0,1] # spin about the z axis
                     m = np.cross(B, tau_des) / (B @ B)
                     self.command_MTB_torques(m, currentTimeNanos)
-            elif self.mission_mode == "MTB_POINTING": # Magentorquer fine pointing controller (experimental)
+            elif self.control_mode == "MTB_POINTING": # Magentorquer fine pointing controller (experimental)
                 tau_des = self.mag_LQR_controller(q_error, omega) # desired 3-axis torque in body frame
                 B2 = B @ B # twice as fast as alternate: np.linalg.norm(B)**2
                 m_cmd = np.zeros(3) if B2 < (5e-6)**2 else np.cross(B, tau_des) / B2 # project torques onto magnetic field
                 self.command_MTB_torques(m_cmd, currentTimeNanos)
-            elif self.mission_mode == "ORBITS":
+            elif self.control_mode == "ORBITS":
                 pass # mode to simply visualize orbits with large timespans
             else:
                 print("ERROR: Unknown mission mode specified", flush = True)
@@ -331,7 +333,7 @@ class FlightSoftware(sysModel.SysModel):
         
         nadir_ECI = R_NE @ nadir_vec
         nadir_facing = nadir_ECI - np.dot(nadir_ECI, drag_facing) * drag_facing # remove component parallel to velocity vector from nadir vector to determine "downwards-pointing" vector
-        nadir_facing = -nadir_facing/np.linalg.norm(nadir_facing) # norm and flip vector. The flip is such that in min_drag mode, the satellite's solar panels are pointing anti-nadir, rather than the GPS antenna
+        nadir_facing = nadir_facing/np.linalg.norm(nadir_facing) # norm 
         
         if drag_orientation == "MAX_DRAG":
             yvec = np.cross(nadir_facing, drag_facing)
@@ -340,6 +342,7 @@ class FlightSoftware(sysModel.SysModel):
             C_BN = np.vstack((drag_facing, yvec, nadir_facing)) # Create DCM for body orientation in ECI coordinates
             
         elif drag_orientation == "MIN_DRAG":
+            nadir_facing = -nadir_facing # flip vector such that in min_drag mode, the satellite's solar panels (rather than the GPS antenna) are pointing anti-nadir
             yvec = np.cross(drag_facing, nadir_facing)
             yvec = yvec/np.linalg.norm(yvec) # norm
             
@@ -347,3 +350,7 @@ class FlightSoftware(sysModel.SysModel):
         
         target_quat = quat.quat_from_dcm_scalar_last(C_BN) # Convert DCM to quaternion
         self.update_target(target_quat) # update FSW target
+        
+    def set_time_zero_from_iso_utc(self, iso_utc: str):
+        s = iso_utc.replace("Z", "+00:00") # Accepts formats "2026-02-10T00:00:00Z" or "2026-02-10T00:00:00+00:00"
+        self.time_zero = datetime.fromisoformat(s).astimezone(timezone.utc)

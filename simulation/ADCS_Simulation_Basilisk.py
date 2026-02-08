@@ -80,7 +80,7 @@ def sim_main(config):
     scObject.hub.v_CN_NInit = vN  # v_BN_N [m/s]
     
     # Add spice object for planet rotation and ECEF coordinate simulation. Necessary for guidance algorithms.
-    timeInitString = "2015 February 10, 00:00:00.0 TDB"
+    timeInitString = "2026-02-10T00:00:00Z"
     spiceObject = gravFactory.createSpiceInterface(bskPath + "/supportData/EphemerisData/", time=timeInitString, epochInMsg=True) # create SPICE object and point to ephemeris data
     spiceObject.addPlanetNames(["earth"])
     
@@ -220,6 +220,7 @@ def sim_main(config):
     fsw.magMsgIn.subscribeTo(magSensor.tamDataOutMsg) # subscribe fsw to magenotometer readings
     fsw.scStateIn.subscribeTo(scObject.scStateOutMsg) # subscribe fsw to spacecraft state (positioning) for GPS emulation
     fsw.earthStateInMsg.subscribeTo(spiceObject.planetStateOutMsgs[0]) # subscribe fsw to earth SPICE data, necessary to extract J20002PFix transformation matrix
+    fsw.set_time_zero_from_iso_utc(timeInitString) # initialize ephemeris start time for GPS timestamp emulation
     sim.AddModelToTask("fswTask", fsw)
     
     rwStateEffector.rwMotorCmdInMsg.subscribeTo(fsw.rwMotorTorqueOutMsg) # subscribe reaction wheel command input to flight software control output
@@ -281,7 +282,7 @@ def sim_main(config):
     ############################ POST PROCESSING ##############################
     '''
     Data arrays are defined differently in this section depending on whether
-    the data originates from a dynamics process or an fsw process, which
+    the data originates from a dynamics process or a flightsoftware process, which
     typically run at different rates in the simulation. As such, their lengths
     must be adapted to be plottable by upsampling the shorter array.
     '''
@@ -307,7 +308,7 @@ def sim_main(config):
         error_expanded_filter = None
     
     plot_times = imuRec.times() * 1e-9
-    if ("RW" in config["mission_mode"]):
+    if ("RW" in config["control_mode"]):
         RW_plot_times = rwSpeedLog.times() * 1e-9 # dynamics process intervals
         plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, config, error_true, error_expanded_filter)
         time_axis = "seconds"
@@ -321,7 +322,7 @@ def sim_main(config):
     # plot_imu(plot_times, imuValues, orbital_period, config, time_axis, error_true)
     
     print(f"\nSimulation completed in {end-start:.2f} seconds\nSimulated time of flight: {config["sim_time"]} seconds")
-    if config["mission_mode"] == "RW_POINTING" or config["mission_mode"] == "MTB_POINTING":
+    if config["control_mode"] == "RW_POINTING" or config["control_mode"] == "MTB_POINTING":
         print(f"\nFinal target was: {fsw.q_target}")
         print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, sat_q_init))}") # calculate orientation/angle change based on initial attitude
         if (config["sim_time"] >= config["error_time_check"]):
@@ -408,26 +409,26 @@ if __name__ == "__main__":
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "SC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    mission_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
+    control_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
 
     # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
     # Max and min drag modes face +x or +z into ram direction respectively
-    tracking_mode = "MAX_DRAG" 
+    tracking_mode = "TARGET" 
     use_skyfield = False
     target_lat = 39.608251
     target_lon = -104.895788
     target_height = 1716 # [m]
         
-    if ("RW" in mission_mode): # realistic RW sim setup
+    if ("RW" in control_mode): # realistic RW sim setup
         sim_time = 100
-        dynamics_update_time = .1
+        dynamics_update_time = .01
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
             exit()
-    elif mission_mode == "ORBITS":
-        sim_time = 6000
+    elif control_mode == "ORBITS":
+        sim_time = 100
         dynamics_update_time = 10
         fsw_update_time = 10
         use_filter = False
@@ -438,12 +439,12 @@ if __name__ == "__main__":
         fsw_update_time = .1
     
     print(f"Satellite: {satellite}")
-    print(f"Mission Mode: {mission_mode}")
+    print(f"Mission Mode: {control_mode}")
     print(f"View Device: {pointing_reference}")
     print(f"Tracking Mode: {tracking_mode}\n")
     
     config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,
-              "satellite":satellite, "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "mission_mode":mission_mode,
+              "satellite":satellite, "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "control_mode":control_mode,
               "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states,
               "save_pdf":save_pdf, "save_png":save_png, "plot_basepath":plot_basepath, "use_filter":use_filter, "sigma_gyro":sigma_gyro, "sigma_bias":sigma_bias, "P_b0":P_b0,
               "sigma_ST":sigma_ST, "P_ST_0":P_ST_0, "ST_update_rate":ST_update_rate, "error_time_check":error_time_check, "tracking_mode":tracking_mode, 
