@@ -410,8 +410,11 @@ if __name__ == "__main__":
     pointing_reference = "SC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     mission_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
 
-    tracking_mode = "NADIR" # Valid modes are TARGET, NADIR, or None. Track specified target on Earth's surface or nadir vector. Both with ram facing.
-    use_skyfield = True
+    # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. 
+    # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
+    # Max and min drag modes face +x or +z into ram direction respectively
+    tracking_mode = "MAX_DRAG" 
+    use_skyfield = False
     target_lat = 39.608251
     target_lon = -104.895788
     target_height = 1716 # [m]

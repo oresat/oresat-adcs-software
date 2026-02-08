@@ -161,10 +161,19 @@ class FlightSoftware(sysModel.SysModel):
                 r_ECEF = ECI_2_ECEF @ r_CE_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
                 target_ECEF = self.ECEF_target - r_ECEF # calculate target vector in ECEF cartesian coordinates
                 target_ECEF = target_ECEF/np.linalg.norm(target_ECEF) # normalize to unit vector
-            elif self.tracking_mode == "NADIR": # Continually face ram direction in flight (+x in ram, +z in opposite of nadir)
-                target_ECEF = ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                
-            self.ram_tracking_quat(target_ECEF, v_ECEF, ECI_2_ECEF)
+                self.target_tracking_quat(target_ECEF, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
+            elif self.tracking_mode == "NADIR": # Continually face +z nadir (+x as close to ram as possible)
+                nadir_vector = ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
+                self.target_tracking_quat(nadir_vector, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
+            elif self.tracking_mode == "MAX_DRAG" or self.tracking_mode == "MIN_DRAG":
+                nadir_vector = ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
+                target_ECEF = self.ram_quaternion(self.tracking_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
+            
+            if self.use_skyfield: # if using skyfield, override the sim-internal frame-transformation matrix with skyfield's
+                print("USING SKYFIELD ERROR")
+                t = self.skyfield_timescale.utc(2025, 11, 16, 12, 0, 0) # REPLACE WITH REAL GPS OR ONBOARD TIME
+                ECI_2_ECEF = self.skyfield_EOP.rotation_at(t).matrix # inertial -> ECEF rotation matrix
+            
             self.target_history.append(self.q_target)
         
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
@@ -271,6 +280,7 @@ class FlightSoftware(sysModel.SysModel):
         return -self.K_MAG @ x # invert sign for control
     
     def GPS_to_ECEF(self, lat, lon, height, a, e2):
+        
         sin_lat = np.sin(lat * macros.D2R)
         cos_lat = np.cos(lat * macros.D2R)
         
@@ -281,20 +291,21 @@ class FlightSoftware(sysModel.SysModel):
 
         return np.asarray([x, y, z])
 
-    def ram_tracking_quat(self, target_vector, v_ECEF, ECI_2_ECEF):
-        if self.use_skyfield:
-            print("USING SKYFIELD ERROR")
-            t = self.skyfield_timescale.utc(2025, 11, 16, 12, 0, 0) # REPLACE WITH REAL GPS OR ONBOARD TIME
-            R_EN = self.skyfield_EOP.rotation_at(t).matrix # inertial -> ECEF rotation matrix
-            R_NE = R_EN.T # ECEF -> inertial rotation matrix
-        else:
-            R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI
-        target_vector_ECI = R_NE @ (target_vector/np.linalg.norm(target_vector)) # norm target vector and convert to ECI
+    def target_tracking_quat(self, target_vector, v_ECEF, ECI_2_ECEF):
+        '''
+        Creates an orientation quaternion forming an orientation based on a target
+        vector for the z-facing, and orients the +x facing as close as possible to
+        the velocity vector
+        
+        Used for target tracking and nadir pointing
+        '''
+        
+        R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI
         v_ECI = R_NE @ (v_ECEF/np.linalg.norm(v_ECEF)) # norm velocity vector and convert to ECI
+            
+        zvec = R_NE @ (target_vector/np.linalg.norm(target_vector)) # norm target vector and convert to ECI
         
-        zvec = target_vector_ECI # z axis of the spacecraft should always be pointing along target vector
-        
-        xvec = v_ECI - np.dot(v_ECI, zvec) * zvec # remove component parallel to nadir vector from velocity vector to determine ram-facing x-vector
+        xvec = v_ECI - np.dot(v_ECI, zvec) * zvec # remove component parallel to nadir vector from velocity vector to determine "ram-facing-like" vector
         xvec = xvec/np.linalg.norm(xvec) # norm
 
         yvec = np.cross(zvec, xvec)
@@ -303,7 +314,36 @@ class FlightSoftware(sysModel.SysModel):
         # xvec = np.cross(yvec, zvec) # Re-orthogonalize zB to avoid numerical drift
         # xvec = xvec/np.linalg.norm(xvec) # norm
         
-        C_BN = np.vstack((xvec, yvec, zvec)) # Create DCM
+        C_BN = np.vstack((xvec, yvec, zvec)) # Create DCM for body orientation in ECI coordinates
         
-        target_quat = quat.quat_from_dcm_scalar_last(C_BN)
-        self.update_target(target_quat)
+        target_quat = quat.quat_from_dcm_scalar_last(C_BN) # Convert DCM to quaternion
+        self.update_target(target_quat) # update FSW target
+        
+    def ram_quaternion(self, drag_orientation, v_ECEF, nadir_vec, ECI_2_ECEF):
+        '''
+        Creates an orientation quaternion forming an orientation based on
+        whether maximum or minimum drag is desired. The secondary axis is defined
+        as the nadir vector, or as close as possible to it
+        '''
+        
+        R_NE = ECI_2_ECEF.T
+        drag_facing = R_NE @ (v_ECEF/np.linalg.norm(v_ECEF)) # norm velocity vector and convert to ECI
+        
+        nadir_ECI = R_NE @ nadir_vec
+        nadir_facing = nadir_ECI - np.dot(nadir_ECI, drag_facing) * drag_facing # remove component parallel to velocity vector from nadir vector to determine "downwards-pointing" vector
+        nadir_facing = -nadir_facing/np.linalg.norm(nadir_facing) # norm and flip vector. The flip is such that in min_drag mode, the satellite's solar panels are pointing anti-nadir, rather than the GPS antenna
+        
+        if drag_orientation == "MAX_DRAG":
+            yvec = np.cross(nadir_facing, drag_facing)
+            yvec = yvec/np.linalg.norm(yvec) # norm
+            
+            C_BN = np.vstack((drag_facing, yvec, nadir_facing)) # Create DCM for body orientation in ECI coordinates
+            
+        elif drag_orientation == "MIN_DRAG":
+            yvec = np.cross(drag_facing, nadir_facing)
+            yvec = yvec/np.linalg.norm(yvec) # norm
+            
+            C_BN = np.vstack((nadir_facing, yvec, drag_facing)) # Create DCM for body orientation in ECI coordinates
+        
+        target_quat = quat.quat_from_dcm_scalar_last(C_BN) # Convert DCM to quaternion
+        self.update_target(target_quat) # update FSW target
