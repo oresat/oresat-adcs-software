@@ -414,21 +414,21 @@ if __name__ == "__main__":
     # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
     # Max and min drag modes face +x or +z into ram direction respectively
-    tracking_mode = "TARGET" 
-    use_skyfield = False
+    tracking_mode = "MIN_DRAG" 
+    use_skyfield = True
     target_lat = 39.608251
     target_lon = -104.895788
     target_height = 1716 # [m]
         
     if ("RW" in control_mode): # realistic RW sim setup
-        sim_time = 100
-        dynamics_update_time = .01
+        sim_time = 500
+        dynamics_update_time = .1
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
             exit()
     elif control_mode == "ORBITS":
-        sim_time = 100
+        sim_time = 2000
         dynamics_update_time = 10
         fsw_update_time = 10
         use_filter = False
