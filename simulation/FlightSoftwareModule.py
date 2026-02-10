@@ -198,7 +198,7 @@ class FlightSoftware(sysModel.SysModel):
                 self.target_tracking_quat(nadir_vector, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
             elif self.tracking_mode == "MAX_DRAG" or self.tracking_mode == "MIN_DRAG":
                 nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                target_ECEF = self.ram_quaternion(self.tracking_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
+                self.ram_quaternion(self.tracking_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
             
             self.target_history.append(self.q_target)
             
@@ -265,7 +265,7 @@ class FlightSoftware(sysModel.SysModel):
                 tau_des = self.mag_LQR_controller(q_error, omega) # desired 3-axis torque in body frame
                 B2 = B @ B # twice as fast as alternate: np.linalg.norm(B)**2
                 # print(B2)
-                m_cmd = np.zeros(3) if B2 < (5e-6)**2 else np.cross(B, tau_des) / B2 # project torques onto magnetic field
+                m_cmd = np.zeros(3) if B2 < (5e-12)**2 else np.cross(B, tau_des) / B2 # project torques onto magnetic field
                 self.command_MTB_torques(m_cmd, currentTimeNanos)
             elif self.control_mode == "ORBITS":
                 pass # mode to simply visualize orbits with large timespans
