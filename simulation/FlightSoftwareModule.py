@@ -69,7 +69,7 @@ class FlightSoftware(sysModel.SysModel):
         self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
         self.bangbang_rate = 0.07 # max rotation rate of bang bang controller (0.07 rad/s ~ 4 deg/s)
         self.thermal_spin_rpm = 1.0 # thermal spin rate about the z-axis (body frame)
-        self.controllerStartTime = 0 # time at which controller should begin taking control [seconds]
+        self.controllerStartTime = 0 # time at which controller should activate [seconds]
         
         max_input = 0.00003 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error = 0.01
@@ -107,6 +107,7 @@ class FlightSoftware(sysModel.SysModel):
         LQR_max_error_mag = 0.05
         LQR_max_rate_mag = 0.000002
         self.K_MAG = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error_mag, LQR_max_rate_mag, max_input_mag)
+        self.mag_torque_integral = 0
         
     def Reset(self, currentTimeNanos): # required by Basilisk even if Reset does nothing
         pass
@@ -118,6 +119,10 @@ class FlightSoftware(sysModel.SysModel):
             
         self.ticks += 1
         
+        '''
+        The following section gathers all sensor and frame states.
+        '''
+        
         ######### GATHER SYSTEM STATES AND CALCULATE ERROR QUATERNION #########
         if self.imuMsgIn.isWritten():
             self.imuMsg = self.imuMsgIn()
@@ -128,6 +133,7 @@ class FlightSoftware(sysModel.SysModel):
         if self.magMsgIn.isWritten():
             self.magMsg = self.magMsgIn()
             B = np.asarray(self.magMsg.tam_S)
+            print(B)
         if self.starTrackerMsgIn.isWritten():
             self.starTrackerMsg = self.starTrackerMsgIn()
             q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
@@ -138,9 +144,13 @@ class FlightSoftware(sysModel.SysModel):
             v_CN_N = scState.v_CN_N # spacecraft velocity vector (position from COM) from origin in ECI frame. Origin is sun in Basilisk
         if self.earthStateInMsg.isWritten():
             earthState = self.earthStateInMsg()
-            true_ECI_2_ECEF = np.asarray(earthState.J20002Pfix) # transform matrix from ECI to ECEF frame
+            true_ECI_2_ECEF = np.asarray(earthState.J20002Pfix) # sim-internal transform matrix from ECI to ECEF frame
             r_EN_N = np.asarray(earthState.PositionVector) # Earth position vector from sun (inertial frame) 
             v_EN_N = np.asarray(earthState.VelocityVector) # Earth velocity vector from sun (inertial frame)
+        
+        '''
+        The following section is for attitude estimation if filtering is turned on
+        '''
         
         if self.use_filter: # simulate asynchronous MEKF
             if (currentTimeNanos == 0):
@@ -156,6 +166,13 @@ class FlightSoftware(sysModel.SysModel):
         else: # send sensor data directly to the controller without filtering
             q = quat.quat_mult(self.q_90_rot, q_star_tracker) # convert star tracker output to nominal body frame (+z with selfie cam)
         
+        '''
+        Dynamic guidance functions for target tracking, nadir-pointing, and
+        minimum & maximum drag orientation. This is separate from the control
+        portion of the code, and just defines the target which is fed into the 
+        control algorithms
+        '''
+        
         if self.tracking_mode is not None:
             q_last = self.q_target # save for tracking rate calculations
             r_CE_N = r_CN_N - r_EN_N # Earth-centered inertial spacecraft position (converted from Sun-centered) allows for emulation of ECEF-vector-converted-GPS coordinates 
@@ -169,7 +186,6 @@ class FlightSoftware(sysModel.SysModel):
                     self.last_skyfield_frame = ECI_2_ECEF
                 else:
                     ECI_2_ECEF = self.last_skyfield_frame # if skyfield didn't update this loop, use saved rotation matrix (zero order hold)
-                    
             else:
                 ECI_2_ECEF = true_ECI_2_ECEF # if not using skyfield, use sim-internal conversion matrix
                 
@@ -186,13 +202,12 @@ class FlightSoftware(sysModel.SysModel):
                 target_ECEF = self.ram_quaternion(self.tracking_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
             
             self.target_history.append(self.q_target)
-        
-        q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
-        q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hemisphere boundaries
-        self.error_filter.append(q_error) # save estimated (filtered) attitude error for plotting after conclusion of sim execution
-        
-        # feed-forward terms for target tracking to avoid overdamping and to account for gyroscopic effects 
-        if self.tracking_mode is not None:
+            
+            '''
+            The following section includes feed-forward terms for target tracking
+            to avoid overdamping and to account for gyroscopic effects 
+            '''
+            
             # feed forward term for angular rate bias
             rotation_quat = quat.quat_error(q_last, self.q_target) # flipped order because of frame conventions for proper signage (body -> target)
             rot_axis = quat.quat_to_axis(rotation_quat)
@@ -208,6 +223,15 @@ class FlightSoftware(sysModel.SysModel):
             omega = omega-omega_desired # set biased omega after using true value to calculate feed forward term
         else:
             tau_ff = 0
+        
+        '''
+        The following section encomposses the control algorithms which
+        define actuator output based on state and target
+        '''
+        
+        q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
+        q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hemisphere boundaries
+        self.error_filter.append(q_error) # save estimated (filtered) attitude error for plotting after conclusion of sim execution
         
         ######################### CONTROL LOGIC ###############################
         if (currentTimeNanos * 1e-9 >= self.controllerStartTime): # turn controller on at specified time
@@ -238,7 +262,7 @@ class FlightSoftware(sysModel.SysModel):
                     tau_des = [0,0,1] # spin about the z axis
                     m = np.cross(B, tau_des) / (B @ B)
                     self.command_MTB_torques(m, currentTimeNanos)
-            elif self.control_mode == "MTB_POINTING": # Magentorquer fine pointing controller (experimental)
+            elif self.control_mode == "MTB_POINTING": # Magnetorquer fine pointing controller (experimental)
                 tau_des = self.mag_LQR_controller(q_error, omega) # desired 3-axis torque in body frame
                 B2 = B @ B # twice as fast as alternate: np.linalg.norm(B)**2
                 m_cmd = np.zeros(3) if B2 < (5e-6)**2 else np.cross(B, tau_des) / B2 # project torques onto magnetic field
@@ -267,7 +291,7 @@ class FlightSoftware(sysModel.SysModel):
         self.rwMotorTorquePayload.motorTorque = self.torque_vals
         self.rwMotorTorqueOutMsg.write(self.rwMotorTorquePayload, currentTimeNanos, self.moduleID)
           
-    def convert_torque_to_wheels(self, torque_array): # convert 3-axis torque request to üyramid configuration reaction wheel output
+    def convert_torque_to_wheels(self, torque_array): # convert 3-axis torque request to pyramid configuration reaction wheel output
         if (self.G_pinv.shape[1] != np.shape(torque_array)[0]):
             print(f"\n\nMANUAL ERROR: Array shapes do not match. Got G_pinv shape [1] {self.G_pinv.shape[1]} and torque_array shape [0] {np.shape(torque_array)[0]}", flush = True)  # this doesn't work because of Basilisk stuff, kernel crashes before flushing output buffer
         return self.G_pinv @ torque_array

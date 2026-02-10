@@ -74,10 +74,9 @@ def quat_from_dcm_scalar_last(m):
     avoid singularities and square roots of negative values
     Returns scalar-last quaternion
     
-    qw represents scalar component of quaternion, as s is already used as
-    intermediate variable
+    qs represents scalar component of quaternion
     
-    Conversion definition taken based on work in:
+    Conversion definition based on work in:
     "Quaternion to DCM and Back Again" by Kurt A. Motekew
     """
     trace = np.trace(m)

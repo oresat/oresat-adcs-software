@@ -399,42 +399,47 @@ if __name__ == "__main__":
     init_rot_axis = [1, 0, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     
-    omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin velocties [RPM]
-    # omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
+    # omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
-    sat_rot_axis = [0, 1, 0]
+    sat_rot_axis = [1, 1, 0]
     sat_rot_angle = 180
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "SC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    control_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
+    control_mode = "MTB_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
 
-    # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. 
+    
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
-    # Max and min drag modes face +x or +z into ram direction respectively
-    tracking_mode = "MIN_DRAG" 
+    tracking_mode = None # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
     use_skyfield = True
+    # KSAT coordinates
+    # target_lat = 78.231500
+    # target_lon = 15.411100
+    # target_height = 488 # [m]
+    
+    # ESI headquarters coordinates
     target_lat = 39.608251
     target_lon = -104.895788
     target_height = 1716 # [m]
         
     if ("RW" in control_mode): # realistic RW sim setup
-        sim_time = 500
+        sim_time = 100
         dynamics_update_time = .1
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
             exit()
     elif control_mode == "ORBITS":
-        sim_time = 2000
+        sim_time = 12000
         dynamics_update_time = 10
         fsw_update_time = 10
         use_filter = False
-        omega_init_rad = np.array([0.0, 0.0, 0.0])
+        omega_init_rad = np.array([0.0, 0.0, 0.0]) # ensure no excessive spinning
     else: # realistic MTB sim setup
-        sim_time = 6000
+        sim_time = 3000
         dynamics_update_time = .1
         fsw_update_time = .1
     
