@@ -133,7 +133,6 @@ class FlightSoftware(sysModel.SysModel):
         if self.magMsgIn.isWritten():
             self.magMsg = self.magMsgIn()
             B = np.asarray(self.magMsg.tam_S)
-            print(B)
         if self.starTrackerMsgIn.isWritten():
             self.starTrackerMsg = self.starTrackerMsgIn()
             q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
@@ -265,6 +264,7 @@ class FlightSoftware(sysModel.SysModel):
             elif self.control_mode == "MTB_POINTING": # Magnetorquer fine pointing controller (experimental)
                 tau_des = self.mag_LQR_controller(q_error, omega) # desired 3-axis torque in body frame
                 B2 = B @ B # twice as fast as alternate: np.linalg.norm(B)**2
+                # print(B2)
                 m_cmd = np.zeros(3) if B2 < (5e-6)**2 else np.cross(B, tau_des) / B2 # project torques onto magnetic field
                 self.command_MTB_torques(m_cmd, currentTimeNanos)
             elif self.control_mode == "ORBITS":

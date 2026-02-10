@@ -83,6 +83,7 @@ def sim_main(config):
     timeInitString = "2026-02-10T00:00:00Z"
     spiceObject = gravFactory.createSpiceInterface(bskPath + "/supportData/EphemerisData/", time=timeInitString, epochInMsg=True) # create SPICE object and point to ephemeris data
     spiceObject.addPlanetNames(["earth"])
+    spiceObject.zeroBase = 'Earth' # centers the spice ephemeris data on Earth. Required, otherwise WMM becomes heliocentric, and has no effect on spacecraft in Earth orbit.
     
     earth.planetBodyInMsg.subscribeTo(spiceObject.planetStateOutMsgs[0])
     
@@ -413,7 +414,8 @@ if __name__ == "__main__":
 
     
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
-    tracking_mode = None # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
+    tracking_mode = None
+    # tracking_mode = "TARGET" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
     use_skyfield = True
     # KSAT coordinates
     # target_lat = 78.231500
@@ -426,7 +428,7 @@ if __name__ == "__main__":
     target_height = 1716 # [m]
         
     if ("RW" in control_mode): # realistic RW sim setup
-        sim_time = 100
+        sim_time = 800
         dynamics_update_time = .1
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
