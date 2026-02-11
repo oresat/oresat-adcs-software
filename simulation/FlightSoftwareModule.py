@@ -103,9 +103,9 @@ class FlightSoftware(sysModel.SysModel):
         
         self.omega_desired_prev = np.zeros(3)
         
-        max_input_mag = 0.03 # QUALITATIVE value for max torque used by LQR tuning ONLY
+        max_input_mag = 0.3 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error_mag = 0.05
-        LQR_max_rate_mag = 0.000002
+        LQR_max_rate_mag = 0.000008
         self.K_MAG = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error_mag, LQR_max_rate_mag, max_input_mag)
         self.mag_torque_integral = 0
         
@@ -263,16 +263,28 @@ class FlightSoftware(sysModel.SysModel):
                     self.command_MTB_torques(m, currentTimeNanos)
             elif self.control_mode == "MTB_POINTING": # Magnetorquer fine pointing controller (experimental)
                 tau_des = self.mag_LQR_controller(q_error, omega) # desired 3-axis torque in body frame
-                B2 = B @ B # twice as fast as alternate: np.linalg.norm(B)**2
-                # print(B2)
-                m_cmd = np.zeros(3) if B2 < (5e-12)**2 else np.cross(B, tau_des) / B2 # project torques onto magnetic field
+                bm = self.b_mat(B)
+                k = 1e-8
+                m_cmd = np.linalg.inv(bm.T @ bm + k*np.eye(3))@bm.T@tau_des
+                m_max = 1
+                m_cmd = np.clip(m_cmd, -m_max, m_max)
+                
                 self.command_MTB_torques(m_cmd, currentTimeNanos)
             elif self.control_mode == "ORBITS":
                 pass # mode to simply visualize orbits with large timespans
             else:
                 print("ERROR: Unknown mission mode specified", flush = True)
                 self.crashTheKernel = True
-            
+     
+    def b_mat(self, B):
+        bx, by, bz = B
+        return np.array([
+            [0,   bz,  -by],
+            [-bz,   0,  bx],
+            [by, -bx,   0]
+        ])
+    
+    
     def update_target(self, target_quat):
         if self.pointing == "ST":
             self.q_target = quat.quat_mult(self.q_90_rot, target_quat) # define target in body coordinates

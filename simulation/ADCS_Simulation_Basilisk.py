@@ -405,8 +405,9 @@ if __name__ == "__main__":
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
-    sat_rot_axis = [1, 1, 0]
-    sat_rot_angle = 180
+    sat_rot_axis = [0, 1, 0]
+    sat_rot_angle = 90
+    
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "SC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
@@ -428,7 +429,7 @@ if __name__ == "__main__":
     target_height = 1716 # [m]
         
     if ("RW" in control_mode): # realistic RW sim setup
-        sim_time = 800
+        sim_time = 200
         dynamics_update_time = .1
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
@@ -441,9 +442,9 @@ if __name__ == "__main__":
         use_filter = False
         omega_init_rad = np.array([0.0, 0.0, 0.0]) # ensure no excessive spinning
     else: # realistic MTB sim setup
-        sim_time = 3000
-        dynamics_update_time = .1
-        fsw_update_time = .1
+        sim_time = 40000
+        dynamics_update_time = 1
+        fsw_update_time = 1
     
     print(f"Satellite: {satellite}")
     print(f"Mission Mode: {control_mode}")
