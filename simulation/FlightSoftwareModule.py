@@ -105,7 +105,7 @@ class FlightSoftware(sysModel.SysModel):
         
         max_input_mag = 0.3 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error_mag = 0.05
-        LQR_max_rate_mag = 0.000008
+        LQR_max_rate_mag = 0.00003
         self.K_MAG = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error_mag, LQR_max_rate_mag, max_input_mag)
         self.mag_torque_integral = 0
         

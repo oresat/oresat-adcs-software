@@ -319,8 +319,10 @@ def sim_main(config):
         plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
     
     imuValues = imuRec.AngVelPlatform
+    # if config["control_mode"] == "MTB_POINTING": # print with quaternion error
+    #     plot_imu(plot_times, imuValues, orbital_period, config, time_axis, error_true)
+    # else:
     plot_imu(plot_times, imuValues, orbital_period, config, time_axis)
-    # plot_imu(plot_times, imuValues, orbital_period, config, time_axis, error_true)
     
     print(f"\nSimulation completed in {end-start:.2f} seconds\nSimulated time of flight: {config["sim_time"]} seconds")
     if config["control_mode"] == "RW_POINTING" or config["control_mode"] == "MTB_POINTING":
@@ -400,20 +402,19 @@ if __name__ == "__main__":
     init_rot_axis = [1, 0, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     
-    # omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin velocties [RPM]
-    omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([0.5, 0.2, 0.1])
+    # omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
     sat_rot_axis = [0, 1, 0]
     sat_rot_angle = 90
     
-    
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "SC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     control_mode = "MTB_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
 
-    
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
     tracking_mode = None
     # tracking_mode = "TARGET" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
@@ -442,9 +443,11 @@ if __name__ == "__main__":
         use_filter = False
         omega_init_rad = np.array([0.0, 0.0, 0.0]) # ensure no excessive spinning
     else: # realistic MTB sim setup
-        sim_time = 40000
+        sim_time = 35000
         dynamics_update_time = 1
-        fsw_update_time = 1
+        fsw_update_time = 10 # suggested fsw rate of no less than 5 seconds for stability
+        if ST_update_rate < fsw_update_time:
+            ST_update_rate = fsw_update_time # if ST update rate is faster than FSW, FSW throws an error
     
     print(f"Satellite: {satellite}")
     print(f"Mission Mode: {control_mode}")
