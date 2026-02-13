@@ -41,10 +41,10 @@ class FlightSoftware(sysModel.SysModel):
         self.updateTime = config["fsw_update_time"]
         self.output_states = config["print_states"] # output state messages (or not) for debugging
         self.use_filter = config["use_filter"]
-        self.tracking_mode = config["tracking_mode"] # True or False, set tracking mode to slowly slew satellite over time to emulate target tracking mode
+        self.guidance_mode = config["guidance_mode"] # True or False, set tracking mode to slowly slew satellite over time to emulate target tracking mode
         self.crashTheKernel = False # intentional exit to catch errors. Crashes the kernel because of SWIG. 
         self.error_filter = [] # used for tracking and graphing filter error (estimated error based on filter state estimates)
-        self.target_history = [] # only used if self.tracking_mode is not None
+        self.target_history = [] # only used if self.guidance_mode is not None
         self.time_zero = 0 # initialized in sim main, used to keep track of GPS time
         
         self.q_target = np.array([0,0,0,1]) # attribute initialization, set to real value in sim main
@@ -172,7 +172,7 @@ class FlightSoftware(sysModel.SysModel):
         control algorithms
         '''
         
-        if self.tracking_mode is not None:
+        if self.guidance_mode is not None:
             q_last = self.q_target # save for tracking rate calculations
             r_CE_N = r_CN_N - r_EN_N # Earth-centered inertial spacecraft position (converted from Sun-centered) allows for emulation of ECEF-vector-converted-GPS coordinates 
             v_ECEF = true_ECI_2_ECEF @ (v_CN_N-v_EN_N) # True, sim-internal Earth-centered inertial spacecraft position (converted from Sun-centered). Convert to ECEF to emulate GPS data.
@@ -188,17 +188,17 @@ class FlightSoftware(sysModel.SysModel):
             else:
                 ECI_2_ECEF = true_ECI_2_ECEF # if not using skyfield, use sim-internal conversion matrix
                 
-            if self.tracking_mode == "TARGET": # Tracking a static target on the surface of the earth via GPS coordinates        
+            if self.guidance_mode == "TARGET": # Tracking a static target on the surface of the earth via GPS coordinates        
                 r_ECEF = true_ECI_2_ECEF @ r_CE_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
                 target_ECEF = self.ECEF_target - r_ECEF # calculate target vector in ECEF cartesian coordinates
                 target_ECEF = target_ECEF/np.linalg.norm(target_ECEF) # normalize to unit vector
                 self.target_tracking_quat(target_ECEF, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
-            elif self.tracking_mode == "NADIR": # Continually face +z nadir (+x as close to ram as possible)
+            elif self.guidance_mode == "NADIR": # Continually face +z nadir (+x as close to ram as possible)
                 nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
                 self.target_tracking_quat(nadir_vector, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
-            elif self.tracking_mode == "MAX_DRAG" or self.tracking_mode == "MIN_DRAG":
+            elif self.guidance_mode == "MAX_DRAG" or self.guidance_mode == "MIN_DRAG":
                 nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                self.ram_quaternion(self.tracking_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
+                self.ram_quaternion(self.guidance_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
             
             self.target_history.append(self.q_target)
             
@@ -266,8 +266,6 @@ class FlightSoftware(sysModel.SysModel):
                 bm = self.b_mat(B)
                 k = 1e-8
                 m_cmd = np.linalg.inv(bm.T @ bm + k*np.eye(3))@bm.T@tau_des
-                m_max = 1
-                m_cmd = np.clip(m_cmd, -m_max, m_max)
                 
                 self.command_MTB_torques(m_cmd, currentTimeNanos)
             elif self.control_mode == "ORBITS":
