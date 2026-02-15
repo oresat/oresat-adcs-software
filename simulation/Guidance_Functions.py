@@ -160,7 +160,11 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range, max_distance, r_sate
         if (np.linalg.norm(r_new-ECI_target) <= max_distance):
             overpass_time = dt # we are passing over within range at this time
             break
-        
+    else: # if overpass not found within range, function
+        print(f"\n\nERROR: overpass not found in specified time window of {time_range} hours!")
+        print(f"Check if inclination allows for overpass within {max_distance/1e3} kilometers\n")
+        return
+    
     lower_bound = overpass_time - large_time_delta # wind clock back by one time interval in order to scan in finer intervals
     upper_bound = lower_bound + large_time_delta # same as found overpass time. Coded for easier reading.
             

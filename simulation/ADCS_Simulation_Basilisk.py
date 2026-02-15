@@ -413,35 +413,36 @@ if __name__ == "__main__":
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "SC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    control_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
+    control_mode = "ORBITS" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
     # guidance_mode = None
-    guidance_mode = "MIN_DRAG" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
+    guidance_mode = "TARGET" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
     activate_on_overpass = True
     use_skyfield = True
     # KSAT coordinates
-    # target_lat = 78.231500
-    # target_lon = 15.411100
-    # target_height = 488 # [m]
+    target_lat = 78.231500
+    target_lon = 15.411100
+    target_height = 488 # [m]
     
     # ESI headquarters coordinates
-    target_lat = 39.608251
-    target_lon = -104.895788
-    target_height = 1716 # [m]
+    # target_lat = 39.608251
+    # target_lon = -104.895788
+    # target_height = 1716 # [m]
         
     if ("RW" in control_mode): # realistic RW sim setup
-        sim_time = 1000
+        sim_time = 100
         dynamics_update_time = .1
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
             exit()
     elif control_mode == "ORBITS":
-        sim_time = 12000
+        sim_time = 24000
         dynamics_update_time = 10
         fsw_update_time = 10
         use_filter = False
+        use_skyfield = False
         omega_init_rad = np.array([0.0, 0.0, 0.0]) # ensure no excessive spinning
     else: # realistic MTB sim setup
         sim_time = 30000

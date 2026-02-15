@@ -161,7 +161,7 @@ class FlightSoftware(sysModel.SysModel):
         '''
         
         if self.ticks == 1 and self.activate_on_overpass: # determine time to overpass and set control system activation time
-            time_range = 24 # check this range of flight time [hours]
+            time_range = 72 # check this range of flight time [hours]
             max_distance = 2000e3 # 2000 km from target [m]
             guid.time_to_overpass(self, currentTimeNanos, time_range, max_distance, r_CN_N, v_CN_N, self.ECEF_target)
         
