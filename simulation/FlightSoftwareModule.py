@@ -296,20 +296,16 @@ class FlightSoftware(sysModel.SysModel):
                 self.crashTheKernel = True
         
         else: # if controller should be off, simulate wheel shutdown by sending required torques to null wheelspeeds. This is only required in simulation, as wheel cogging will have the same affect uncommanded for the real satellite.
-            # # Zero RW torques
-            # self.torque_vals[:] = 0.0
-            # self.rwMotorTorquePayload.motorTorque = self.torque_vals
-            # self.rwMotorTorqueOutMsg.write(self.rwMotorTorquePayload, currentTimeNanos, self.moduleID)
-            
+            # Zero wheel torques    
             wheel_torque = [0]*4
             for i in range(4):
                 wheel_torque[i] = (-self.rwInertia * wheelSpeeds[i] / self.updateTime)/10 # divide by 100 to prevent hysteresis and uncontrolled flipping.
             self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds)
         
-            # # Zero MTB dipoles
-            # self.mag_torques[:] = 0.0
-            # self.magTorquePayload.mtbDipoleCmds = self.mag_torques
-            # self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
+            # Zero MTB dipoles
+            self.mag_torques[:] = 0.0
+            self.magTorquePayload.mtbDipoleCmds = self.mag_torques
+            self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
             
     def b_mat(self, B):
         bx, by, bz = B
