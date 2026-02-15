@@ -46,6 +46,9 @@ class FlightSoftware(sysModel.SysModel):
         self.error_filter = [] # used for tracking and graphing filter error (estimated error based on filter state estimates)
         self.target_history = [] # only used if self.guidance_mode is not None
         self.time_zero = 0 # initialized in sim main, used to keep track of GPS time
+        self.omega_earth = 7.2921150e-5 # sidereal rotation rate of Earth for propogation calculations. Approximation suffices for the calculations we're doing
+        self.r_earth = 4.07e7 # approximate earth radius for line-of-sight (LOS) calculations
+        self.activate_on_overpass = config["activate_on_overpass"] # determines whether overpass time should be calculated, and an activation time for control systems set
         
         self.q_target = np.array([0,0,0,1]) # attribute initialization, set to real value in sim main
         omega_target_rpm = np.array([0.0, 0.0, 0.0]) # [RPM]
@@ -60,7 +63,7 @@ class FlightSoftware(sysModel.SysModel):
         self.ECEF_target = self.GPS_to_ECEF(target_lat, target_lon, target_height, a, e2) # convert GPS coordinates to ECEF coordinates
         
         self.use_skyfield = config["use_skyfield"]
-        if self.use_skyfield:
+        if self.use_skyfield or self.activate_on_overpass:
             self.skyfield_timescale = load.timescale()
             # self.skyfield_ephemeris = load('de440s.bsp') # UPDATE THIS TO POINT TO ACTUAL FILE || NOT TOO SENSITIVE TO STALE FILES
             self.skyfield_EOP = itrs
@@ -146,6 +149,12 @@ class FlightSoftware(sysModel.SysModel):
             true_ECI_2_ECEF = np.asarray(earthState.J20002Pfix) # sim-internal transform matrix from ECI to ECEF frame
             r_EN_N = np.asarray(earthState.PositionVector) # Earth position vector from sun (inertial frame) 
             v_EN_N = np.asarray(earthState.VelocityVector) # Earth velocity vector from sun (inertial frame)
+        
+        if self.ticks == 1 and self.activate_on_overpass: # determine time to overpass and set control system activation time
+            # print(self.time_zero)
+            time_range = 24 # check this range of flight time [hours]
+            max_distance = 2000e3 # 2000 km from target [m]
+            self.time_to_overpass(currentTimeNanos, time_range, max_distance, r_CN_N, v_CN_N, self.ECEF_target)
         
         '''
         The following section is for attitude estimation if filtering is turned on
@@ -325,7 +334,6 @@ class FlightSoftware(sysModel.SysModel):
         return -self.K_MAG @ x # invert sign for control
     
     def GPS_to_ECEF(self, lat, lon, height, a, e2):
-        
         sin_lat = np.sin(lat * macros.D2R)
         cos_lat = np.cos(lat * macros.D2R)
         
@@ -394,6 +402,118 @@ class FlightSoftware(sysModel.SysModel):
         target_quat = quat.quat_from_dcm_scalar_last(C_BN) # Convert DCM to quaternion
         self.update_target(target_quat) # update FSW target
         
-    def set_time_zero_from_iso_utc(self, iso_utc: str):
-        s = iso_utc.replace("Z", "+00:00") # Accepts formats "2026-02-10T00:00:00Z" or "2026-02-10T00:00:00+00:00"
-        self.time_zero = datetime.fromisoformat(s).astimezone(timezone.utc)
+    def set_time_zero_from_iso_utc(self, iso_utc: str): # used to initialize ephemeris start time for GPS timestamp emulation. Only used in simulation software, not flight software.
+        # s = iso_utc.replace("Z", "+00:00") # Accepts formats "2026-02-10T00:00:00Z" or "2026-02-10T00:00:00+00:00"
+        self.time_zero = datetime.fromisoformat(iso_utc).astimezone(timezone.utc)
+        
+    def psi_c2_c3(self, Chi, alpha):
+        psi = alpha * Chi**2
+        if abs(psi) < 1e-8: # Use series near 0 for numerical stability
+            c2 = 0.5 - psi/24.0 + psi**2/720.0 - psi**3/40320.0
+            c3 = 1.0/6.0 - psi/120.0 + psi**2/5040.0 - psi**3/362880.0
+        elif psi > 0:
+            s = np.sqrt(psi)
+            c2 = (1.0 - np.cos(s)) / psi
+            c3 = (s - np.sin(s)) / (s**3)
+        else:
+            s = np.sqrt(-psi)
+            c2 = (np.cosh(s) - 1.0) / (-psi)
+            c3 = (np.sinh(s) - s) / (s**3)
+            
+        return psi, c2, c3
+    
+    def kepler_values(self, r0_vec, v0_vec, dt):
+        '''
+        Kepler propagation function as defined by Mathworks:
+        https://www.mathworks.com/help/aerotbx/ug/orbit-pop-algorithms.html
+        '''
+        
+        mu_earth = 3.986e14
+        sqrt_mu = np.sqrt(mu_earth)
+        
+        r0 = np.linalg.norm(r0_vec)
+        v0 = np.linalg.norm(v0_vec)
+        vr0 = np.dot(r0_vec, v0_vec) / r0  # Radial velocity component v_r0 = (r0·v0)/|r0|
+        
+        epsilon = v0**2/2-mu_earth/r0 # determine orbital energy
+        alpha = -2*epsilon/mu_earth # alpha should always be > 0 for an elliptical orbit
+        Chi = sqrt_mu*dt*alpha # initial guess for first iteration
+        psi, c2, c3 = self.psi_c2_c3(Chi, alpha)
+        
+        while(True):
+            Chi_new = Chi + (sqrt_mu * dt - Chi**3*c3 - r0*vr0*Chi**2*c2/sqrt_mu-r0*Chi*(1-psi*c3)) / (Chi**2*c2 + r0*vr0*Chi*(1-psi*c3)/sqrt_mu + r0*(1-psi*c2))
+            psi, c2, c3 = self.psi_c2_c3(Chi_new, alpha)
+            
+            if abs(Chi_new-Chi) < 1e-8:
+                Chi = Chi_new
+                break
+            Chi = Chi_new # update Chi and iterate again
+            
+        # calculate universal variables
+        f = 1-Chi**2/r0*c2
+        g = dt-Chi**3/sqrt_mu*c3
+        
+        r = f * np.asarray(r0_vec) + g * np.asarray(v0_vec)
+        
+        return r
+    
+    def R3(self, theta):
+        c, s = np.cos(theta), np.sin(theta)
+        return np.array([[c, -s, 0.0],
+                         [s,  c, 0.0],
+                         [0.0, 0.0, 1.0]])
+        
+    def time_to_overpass(self, currentTimeNanos, time_range, max_distance, r_satellite, v_satellite, target):
+        '''
+        A function to determine how long the spacecraft can enter low-power mode
+        before it will be within range of a set of GPS coordinates for fine-pointing
+        of antenna and transmission
+        
+        Parameters
+        ----------
+        time_range : time in hours up to which overpass possibility should be checked [hours]
+        max_distance : maximum distance from target in meters [m]
+        
+        '''
+        currentTime = currentTimeNanos*1e-9
+        large_time_delta = 60*5 # for coarse overpass determination
+        small_time_delta = 20 # for fine overpass determination
+        
+        # get current Earth rotation angle relative to ECI
+        time = self.skyfield_timescale.utc(self.time_zero)
+        # dt = self.time_zero + timedelta(seconds=currentTimeNanos * 1e-9)
+        
+        # itrs.rotation_at(t) returns the rotation matrix that maps ICRF/ECI -> ITRS/ECEF.
+        R_ecef_from_eci = itrs.rotation_at(time)
+     
+        # We want ECEF -> ECI, so invert. Rotation matrices are orthonormal, so inverse = transpose.
+        R_eci_from_ecef = R_ecef_from_eci.T
+     
+        # If you want a single "yaw about z" angle (only valid if you approximate the transform as pure R3):
+        # For an ideal R3(theta): R = [[c,-s,0],[s,c,0],[0,0,1]]
+        theta0 = np.arctan2(R_eci_from_ecef[1, 0], R_eci_from_ecef[0, 0])  # radians in [-pi, pi]
+        
+        for dt in range(0, time_range*3600, large_time_delta): # check all future positions in propagation intervals
+            r_new = self.kepler_values(r_satellite, v_satellite, dt) # get Kepler values
+            
+            theta_new = theta0 + dt*self.omega_earth
+            ECI_target = self.R3(theta_new) @ target
+            if (np.linalg.norm(r_new-ECI_target) <= max_distance):
+                overpass_time = dt # we are passing over within range at this time
+                break
+            
+        lower_bound = overpass_time - large_time_delta # wind clock back by one time interval in order to scan in finer intervals
+        upper_bound = lower_bound + large_time_delta # same as found overpass time. Coded for easier reading.
+                
+        for dt in range(lower_bound, upper_bound, small_time_delta): # check all future positions in finer propagation intervals
+            r_new = self.kepler_values(r_satellite, v_satellite, dt) # get Kepler values
+            
+            theta_new = theta0 + dt*self.omega_earth
+            ECI_target = self.R3(theta_new) @ target
+            if (np.linalg.norm(r_new-ECI_target) <= max_distance):
+                delay_time = dt-100 # subtract 100 seconds to allow spacecraft to reorient and stabilize in time for overpass window
+                break
+        self.controllerStartTime = delay_time # give sufficient time for satellite to reorient
+        print(f"\nOverpass predicted in {delay_time}\n")
+    
+        # SIMULATE WHEEL SHUTDOWN        

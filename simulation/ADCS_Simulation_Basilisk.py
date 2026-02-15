@@ -402,9 +402,9 @@ if __name__ == "__main__":
     init_rot_axis = [1, 0, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     
-    # omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin velocties [RPM]
-    omega_init_rpm = np.array([0.5, 0.2, 0.1])
-    # omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin velocties [RPM]
+    omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin rates [RPM]
+    # omega_init_rpm = np.array([0.5, 0.2, 0.1])
+    # omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin rates [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
     # command rotations relative to initial orientation
@@ -413,11 +413,12 @@ if __name__ == "__main__":
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "SC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    control_mode = "MTB_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
+    control_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
-    guidance_mode = None
-    # guidance_mode = "NADIR" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
+    # guidance_mode = None
+    guidance_mode = "Target" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
+    activate_on_overpass = True
     use_skyfield = True
     # KSAT coordinates
     # target_lat = 78.231500
@@ -430,7 +431,7 @@ if __name__ == "__main__":
     target_height = 1716 # [m]
         
     if ("RW" in control_mode): # realistic RW sim setup
-        sim_time = 200
+        sim_time = 800
         dynamics_update_time = .1
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
@@ -459,6 +460,7 @@ if __name__ == "__main__":
               "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states,
               "save_pdf":save_pdf, "save_png":save_png, "plot_basepath":plot_basepath, "use_filter":use_filter, "sigma_gyro":sigma_gyro, "sigma_bias":sigma_bias, "P_b0":P_b0,
               "sigma_ST":sigma_ST, "P_ST_0":P_ST_0, "ST_update_rate":ST_update_rate, "error_time_check":error_time_check, "guidance_mode":guidance_mode, 
-              "target_lat":target_lat, "target_lon":target_lon, "target_height":target_height, "sat_3D_file":sat_3D_file, "viz_scaling":viz_scaling, "use_skyfield":use_skyfield}
+              "target_lat":target_lat, "target_lon":target_lon, "target_height":target_height, "sat_3D_file":sat_3D_file, "viz_scaling":viz_scaling, "use_skyfield":use_skyfield,
+              "activate_on_overpass":activate_on_overpass}
     
     sim_main(config)
