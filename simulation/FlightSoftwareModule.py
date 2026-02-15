@@ -1,14 +1,15 @@
 from Basilisk.architecture import sysModel, messaging
 from Basilisk.utilities import macros
 import numpy as np
-from ADCS_Discrete_State_Space_Calculator import get_RW_gain_matrix
-import Quaternions as quat
-# import Guidance_Functions as guidance
-from Kalman_Filter import Multiplicative_Extended_Kalman_Filter
 from skyfield.api import load
 from skyfield.framelib import itrs
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta, datetime, timezone
 from sys import exit
+
+from ADCS_Discrete_State_Space_Calculator import get_RW_gain_matrix
+from Kalman_Filter import Multiplicative_Extended_Kalman_Filter
+import Quaternions as quat
+import Guidance_Functions as guid
 
 class FlightSoftware(sysModel.SysModel):
     def __init__(self, config):
@@ -60,7 +61,7 @@ class FlightSoftware(sysModel.SysModel):
         target_lat = config["target_lat"]
         target_lon = config["target_lon"]
         target_height = config["target_height"]
-        self.ECEF_target = self.GPS_to_ECEF(target_lat, target_lon, target_height, a, e2) # convert GPS coordinates to ECEF coordinates
+        self.ECEF_target = guid.GPS_to_ECEF(target_lat, target_lon, target_height, a, e2) # convert GPS coordinates to ECEF coordinates
         
         self.use_skyfield = config["use_skyfield"]
         if self.use_skyfield or self.activate_on_overpass:
@@ -73,6 +74,7 @@ class FlightSoftware(sysModel.SysModel):
         self.bangbang_rate = 0.07 # max rotation rate of bang bang controller (0.07 rad/s ~ 4 deg/s)
         self.thermal_spin_rpm = 1.0 # thermal spin rate about the z-axis (body frame)
         self.controllerStartTime = 0 # time at which controller should activate [seconds]
+        self.controllerEndTime = None # time at which controller should turn off. Used for deactivation after overpass. When set to None controller will not be deactivated
         
         max_input = 0.00003 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error = 0.01
@@ -111,11 +113,15 @@ class FlightSoftware(sysModel.SysModel):
         LQR_max_rate_mag = 0.00003
         self.K_MAG = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error_mag, LQR_max_rate_mag, max_input_mag)
         self.mag_torque_integral = 0
+    
+    def set_time_zero_from_iso_utc(self, iso_utc: str): # used to initialize ephemeris start time for GPS timestamp emulation. Only used in simulation software, not flight software.
+        s = iso_utc.replace("Z", "+00:00") # Accepts formats "2026-02-10T00:00:00Z" or "2026-02-10T00:00:00+00:00"
+        self.time_zero = datetime.fromisoformat(s).astimezone(timezone.utc)
         
     def Reset(self, currentTimeNanos): # required by Basilisk even if Reset does nothing
         pass
         # print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.1e-9:.2f} s") # commented out to remove unnecessary printing every simulation
-        
+    
     def UpdateState(self, currentTimeNanos):
         if self.crashTheKernel == True: # This method allows error message printing  *jank intensifies*
             exit()
@@ -150,10 +156,14 @@ class FlightSoftware(sysModel.SysModel):
             r_EN_N = np.asarray(earthState.PositionVector) # Earth position vector from sun (inertial frame) 
             v_EN_N = np.asarray(earthState.VelocityVector) # Earth velocity vector from sun (inertial frame)
         
+        '''
+        Overpass window calculations
+        '''
+        
         if self.ticks == 1 and self.activate_on_overpass: # determine time to overpass and set control system activation time
             time_range = 24 # check this range of flight time [hours]
             max_distance = 2000e3 # 2000 km from target [m]
-            self.time_to_overpass(currentTimeNanos, time_range, max_distance, r_CN_N, v_CN_N, self.ECEF_target)
+            guid.time_to_overpass(self, currentTimeNanos, time_range, max_distance, r_CN_N, v_CN_N, self.ECEF_target)
         
         '''
         The following section is for attitude estimation if filtering is turned on
@@ -200,13 +210,13 @@ class FlightSoftware(sysModel.SysModel):
                 r_ECEF = true_ECI_2_ECEF @ r_CE_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
                 target_ECEF = self.ECEF_target - r_ECEF # calculate target vector in ECEF cartesian coordinates
                 target_ECEF = target_ECEF/np.linalg.norm(target_ECEF) # normalize to unit vector
-                self.target_tracking_quat(target_ECEF, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
+                guid.target_tracking_quat(self, target_ECEF, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
             elif self.guidance_mode == "NADIR": # Continually face +z nadir (+x as close to ram as possible)
                 nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                self.target_tracking_quat(nadir_vector, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
+                guid.target_tracking_quat(self, nadir_vector, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
             elif self.guidance_mode == "MAX_DRAG" or self.guidance_mode == "MIN_DRAG":
                 nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                self.ram_quaternion(self.guidance_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
+                guid.ram_quaternion(self, self.guidance_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
             else:
                 print(f"Unknown guidance mode: {self.guidance_mode}")
                 
@@ -243,7 +253,8 @@ class FlightSoftware(sysModel.SysModel):
         self.error_filter.append(q_error) # save estimated (filtered) attitude error for plotting after conclusion of sim execution
         
         ######################### CONTROL LOGIC ###############################
-        if (currentTimeNanos * 1e-9 >= self.controllerStartTime): # turn controller on at specified time
+        currentTime = currentTimeNanos * 1e-9
+        if (currentTime >= self.controllerStartTime and (self.controllerEndTime is None or currentTime < self.controllerEndTime)): # turn controller on at specified time
             if self.control_mode == "RW_POINTING":
                 desired_torque = self.RW_controller(q_error, omega) # compute desired 3-axis torque from controller (standard LQR controller)
                 desired_torque += tau_ff # feedforward torque, only non-zero for tracking mode
@@ -283,7 +294,23 @@ class FlightSoftware(sysModel.SysModel):
             else:
                 print("ERROR: Unknown mission mode specified", flush = True)
                 self.crashTheKernel = True
-     
+        
+        else: # if controller should be off, simulate wheel shutdown by sending required torques to null wheelspeeds. This is only required in simulation, as wheel cogging will have the same affect uncommanded for the real satellite.
+            # # Zero RW torques
+            # self.torque_vals[:] = 0.0
+            # self.rwMotorTorquePayload.motorTorque = self.torque_vals
+            # self.rwMotorTorqueOutMsg.write(self.rwMotorTorquePayload, currentTimeNanos, self.moduleID)
+            
+            wheel_torque = [0]*4
+            for i in range(4):
+                wheel_torque[i] = (-self.rwInertia * wheelSpeeds[i] / self.updateTime)/10 # divide by 100 to prevent hysteresis and uncontrolled flipping.
+            self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds)
+        
+            # # Zero MTB dipoles
+            # self.mag_torques[:] = 0.0
+            # self.magTorquePayload.mtbDipoleCmds = self.mag_torques
+            # self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
+            
     def b_mat(self, B):
         bx, by, bz = B
         return np.array([
@@ -291,7 +318,6 @@ class FlightSoftware(sysModel.SysModel):
             [-bz,   0,  bx],
             [by, -bx,   0]
         ])
-    
     
     def update_target(self, target_quat):
         if self.pointing == "ST":
@@ -334,187 +360,3 @@ class FlightSoftware(sysModel.SysModel):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector
         return -self.K_MAG @ x # invert sign for control
     
-    def GPS_to_ECEF(self, lat, lon, height, a, e2):
-        sin_lat = np.sin(lat * macros.D2R)
-        cos_lat = np.cos(lat * macros.D2R)
-        
-        N = a/np.sqrt(1-e2*sin_lat**2) # lattitude must be signed for WGS-84
-        x = (N+height)*cos_lat*np.cos(lon * macros.D2R)
-        y = (N+height)*cos_lat*np.sin(lon * macros.D2R)
-        z = (N*(1-e2)+height)*sin_lat
-
-        return np.asarray([x, y, z])
-
-    def target_tracking_quat(self, target_vector, v_ECEF, ECI_2_ECEF):
-        '''
-        Creates an orientation quaternion forming an orientation based on a target
-        vector for the z-facing, and orients the +x facing as close as possible to
-        the velocity vector
-        
-        Used for target tracking and nadir pointing
-        '''
-        
-        R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI
-        v_ECI = R_NE @ (v_ECEF/np.linalg.norm(v_ECEF)) # norm velocity vector and convert to ECI
-            
-        zvec = R_NE @ (target_vector/np.linalg.norm(target_vector)) # norm target vector and convert to ECI
-        
-        xvec = v_ECI - np.dot(v_ECI, zvec) * zvec # remove component parallel to nadir vector from velocity vector to determine "ram-facing-like" vector
-        xvec = xvec/np.linalg.norm(xvec) # norm
-
-        yvec = np.cross(zvec, xvec)
-        yvec = yvec/np.linalg.norm(yvec) # norm
-        
-        # xvec = np.cross(yvec, zvec) # Re-orthogonalize zB to avoid numerical drift
-        # xvec = xvec/np.linalg.norm(xvec) # norm
-        
-        C_BN = np.vstack((xvec, yvec, zvec)) # Create DCM for body orientation in ECI coordinates
-        
-        target_quat = quat.quat_from_dcm_scalar_last(C_BN) # Convert DCM to quaternion
-        self.update_target(target_quat) # update FSW target
-        
-    def ram_quaternion(self, drag_orientation, v_ECEF, nadir_vec, ECI_2_ECEF):
-        '''
-        Creates an orientation quaternion forming an orientation based on
-        whether maximum or minimum drag is desired. The secondary axis is defined
-        as the nadir vector, or as close as possible to it
-        '''
-        
-        R_NE = ECI_2_ECEF.T
-        drag_facing = R_NE @ (v_ECEF/np.linalg.norm(v_ECEF)) # norm velocity vector and convert to ECI
-        
-        nadir_ECI = R_NE @ nadir_vec
-        nadir_facing = nadir_ECI - np.dot(nadir_ECI, drag_facing) * drag_facing # remove component parallel to velocity vector from nadir vector to determine "downwards-pointing" vector
-        nadir_facing = nadir_facing/np.linalg.norm(nadir_facing) # norm 
-        
-        if drag_orientation == "MAX_DRAG":
-            yvec = np.cross(nadir_facing, drag_facing)
-            yvec = yvec/np.linalg.norm(yvec) # norm
-            
-            C_BN = np.vstack((drag_facing, yvec, nadir_facing)) # Create DCM for body orientation in ECI coordinates
-            
-        elif drag_orientation == "MIN_DRAG":
-            nadir_facing = -nadir_facing # flip vector such that in min_drag mode, the satellite's solar panels (rather than the GPS antenna) are pointing anti-nadir
-            yvec = np.cross(drag_facing, nadir_facing)
-            yvec = yvec/np.linalg.norm(yvec) # norm
-            
-            C_BN = np.vstack((nadir_facing, yvec, drag_facing)) # Create DCM for body orientation in ECI coordinates
-        
-        target_quat = quat.quat_from_dcm_scalar_last(C_BN) # Convert DCM to quaternion
-        self.update_target(target_quat) # update FSW target
-        
-    def set_time_zero_from_iso_utc(self, iso_utc: str): # used to initialize ephemeris start time for GPS timestamp emulation. Only used in simulation software, not flight software.
-        s = iso_utc.replace("Z", "+00:00") # Accepts formats "2026-02-10T00:00:00Z" or "2026-02-10T00:00:00+00:00"
-        self.time_zero = datetime.fromisoformat(s).astimezone(timezone.utc)
-        
-    def psi_c2_c3(self, Chi, alpha):
-        psi = alpha * Chi**2
-        if abs(psi) < 1e-8: # Use series near 0 for numerical stability
-            c2 = 0.5 - psi/24.0 + psi**2/720.0 - psi**3/40320.0
-            c3 = 1.0/6.0 - psi/120.0 + psi**2/5040.0 - psi**3/362880.0
-        elif psi > 0:
-            s = np.sqrt(psi)
-            c2 = (1.0 - np.cos(s)) / psi
-            c3 = (s - np.sin(s)) / (s**3)
-        else:
-            s = np.sqrt(-psi)
-            c2 = (np.cosh(s) - 1.0) / (-psi)
-            c3 = (np.sinh(s) - s) / (s**3)
-            
-        return psi, c2, c3
-    
-    def kepler_values(self, r0_vec, v0_vec, dt):
-        '''
-        Kepler propagation function as defined by Mathworks:
-        https://www.mathworks.com/help/aerotbx/ug/orbit-pop-algorithms.html
-        '''
-        
-        mu_earth = 3.986e14
-        sqrt_mu = np.sqrt(mu_earth)
-        
-        r0 = np.linalg.norm(r0_vec)
-        v0 = np.linalg.norm(v0_vec)
-        vr0 = np.dot(r0_vec, v0_vec) / r0  # Radial velocity component v_r0 = (r0·v0)/|r0|
-        
-        epsilon = v0**2/2-mu_earth/r0 # determine orbital energy
-        alpha = -2*epsilon/mu_earth # alpha should always be > 0 for an elliptical orbit
-        Chi = sqrt_mu*dt*alpha # initial guess for first iteration
-        psi, c2, c3 = self.psi_c2_c3(Chi, alpha)
-        
-        while(True):
-            Chi_new = Chi + (sqrt_mu * dt - Chi**3*c3 - r0*vr0*Chi**2*c2/sqrt_mu-r0*Chi*(1-psi*c3)) / (Chi**2*c2 + r0*vr0*Chi*(1-psi*c3)/sqrt_mu + r0*(1-psi*c2))
-            psi, c2, c3 = self.psi_c2_c3(Chi_new, alpha)
-            
-            if abs(Chi_new-Chi) < 1e-8:
-                Chi = Chi_new
-                break
-            Chi = Chi_new # update Chi and iterate again
-            
-        # calculate universal variables
-        f = 1-Chi**2/r0*c2
-        g = dt-Chi**3/sqrt_mu*c3
-        
-        r = f * np.asarray(r0_vec) + g * np.asarray(v0_vec)
-        
-        return r
-    
-    def R3(self, theta):
-        c, s = np.cos(theta), np.sin(theta)
-        return np.array([[c, -s, 0.0],
-                         [s,  c, 0.0],
-                         [0.0, 0.0, 1.0]])
-        
-    def time_to_overpass(self, currentTimeNanos, time_range, max_distance, r_satellite, v_satellite, target):
-        '''
-        A function to determine how long the spacecraft can enter low-power mode
-        before it will be within range of a set of GPS coordinates for fine-pointing
-        of antenna and transmission
-        
-        Parameters
-        ----------
-        time_range : time in hours up to which overpass possibility should be checked [hours]
-        max_distance : maximum distance from target in meters [m]
-        
-        '''
-        currentTime = currentTimeNanos*1e-9
-        large_time_delta = 60*5 # for coarse overpass determination
-        small_time_delta = 20 # for fine overpass determination
-        
-        # get current Earth rotation angle relative to ECI
-        time = self.skyfield_timescale.utc(self.time_zero)
-        # dt = self.time_zero + timedelta(seconds=currentTimeNanos * 1e-9)
-        
-        # itrs.rotation_at(t) returns the rotation matrix that maps ICRF/ECI -> ITRS/ECEF.
-        R_ecef_from_eci = itrs.rotation_at(time)
-     
-        # We want ECEF -> ECI, so invert. Rotation matrices are orthonormal, so inverse = transpose.
-        R_eci_from_ecef = R_ecef_from_eci.T
-     
-        # If you want a single "yaw about z" angle (only valid if you approximate the transform as pure R3):
-        # For an ideal R3(theta): R = [[c,-s,0],[s,c,0],[0,0,1]]
-        theta0 = np.arctan2(R_eci_from_ecef[1, 0], R_eci_from_ecef[0, 0])  # radians in [-pi, pi]
-        
-        for dt in range(0, time_range*3600, large_time_delta): # check all future positions in propagation intervals
-            r_new = self.kepler_values(r_satellite, v_satellite, dt) # get Kepler values
-            
-            theta_new = theta0 + dt*self.omega_earth
-            ECI_target = self.R3(theta_new) @ target
-            if (np.linalg.norm(r_new-ECI_target) <= max_distance):
-                overpass_time = dt # we are passing over within range at this time
-                break
-            
-        lower_bound = overpass_time - large_time_delta # wind clock back by one time interval in order to scan in finer intervals
-        upper_bound = lower_bound + large_time_delta # same as found overpass time. Coded for easier reading.
-                
-        for dt in range(lower_bound, upper_bound, small_time_delta): # check all future positions in finer propagation intervals
-            r_new = self.kepler_values(r_satellite, v_satellite, dt) # get Kepler values
-            
-            theta_new = theta0 + dt*self.omega_earth
-            ECI_target = self.R3(theta_new) @ target
-            if (np.linalg.norm(r_new-ECI_target) <= max_distance):
-                delay_time = dt-100 # subtract 100 seconds to allow spacecraft to reorient and stabilize in time for overpass window
-                break
-        self.controllerStartTime = delay_time # give sufficient time for satellite to reorient
-        print(f"\nOverpass predicted to occur in {delay_time} seconds\n")
-    
-        # SIMULATE WHEEL SHUTDOWN        
