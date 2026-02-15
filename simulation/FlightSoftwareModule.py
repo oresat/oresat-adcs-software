@@ -151,7 +151,6 @@ class FlightSoftware(sysModel.SysModel):
             v_EN_N = np.asarray(earthState.VelocityVector) # Earth velocity vector from sun (inertial frame)
         
         if self.ticks == 1 and self.activate_on_overpass: # determine time to overpass and set control system activation time
-            # print(self.time_zero)
             time_range = 24 # check this range of flight time [hours]
             max_distance = 2000e3 # 2000 km from target [m]
             self.time_to_overpass(currentTimeNanos, time_range, max_distance, r_CN_N, v_CN_N, self.ECEF_target)
@@ -180,7 +179,7 @@ class FlightSoftware(sysModel.SysModel):
         portion of the code, and just defines the target which is fed into the 
         control algorithms
         '''
-        
+
         if self.guidance_mode is not None:
             q_last = self.q_target # save for tracking rate calculations
             r_CE_N = r_CN_N - r_EN_N # Earth-centered inertial spacecraft position (converted from Sun-centered) allows for emulation of ECEF-vector-converted-GPS coordinates 
@@ -196,7 +195,7 @@ class FlightSoftware(sysModel.SysModel):
                     ECI_2_ECEF = self.last_skyfield_frame # if skyfield didn't update this loop, use saved rotation matrix (zero order hold)
             else:
                 ECI_2_ECEF = true_ECI_2_ECEF # if not using skyfield, use sim-internal conversion matrix
-                
+            
             if self.guidance_mode == "TARGET": # Tracking a static target on the surface of the earth via GPS coordinates        
                 r_ECEF = true_ECI_2_ECEF @ r_CE_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
                 target_ECEF = self.ECEF_target - r_ECEF # calculate target vector in ECEF cartesian coordinates
@@ -208,7 +207,9 @@ class FlightSoftware(sysModel.SysModel):
             elif self.guidance_mode == "MAX_DRAG" or self.guidance_mode == "MIN_DRAG":
                 nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
                 self.ram_quaternion(self.guidance_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
-            
+            else:
+                print(f"Unknown guidance mode: {self.guidance_mode}")
+                
             self.target_history.append(self.q_target)
             
             '''
@@ -403,8 +404,8 @@ class FlightSoftware(sysModel.SysModel):
         self.update_target(target_quat) # update FSW target
         
     def set_time_zero_from_iso_utc(self, iso_utc: str): # used to initialize ephemeris start time for GPS timestamp emulation. Only used in simulation software, not flight software.
-        # s = iso_utc.replace("Z", "+00:00") # Accepts formats "2026-02-10T00:00:00Z" or "2026-02-10T00:00:00+00:00"
-        self.time_zero = datetime.fromisoformat(iso_utc).astimezone(timezone.utc)
+        s = iso_utc.replace("Z", "+00:00") # Accepts formats "2026-02-10T00:00:00Z" or "2026-02-10T00:00:00+00:00"
+        self.time_zero = datetime.fromisoformat(s).astimezone(timezone.utc)
         
     def psi_c2_c3(self, Chi, alpha):
         psi = alpha * Chi**2
@@ -514,6 +515,6 @@ class FlightSoftware(sysModel.SysModel):
                 delay_time = dt-100 # subtract 100 seconds to allow spacecraft to reorient and stabilize in time for overpass window
                 break
         self.controllerStartTime = delay_time # give sufficient time for satellite to reorient
-        print(f"\nOverpass predicted in {delay_time}\n")
+        print(f"\nOverpass predicted to occur in {delay_time} seconds\n")
     
         # SIMULATE WHEEL SHUTDOWN        
