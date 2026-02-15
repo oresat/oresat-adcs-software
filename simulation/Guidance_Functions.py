@@ -2,7 +2,6 @@ import numpy as np
 import Quaternions as quat
 from Basilisk.utilities import macros
 from skyfield.framelib import itrs
-from datetime import datetime, timezone
 
 def GPS_to_ECEF(lat, lon, height, a, e2):
     sin_lat = np.sin(lat * macros.D2R)
