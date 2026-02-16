@@ -6,7 +6,7 @@ from skyfield.framelib import itrs
 from datetime import timedelta, datetime, timezone
 from sys import exit
 
-from ADCS_Discrete_State_Space_Calculator import get_RW_gain_matrix
+from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
 from Kalman_Filter import Multiplicative_Extended_Kalman_Filter
 import Quaternions as quat
 import Guidance_Functions as guid
@@ -79,7 +79,7 @@ class FlightSoftware(sysModel.SysModel):
         max_input = 0.00003 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error = 0.01
         LQR_max_rate = 0.002
-        self.K_RW = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
+        self.K_RW = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
         
         self.control_mode = config["control_mode"]
         self.slewMode = "slew" # only used for sliding mode bang-bang controller. Can be "slew" for large-angle rotations or "precise" for fine-pointing operations
@@ -111,7 +111,7 @@ class FlightSoftware(sysModel.SysModel):
         max_input_mag = 0.3 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error_mag = 0.05
         LQR_max_rate_mag = 0.00003
-        self.K_MAG = get_RW_gain_matrix(self.satInertia, self.updateTime, LQR_max_error_mag, LQR_max_rate_mag, max_input_mag)
+        self.K_MAG = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error_mag, LQR_max_rate_mag, max_input_mag)
         self.mag_torque_integral = 0
     
     def set_time_zero_from_iso_utc(self, iso_utc: str): # used to initialize ephemeris start time for GPS timestamp emulation. Only used in simulation software, not flight software.
@@ -162,7 +162,7 @@ class FlightSoftware(sysModel.SysModel):
         
         if self.ticks == 1 and self.activate_on_overpass: # determine time to overpass and set control system activation time
             time_range = 72 # check this range of flight time [hours]
-            max_distance = 2000e3 # 2000 km from target [m]
+            max_distance = 2800e3 # 2800 km from target [m]
             guid.time_to_overpass(self, currentTimeNanos, time_range, max_distance, r_CN_N, v_CN_N, self.ECEF_target)
         
         '''

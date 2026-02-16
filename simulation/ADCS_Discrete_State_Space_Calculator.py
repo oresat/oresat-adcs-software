@@ -42,7 +42,7 @@ def add_integrators(A, B, C):
 
     return A_aug, B_aug
 
-def get_RW_gain_matrix(J, timestep, max_error, max_rate, max_input, use_integrator = False):
+def get_gain_matrix(J, timestep, max_error, max_rate, max_input, use_integrator = False):
     #----------------- LQR matrices--------------------------------------------
     max_error = max_error # q_vec error
     max_velocity = max_rate # ω_sat

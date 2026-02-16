@@ -129,7 +129,7 @@ def R3(theta): # used for Earth rotation calculations. Not a perfect model for E
                      [s,  c, 0.0],
                      [0.0, 0.0, 1.0]])
     
-def time_to_overpass(fsw_obj, currentTimeNanos, time_range, max_distance, r_satellite, v_satellite, target):
+def time_to_overpass(fsw_obj, currentTimeNanos, time_range, max_distance, r_satellite, v_satellite, target, time_offset=0):
     '''
     A function to determine how long the spacecraft can enter low-power mode
     before it will be within range of a set of GPS coordinates for fine-pointing
@@ -194,5 +194,5 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range, max_distance, r_sate
     
     fsw_obj.controllerEndTime = window_exit_delay
     print(f"Overpass window exit predicted to occur in {window_exit_delay} seconds\n")
-
-    # SIMULATE WHEEL SHUTDOWN
+    
+    # call function recursively, add offset to be the window exit_delay+1000 just to be sure
