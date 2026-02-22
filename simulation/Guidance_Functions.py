@@ -128,8 +128,15 @@ def R3(theta): # used for Earth rotation calculations. Not a perfect model for E
     return np.array([[c, -s, 0.0],
                      [s,  c, 0.0],
                      [0.0, 0.0, 1.0]])
-    
-def time_to_overpass(fsw_obj, currentTimeNanos, time_range, max_distance, r_satellite, v_satellite, target, time_offset=0):
+
+# def distance_to_target_eci(dt, r_satellite, v_satellite, theta0, omega_earth, target_ECEF):
+#     r_new = kepler_values(r_satellite, v_satellite, dt) # get Kepler values
+#     theta_new = theta0 + dt*omega_earth # calculate Earth's rotation after dt
+#     ECI_target = R3(theta_new) @ target_ECEF # rotate target position into ECI based on new theta
+#     return np.linalg.norm(r_new-ECI_target)
+
+
+def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, r_satellite, v_satellite, target_ECEF):
     '''
     A function to determine how long the spacecraft can enter low-power mode
     before it will be within range of a set of GPS coordinates for fine-pointing
@@ -141,9 +148,15 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range, max_distance, r_sate
     max_distance : maximum distance from target in meters [m]
     
     '''
+    omega_earth = fsw_obj.omega_earth
     
-    large_time_delta = 60*5 # for coarse overpass determination (five minutes)
-    small_time_delta = 5 # for fine overpass determination
+    large_dt = 60*5 # for coarse overpass determination (five minutes)
+    small_dt = 5 # for fine overpass determination
+    maximum_window = 3600 # large value to ensure exit boundary of overpass window is found
+    exit_check_increment = 5 # search for window exit in increments
+    lead_time = 100 # lead time before entering window to engage control system. Allows satellite to reorient in time.
+    min_window_time = 300 # minimum overpass time
+    skip_after_window = 2000 # time to skip after window with insufficient overpass time before searching again
     
     time = fsw_obj.skyfield_timescale.utc(fsw_obj.time_zero) 
     
@@ -152,47 +165,53 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range, max_distance, r_sate
     R_eci_from_ecef = R_ecef_from_eci.T # get current Earth rotation angle relative to ECI
     theta0 = np.arctan2(R_eci_from_ecef[1, 0], R_eci_from_ecef[0, 0]) # Get Earth's rotation angle in ECI at current time. Radians in [-pi, pi].
     
-    for dt in range(0, time_range*3600, large_time_delta): # check all future positions in propagation intervals
-        r_new = kepler_values(r_satellite, v_satellite, dt) # get Kepler values
+    def distance_to_target_eci(dt):
+        r_eci = kepler_values(r_satellite, v_satellite, dt)
+        theta = theta0 + dt * omega_earth
+        target_eci = R3(theta) @ target_ECEF
+        return np.linalg.norm(r_eci - target_eci)
+    
+    time_offset = 0
+    t_end = time_range_hours*3600
+    while time_offset < t_end:
         
-        theta_new = theta0 + dt*fsw_obj.omega_earth # calculate Earth's rotation after dt
-        ECI_target = R3(theta_new) @ target # rotate target position into ECI based on new theta
-        if (np.linalg.norm(r_new-ECI_target) <= max_distance):
-            overpass_time = dt # we are passing over within range at this time
-            break
-    else: # if overpass not found within range, function
-        print(f"\n\nERROR: overpass not found in specified time window of {time_range} hours!")
-        print(f"Check if inclination allows for overpass within {max_distance/1e3} kilometers\n")
-        return
-    
-    lower_bound = overpass_time - large_time_delta # wind clock back by one time interval in order to scan in finer intervals
-    upper_bound = lower_bound + large_time_delta # same as found overpass time. Coded for easier reading.
-            
-    for dt in range(lower_bound, upper_bound, small_time_delta): # check all future positions in finer propagation intervals
-        r_SC_new = kepler_values(r_satellite, v_satellite, dt) # get new spacecraft position
+        # first coarse scan to find window
+        overpass_time = None
+        for dt in range(time_offset, t_end, large_dt): # check all future positions in propagation intervals
+            if distance_to_target_eci(dt) <= max_distance:
+                overpass_time = dt # we are passing over within range at this time
+                break
         
-        theta_new = theta0 + dt*fsw_obj.omega_earth # calculate Earth's rotation after dt
-        ECI_target = R3(theta_new) @ target # rotate target position into ECI based on new theta
-        if (np.linalg.norm(r_SC_new-ECI_target) <= max_distance): 
-            window_start_delay = dt # save time at which SC is in range
-            break
+        if overpass_time is None: # no overpass found within window
+            print(f"\n\nERROR: Overpass window not found in specified time window of {time_range_hours} hours!")
+            print(f"Check if inclination allows for overpass within {max_distance/1e3} kilometers\n")
+            return 0, None
         
-    fsw_obj.controllerStartTime = window_start_delay-100 # subtract 100 seconds to allow spacecraft to reorient and stabilize in time for overpass window
-    print(f"\nOverpass window entry predicted to occur in {window_start_delay} seconds")
-    
-    maximum_window = 3600 # large value to ensure exit boundary of overpass window is found
-    exit_check_increment = 20 # search for window exit in increments
-    
-    for dt in range(window_start_delay, maximum_window, exit_check_increment): # check all future positions in propagation intervals
-        r_SC_new = kepler_values(r_satellite, v_satellite, dt) # get new spacecraft position
+        # second scan with finer interval to narrow down window-entry time
+        lower_bound = max(overpass_time - large_dt, time_offset) # wind clock back by one time interval in order to scan in finer intervals
+        upper_bound = overpass_time + 1 # include the final time step with +1
         
-        theta_new = theta0 + dt*fsw_obj.omega_earth # calculate Earth's rotation after dt
-        ECI_target = R3(theta_new) @ target # rotate target position into ECI based on new theta
-        if (np.linalg.norm(r_SC_new-ECI_target) > max_distance):
-            window_exit_delay = dt # window exit at this time
-            break
+        for dt in range(lower_bound, upper_bound, small_dt): # check all future positions in finer propagation intervals
+            if distance_to_target_eci(dt) <= max_distance: 
+                window_start = dt # save time at which SC is in range
+                print(f"\nOverpass window entry predicted to occur in {window_start} seconds")
+                break
+        
+        # third step: find window exit time
+        for dt in range(window_start, window_start+maximum_window, exit_check_increment): # check all future positions in propagation intervals
+            if distance_to_target_eci(dt) > max_distance:
+                window_exit = dt # window exit at this time
+                print(f"Overpass window exit predicted to occur in {window_exit} seconds")
+                break
+
+        if (window_exit - window_start) >= min_window_time: # if an acceptable window has been found, return value
+            controller_start = max(0, window_start - lead_time) # ensure controller can't see negative activation time (would work anyways in current implementatino, but this avoids future bugs)
+            controller_end = window_exit
+            return controller_start, controller_end
+        
+        # Too short: advance offset and try again
+        time_offset = window_exit + skip_after_window
     
-    fsw_obj.controllerEndTime = window_exit_delay
-    print(f"Overpass window exit predicted to occur in {window_exit_delay} seconds\n")
-    
-    # call function recursively, add offset to be the window exit_delay+1000 just to be sure
+    print(f"\n\nERROR: Sufficiently large overpass window not found in specified time window of {time_range_hours} hours!")
+    print(f"Check if inclination allows for overpass within {max_distance/1e3} kilometers\n")
+    return 0, None

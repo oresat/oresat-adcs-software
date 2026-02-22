@@ -66,7 +66,7 @@ def sim_main(config):
     oe = orbitalMotion.ClassicElements()
     oe.a = (415+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
     oe.e = 0 # eccentricity
-    oe.i = 50 * macros.D2R # inclination [rad]
+    oe.i = 55 * macros.D2R # inclination [rad]
     oe.Omega = 0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
     oe.omega = 0.0 * macros.D2R  # argument of periapsis [rad]
     oe.f = 10 * macros.D2R       # true anomaly [rad]
@@ -426,12 +426,12 @@ if __name__ == "__main__":
     target_height = 488 # [m]
     
     # ESI headquarters coordinates
-    target_lat = 39.608251
-    target_lon = -104.895788
-    target_height = 1716 # [m]
+    # target_lat = 39.608251
+    # target_lon = -104.895788
+    # target_height = 1716 # [m]
         
     if ("RW" in control_mode): # realistic RW sim setup
-        sim_time = 800
+        sim_time = 50
         dynamics_update_time = .1
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
