@@ -66,10 +66,24 @@ def sim_main(config):
     oe = orbitalMotion.ClassicElements()
     oe.a = (415+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
     oe.e = 0 # eccentricity
-    oe.i = 55 * macros.D2R # inclination [rad]
+    oe.i = 50 * macros.D2R # inclination [rad]
     oe.Omega = 0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
     oe.omega = 0.0 * macros.D2R  # argument of periapsis [rad]
     oe.f = 10 * macros.D2R       # true anomaly [rad]
+    
+    # true orbit parameters for SENTINEL mission
+    oe = orbitalMotion.ClassicElements()
+    Re = 6371e3 # radius of Earth
+    apoapsis = 550e3
+    periapsis = 536e3
+    ra = Re + apoapsis
+    rp = Re + periapsis
+    oe.a = 0.5*(rp + ra)
+    oe.e = (ra - rp)/(ra + rp)
+    oe.i = 98.7 * macros.D2R
+    oe.Omega = 130 * macros.D2R
+    oe.omega = 0 * macros.D2R   # sets perigee direction in the orbital plane
+    oe.f = 50 * macros.D2R      # where the satellite is on the ellipse at epoch (start of sim)
     
     rN, vN = orbitalMotion.elem2rv(mu_earth, oe)
     oe = orbitalMotion.rv2elem(mu_earth, rN, vN)  # this stores consistent initial orbit elements, fixes numerical errors, particulary with perfectly circular orbits. Consult ChatGPT for detailed explanation.
@@ -80,7 +94,7 @@ def sim_main(config):
     scObject.hub.v_CN_NInit = vN  # v_BN_N [m/s]
     
     # Add spice object for planet rotation and ECEF coordinate simulation. Necessary for guidance algorithms.
-    timeInitString = "2026-02-10T00:00:00Z"
+    timeInitString = "2026-02-10T20:00:00Z"
     spiceObject = gravFactory.createSpiceInterface(bskPath + "/supportData/EphemerisData/", time=timeInitString, epochInMsg=True) # create SPICE object and point to ephemeris data
     spiceObject.addPlanetNames(["earth"])
     spiceObject.zeroBase = 'Earth' # centers the spice ephemeris data on Earth. Required, otherwise WMM becomes heliocentric, and has no effect on spacecraft in Earth orbit.
@@ -431,7 +445,7 @@ if __name__ == "__main__":
     # target_height = 1716 # [m]
         
     if ("RW" in control_mode): # realistic RW sim setup
-        sim_time = 50
+        sim_time = 900
         dynamics_update_time = .1
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME

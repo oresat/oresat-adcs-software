@@ -14,19 +14,49 @@ def GPS_to_ECEF(lat, lon, height, a, e2):
 
     return np.asarray([x, y, z])
 
-def target_tracking_quat(fsw_obj, target_vector, v_ECEF, ECI_2_ECEF):
+def target_tracking_quat(fsw_obj, target_vector, nadir_vector, ECI_2_ECEF):
     '''
     Creates an orientation quaternion forming an orientation based on a target
-    vector for the z-facing, and orients the +x facing as close as possible to
-    the velocity vector
+    vector for the z-facing, and orients the +x facing to point into the starfield
+    (away from nadir vector) in order to give star tracker unoccluded view
+    '''
+    R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI
+    #OLD VERSION FOR +x RAM POINTING    
+    # v_ECI = R_NE @ (v_ECEF/np.linalg.norm(v_ECEF)) # norm velocity vector and convert to ECI
+        
+    # zvec = R_NE @ (target_vector/np.linalg.norm(target_vector)) # norm target vector and convert to ECI
     
-    Used for target tracking and nadir pointing
+    # xvec = v_ECI - np.dot(v_ECI, zvec) * zvec # remove component parallel to nadir vector from velocity vector to determine "ram-facing-like" vector
+    # xvec = xvec/np.linalg.norm(xvec) # norm
+    
+
+    zvec = R_NE @ (target_vector/np.linalg.norm(target_vector)) # norm target vector and convert to ECI
+    
+    neg_nadir = -nadir_vector
+    xvec = neg_nadir - np.dot(neg_nadir, zvec) * zvec # remove component parallel to nadir vector from velocity vector to determine "ram-facing-like" vector
+    xvec = xvec/np.linalg.norm(xvec) # norm
+
+    yvec = np.cross(zvec, xvec)
+    yvec = yvec/np.linalg.norm(yvec) # norm
+    
+    # xvec = np.cross(yvec, zvec) # Re-orthogonalize zB to avoid numerical drift
+    # xvec = xvec/np.linalg.norm(xvec) # norm
+    
+    C_BN = np.vstack((xvec, yvec, zvec)) # Create DCM for body orientation in ECI coordinates
+    
+    target_quat = quat.quat_from_dcm_scalar_last(C_BN) # Convert DCM to quaternion
+    return target_quat
+
+def nadir_quat(fsw_obj, nadir_vector, v_ECEF, ECI_2_ECEF):
+    '''
+    Creates an orientation quaternion forming an orientation based on a nadir
+    vector for the z-facing, and orients the +x facing towards the velocity vector
     '''
     
     R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI
     v_ECI = R_NE @ (v_ECEF/np.linalg.norm(v_ECEF)) # norm velocity vector and convert to ECI
-        
-    zvec = R_NE @ (target_vector/np.linalg.norm(target_vector)) # norm target vector and convert to ECI
+    
+    zvec = R_NE @ (nadir_vector/np.linalg.norm(nadir_vector)) # norm target vector and convert to ECI
     
     xvec = v_ECI - np.dot(v_ECI, zvec) * zvec # remove component parallel to nadir vector from velocity vector to determine "ram-facing-like" vector
     xvec = xvec/np.linalg.norm(xvec) # norm
@@ -40,13 +70,13 @@ def target_tracking_quat(fsw_obj, target_vector, v_ECEF, ECI_2_ECEF):
     C_BN = np.vstack((xvec, yvec, zvec)) # Create DCM for body orientation in ECI coordinates
     
     target_quat = quat.quat_from_dcm_scalar_last(C_BN) # Convert DCM to quaternion
-    fsw_obj.update_target(target_quat) # update FSW target
+    return target_quat
     
 def ram_quaternion(fsw_obj, drag_orientation, v_ECEF, nadir_vec, ECI_2_ECEF):
     '''
-    Creates an orientation quaternion forming an orientation based on
-    whether maximum or minimum drag is desired. The secondary axis is defined
-    as the nadir vector, or as close as possible to it
+    Creates an orientation quaternion forming based on whether maximum or 
+    minimum drag is desired. The secondary axis is defined as the nadir 
+    vector, or as close as possible to it
     '''
     
     R_NE = ECI_2_ECEF.T
@@ -70,7 +100,7 @@ def ram_quaternion(fsw_obj, drag_orientation, v_ECEF, nadir_vec, ECI_2_ECEF):
         C_BN = np.vstack((nadir_facing, yvec, drag_facing)) # Create DCM for body orientation in ECI coordinates
     
     target_quat = quat.quat_from_dcm_scalar_last(C_BN) # Convert DCM to quaternion
-    fsw_obj.update_target(target_quat) # update FSW target
+    return target_quat
     
 def psi_c2_c3(Chi, alpha):
     psi = alpha * Chi**2
@@ -129,13 +159,6 @@ def R3(theta): # used for Earth rotation calculations. Not a perfect model for E
                      [s,  c, 0.0],
                      [0.0, 0.0, 1.0]])
 
-# def distance_to_target_eci(dt, r_satellite, v_satellite, theta0, omega_earth, target_ECEF):
-#     r_new = kepler_values(r_satellite, v_satellite, dt) # get Kepler values
-#     theta_new = theta0 + dt*omega_earth # calculate Earth's rotation after dt
-#     ECI_target = R3(theta_new) @ target_ECEF # rotate target position into ECI based on new theta
-#     return np.linalg.norm(r_new-ECI_target)
-
-
 def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, r_satellite, v_satellite, target_ECEF):
     '''
     A function to determine how long the spacecraft can enter low-power mode
@@ -173,7 +196,7 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, 
     
     time_offset = 0
     t_end = time_range_hours*3600
-    while time_offset < t_end:
+    while time_offset < t_end: # scan until maximum time for window which satisifies minimum time criteria
         
         # first coarse scan to find window
         overpass_time = None

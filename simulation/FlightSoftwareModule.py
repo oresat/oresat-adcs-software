@@ -212,16 +212,17 @@ class FlightSoftware(sysModel.SysModel):
                 r_ECEF = true_ECI_2_ECEF @ r_CE_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
                 target_ECEF = self.ECEF_target - r_ECEF # calculate target vector in ECEF cartesian coordinates
                 target_ECEF = target_ECEF/np.linalg.norm(target_ECEF) # normalize to unit vector
-                guid.target_tracking_quat(self, target_ECEF, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
+                nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # used to get correct facing for star tracker. Nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
+                new_target = guid.target_tracking_quat(self, target_ECEF, nadir_vector, ECI_2_ECEF) # create orientation quaternion from cartesian target
             elif self.guidance_mode == "NADIR": # Continually face +z nadir (+x as close to ram as possible)
                 nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                guid.target_tracking_quat(self, nadir_vector, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
+                new_target = guid.nadir_quat(self, nadir_vector, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
             elif self.guidance_mode == "MAX_DRAG" or self.guidance_mode == "MIN_DRAG":
                 nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                guid.ram_quaternion(self, self.guidance_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
+                new_target = guid.ram_quaternion(self, self.guidance_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
             else:
                 print(f"Unknown guidance mode: {self.guidance_mode}")
-                
+            self.update_target(new_target) # update FSW target
             self.target_history.append(self.q_target)
             
             '''
