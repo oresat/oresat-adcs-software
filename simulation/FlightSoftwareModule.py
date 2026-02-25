@@ -69,14 +69,15 @@ class FlightSoftware(sysModel.SysModel):
             # self.skyfield_ephemeris = load('de440s.bsp') # UPDATE THIS TO POINT TO ACTUAL FILE || NOT TOO SENSITIVE TO STALE FILES
             self.skyfield_EOP = itrs
         
-        self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
+        # self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
+        self.maxTorque = 0.001 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
         self.bangbang_rate = 0.07 # max rotation rate of bang bang controller (0.07 rad/s ~ 4 deg/s)
         self.thermal_spin_rpm = 1.0 # thermal spin rate about the z-axis (body frame)
         self.controllerStartTime = 0 # time at which controller should activate [seconds]
         self.controllerEndTime = None # time at which controller should turn off. Used for deactivation after overpass. When set to None controller will not be deactivated
         
-        max_input = 0.00003 # QUALITATIVE value for max torque used by LQR tuning ONLY
+        max_input = 0.00001 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error = 0.01
         LQR_max_rate = 0.002
         self.K_RW = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
@@ -213,13 +214,13 @@ class FlightSoftware(sysModel.SysModel):
                 target_ECEF = self.ECEF_target - r_ECEF # calculate target vector in ECEF cartesian coordinates
                 target_ECEF = target_ECEF/np.linalg.norm(target_ECEF) # normalize to unit vector
                 nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # used to get correct facing for star tracker. Nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                new_target = guid.target_tracking_quat(self, target_ECEF, nadir_vector, ECI_2_ECEF) # create orientation quaternion from cartesian target
+                new_target = guid.target_tracking_quat(target_ECEF, nadir_vector, ECI_2_ECEF) # create orientation quaternion from cartesian target
             elif self.guidance_mode == "NADIR": # Continually face +z nadir (+x as close to ram as possible)
                 nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                new_target = guid.nadir_quat(self, nadir_vector, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
+                new_target = guid.nadir_quat(nadir_vector, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
             elif self.guidance_mode == "MAX_DRAG" or self.guidance_mode == "MIN_DRAG":
                 nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                new_target = guid.ram_quaternion(self, self.guidance_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
+                new_target = guid.ram_quaternion(self.guidance_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
             else:
                 print(f"Unknown guidance mode: {self.guidance_mode}")
             self.update_target(new_target) # update FSW target

@@ -14,7 +14,7 @@ def GPS_to_ECEF(lat, lon, height, a, e2):
 
     return np.asarray([x, y, z])
 
-def target_tracking_quat(fsw_obj, target_vector, nadir_vector, ECI_2_ECEF):
+def target_tracking_quat(target_vector, nadir_vector, ECI_2_ECEF):
     '''
     Creates an orientation quaternion forming an orientation based on a target
     vector for the z-facing, and orients the +x facing to point into the starfield
@@ -47,7 +47,7 @@ def target_tracking_quat(fsw_obj, target_vector, nadir_vector, ECI_2_ECEF):
     target_quat = quat.quat_from_dcm_scalar_last(C_BN) # Convert DCM to quaternion
     return target_quat
 
-def nadir_quat(fsw_obj, nadir_vector, v_ECEF, ECI_2_ECEF):
+def nadir_quat(nadir_vector, v_ECEF, ECI_2_ECEF):
     '''
     Creates an orientation quaternion forming an orientation based on a nadir
     vector for the z-facing, and orients the +x facing towards the velocity vector
@@ -72,7 +72,7 @@ def nadir_quat(fsw_obj, nadir_vector, v_ECEF, ECI_2_ECEF):
     target_quat = quat.quat_from_dcm_scalar_last(C_BN) # Convert DCM to quaternion
     return target_quat
     
-def ram_quaternion(fsw_obj, drag_orientation, v_ECEF, nadir_vec, ECI_2_ECEF):
+def ram_quaternion(drag_orientation, v_ECEF, nadir_vec, ECI_2_ECEF):
     '''
     Creates an orientation quaternion forming based on whether maximum or 
     minimum drag is desired. The secondary axis is defined as the nadir 
@@ -171,8 +171,7 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, 
     max_distance : maximum distance from target in meters [m]
     
     '''
-    omega_earth = fsw_obj.omega_earth
-    
+    omega_earth = 7.2921150e-5
     large_dt = 60*5 # for coarse overpass determination (five minutes)
     small_dt = 5 # for fine overpass determination
     maximum_window = 3600 # large value to ensure exit boundary of overpass window is found

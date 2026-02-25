@@ -432,7 +432,7 @@ if __name__ == "__main__":
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
     # guidance_mode = None
     guidance_mode = "TARGET" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
-    activate_on_overpass = True
+    activate_on_overpass = False
     use_skyfield = True
     # KSAT coordinates
     target_lat = 78.231500
@@ -445,8 +445,8 @@ if __name__ == "__main__":
     # target_height = 1716 # [m]
         
     if ("RW" in control_mode): # realistic RW sim setup
-        sim_time = 900
-        dynamics_update_time = .1
+        sim_time = 700
+        dynamics_update_time = .01
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
