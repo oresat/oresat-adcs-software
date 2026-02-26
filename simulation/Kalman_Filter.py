@@ -22,14 +22,12 @@ class Multiplicative_Extended_Kalman_Filter():
                            [self.Z3, P_omega]])
         
         self.R = sigma_star**2 * self.I3 # R: measurement noise covariance [rad]
+        # self.H = np.eye(3, 6) # H: matrix (Jacobian of measurement model)
         # self.H = 0.1*np.eye(3, 6) # H: matrix (Jacobian of measurement model)
         self.H = 0.3*np.eye(3, 6) # H: matrix (Jacobian of measurement model)
-        # self.H = np.eye(3, 6) # H: matrix (Jacobian of measurement model)
         
         self.last_time = 0 # time of last prediction step execution (needs to be reinitialized to current time whenever state estimation is switched from inactive to active)
         self.prev_event_used_IMU = True # track whether IMU data was part of last step for decision on Zero-Order_Hold (ZOH) or Midpoint Rule usage
-        
-        self.last_star_tracker_measurement = 0
         
     def update(self, current_time, omega = None, q_measured=None): # update Kalman filter and return output (event based function)
         dt = current_time - self.last_time

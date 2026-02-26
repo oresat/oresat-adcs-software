@@ -55,24 +55,19 @@ class FlightSoftware(sysModel.SysModel):
         omega_target_rpm = np.array([0.0, 0.0, 0.0]) # [RPM]
         self.omega_target = omega_target_rpm * 2*np.pi/60 # convert to [rad/s]
         
-        # constants used for GPS-to-ECEF conversion
-        a = 6378137.0 # WGS-84 constant: a = semi-major axis
-        e2 = 0.0066943799901413165 # WGS-84 constant: e^2 = flattening
         target_lat = config["target_lat"]
         target_lon = config["target_lon"]
         target_height = config["target_height"]
-        self.ECEF_target = guid.GPS_to_ECEF(target_lat, target_lon, target_height, a, e2) # convert GPS coordinates to ECEF coordinates
+        self.ECEF_target = guid.GPS_to_ECEF(target_lat, target_lon, target_height) # convert GPS coordinates to ECEF coordinates
         
         self.use_skyfield = config["use_skyfield"]
         if self.use_skyfield or self.activate_on_overpass:
             self.skyfield_timescale = load.timescale()
-            # self.skyfield_ephemeris = load('de440s.bsp') # UPDATE THIS TO POINT TO ACTUAL FILE || NOT TOO SENSITIVE TO STALE FILES
             self.skyfield_EOP = itrs
         
         # self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxTorque = 0.001 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
-        self.bangbang_rate = 0.07 # max rotation rate of bang bang controller (0.07 rad/s ~ 4 deg/s)
         self.thermal_spin_rpm = 1.0 # thermal spin rate about the z-axis (body frame)
         self.controllerStartTime = 0 # time at which controller should activate [seconds]
         self.controllerEndTime = None # time at which controller should turn off. Used for deactivation after overpass. When set to None controller will not be deactivated
@@ -81,6 +76,12 @@ class FlightSoftware(sysModel.SysModel):
         LQR_max_error = 0.01
         LQR_max_rate = 0.002
         self.K_RW = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
+        
+        max_input_mag = 0.3 # QUALITATIVE value for max torque used by LQR tuning ONLY
+        LQR_max_error_mag = 0.05
+        LQR_max_rate_mag = 0.00003
+        self.K_MAG = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error_mag, LQR_max_rate_mag, max_input_mag)
+        self.mag_torque_integral = 0
         
         self.control_mode = config["control_mode"]
         self.slewMode = "slew" # only used for sliding mode bang-bang controller. Can be "slew" for large-angle rotations or "precise" for fine-pointing operations
@@ -105,19 +106,13 @@ class FlightSoftware(sysModel.SysModel):
         self.tracker_count = 0
         self.ticks = 0
         
-        self.rotate = quat.axis_angle_to_quaternion([0,1,0], -0.02) # for target tracking emulation REMOVE
-        
         self.omega_desired_prev = np.zeros(3)
         
-        max_input_mag = 0.3 # QUALITATIVE value for max torque used by LQR tuning ONLY
-        LQR_max_error_mag = 0.05
-        LQR_max_rate_mag = 0.00003
-        self.K_MAG = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error_mag, LQR_max_rate_mag, max_input_mag)
-        self.mag_torque_integral = 0
     
     def set_time_zero_from_iso_utc(self, iso_utc: str): # used to initialize ephemeris start time for GPS timestamp emulation. Only used in simulation software, not flight software.
         s = iso_utc.replace("Z", "+00:00") # Accepts formats "2026-02-10T00:00:00Z" or "2026-02-10T00:00:00+00:00"
         self.time_zero = datetime.fromisoformat(s).astimezone(timezone.utc)
+        print(self.time_zero, type(self.time_zero))
         
     def Reset(self, currentTimeNanos): # required by Basilisk even if Reset does nothing
         pass
@@ -310,14 +305,6 @@ class FlightSoftware(sysModel.SysModel):
             self.mag_torques[:] = 0.0
             self.magTorquePayload.mtbDipoleCmds = self.mag_torques
             self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
-            
-    def b_mat(self, B):
-        bx, by, bz = B
-        return np.array([
-            [0,   bz,  -by],
-            [-bz,   0,  bx],
-            [by, -bx,   0]
-        ])
     
     def update_target(self, target_quat):
         if self.pointing == "ST":
@@ -326,6 +313,9 @@ class FlightSoftware(sysModel.SysModel):
             self.q_target = target_quat # target does not require rotation
         elif self.pointing == "CFC":
             self.q_target = quat.quat_mult(self.q_180_rot, target_quat) # define target in body coordinates
+        else:
+            print("ERROR: UNKNOWN POINTING REFERENCE")
+            exit()
     
     def command_MTB_torques(self, desired_torque, currentTimeNanos):
         self.mag_torques[:3] = desired_torque
@@ -359,4 +349,12 @@ class FlightSoftware(sysModel.SysModel):
     def mag_LQR_controller(self, q_error, omega):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector
         return -self.K_MAG @ x # invert sign for control
+    
+    def b_mat(self, B):
+        bx, by, bz = B
+        return np.array([
+            [0,   bz,  -by],
+            [-bz,   0,  bx],
+            [by, -bx,   0]
+        ])
     
