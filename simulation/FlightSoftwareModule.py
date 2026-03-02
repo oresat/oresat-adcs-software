@@ -72,14 +72,14 @@ class FlightSoftware(sysModel.SysModel):
         self.controllerStartTime = 0 # time at which controller should activate [seconds]
         self.controllerEndTime = None # time at which controller should turn off. Used for deactivation after overpass. When set to None controller will not be deactivated
         
-        max_input = 0.00001 # QUALITATIVE value for max torque used by LQR tuning ONLY
-        LQR_max_error = 0.01
-        LQR_max_rate = 0.002
+        max_input = 0.001 # QUALITATIVE value for max torque used by LQR tuning ONLY
+        LQR_max_error = 1
+        LQR_max_rate = 0.2
         self.K_RW = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
         
-        max_input_mag = 0.3 # QUALITATIVE value for max torque used by LQR tuning ONLY
-        LQR_max_error_mag = 0.05
-        LQR_max_rate_mag = 0.00003
+        max_input_mag = 3 # QUALITATIVE value for max torque used by LQR tuning ONLY
+        LQR_max_error_mag = 0.5
+        LQR_max_rate_mag = 0.0003
         self.K_MAG = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error_mag, LQR_max_rate_mag, max_input_mag)
         self.mag_torque_integral = 0
         
@@ -95,7 +95,7 @@ class FlightSoftware(sysModel.SysModel):
         # Controller gains
         Jmin = np.min(np.linalg.eigvals(self.satInertia)) # maximum principal moment of inertia (Markley & Crassidis defines this with the minimum principal moment of inertia, but maximum works better???)
         self.detumble_gain = 4*np.pi/config["orbital_period"]*(1+np.sin(config["orbital_inclination"]*2*np.pi/180))*Jmin # gain based on minimal principal moment of inertia as defined in Markley & Crassidis
-        
+
         # Kalman filter object to store filter states and sensor values
         self.gyro_bias_drift_rate = 0.015 * macros.D2R # [rad/s/K] additional bias drift dependent on difference between current and reference (25 C) temperatures
         self.EKF = Multiplicative_Extended_Kalman_Filter(config["P_ST_0"], config["sigma_ST"], config["P_b0"], config["sigma_gyro"], config["sigma_bias"])
@@ -107,7 +107,6 @@ class FlightSoftware(sysModel.SysModel):
         self.ticks = 0
         
         self.omega_desired_prev = np.zeros(3)
-        
     
     def set_time_zero_from_iso_utc(self, iso_utc: str): # used to initialize ephemeris start time for GPS timestamp emulation. Only used in simulation software, not flight software.
         s = iso_utc.replace("Z", "+00:00") # Accepts formats "2026-02-10T00:00:00Z" or "2026-02-10T00:00:00+00:00"
@@ -144,22 +143,22 @@ class FlightSoftware(sysModel.SysModel):
             q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
         if self.scStateIn.isWritten():
             scState = self.scStateIn()
-            r_CN_N = scState.r_CN_N # spacecraft inertial vector (position from COM) from origin in ECI frame. Origin is sun in Basilisk
-            v_CN_N = scState.v_CN_N # spacecraft velocity vector (position from COM) from origin in ECI frame. Origin is sun in Basilisk
+            r_CN_N = scState.r_CN_N # spacecraft inertial vector (position from COM) from origin (Earth) in ECI frame.
+            v_CN_N = scState.v_CN_N # spacecraft velocity vector (position from COM) from origin (Earth) in ECI frame.
         if self.earthStateInMsg.isWritten():
             earthState = self.earthStateInMsg()
             true_ECI_2_ECEF = np.asarray(earthState.J20002Pfix) # sim-internal transform matrix from ECI to ECEF frame
-            r_EN_N = np.asarray(earthState.PositionVector) # Earth position vector from sun (inertial frame) 
-            v_EN_N = np.asarray(earthState.VelocityVector) # Earth velocity vector from sun (inertial frame)
-        
+            
         '''
-        Overpass window calculations
+        Overpass window calculations.
         '''
         
         if self.ticks == 1 and self.activate_on_overpass: # determine time to overpass and set control system activation time
             time_range = 72 # check this range of flight time [hours]
             max_distance = 2800e3 # 2800 km from target [m]
-            start_time, end_time = guid.time_to_overpass(self, currentTimeNanos, time_range, max_distance, r_CN_N, v_CN_N, self.ECEF_target)
+            r_ECEF = true_ECI_2_ECEF @ r_CN_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
+            v_ECEF = true_ECI_2_ECEF @ v_CN_N # Spacecraft orbital velocity vector. Convert to ECEF to emulate GPS data.
+            start_time, end_time = guid.time_to_overpass(self, currentTimeNanos, time_range, max_distance, r_ECEF, v_ECEF, self.ECEF_target)
             self.controllerStartTime = start_time
             self.controllerEndTime = end_time
         
@@ -189,9 +188,14 @@ class FlightSoftware(sysModel.SysModel):
         '''
 
         if self.guidance_mode is not None:
-            q_last = self.q_target # save for tracking rate calculations
-            r_CE_N = r_CN_N - r_EN_N # Earth-centered inertial spacecraft position (converted from Sun-centered) allows for emulation of ECEF-vector-converted-GPS coordinates 
-            v_ECEF = true_ECI_2_ECEF @ (v_CN_N-v_EN_N) # True, sim-internal Earth-centered inertial spacecraft position (converted from Sun-centered). Convert to ECEF to emulate GPS data.
+            '''
+            These next few lines are simply to emulate GPS ECEF output, and
+            calculate nadir vector in ECEF
+            '''
+
+            r_ECEF = true_ECI_2_ECEF @ r_CN_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
+            v_ECEF = true_ECI_2_ECEF @ v_CN_N # Spacecraft orbital velocity vector. Convert to ECEF to emulate GPS data.
+            nadir_vector_ECEF = -r_ECEF / np.linalg.norm(r_ECEF) # used to get correct facing for star tracker. Nadir vector is opposite of vector from earth.
             
             if self.use_skyfield: # if using skyfield, override the sim-internal frame-transformation matrix with skyfield's
                 if self.ticks % self.skyfield_rate == 0 or self.last_skyfield_frame is None: # slow skyfield update for performance reasons. Update rate of 1 second shouldn't introduce more than .005 degrees of error.
@@ -205,19 +209,17 @@ class FlightSoftware(sysModel.SysModel):
                 ECI_2_ECEF = true_ECI_2_ECEF # if not using skyfield, use sim-internal conversion matrix
             
             if self.guidance_mode == "TARGET": # Tracking a static target on the surface of the earth via GPS coordinates        
-                r_ECEF = true_ECI_2_ECEF @ r_CE_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
-                target_ECEF = self.ECEF_target - r_ECEF # calculate target vector in ECEF cartesian coordinates
-                target_ECEF = target_ECEF/np.linalg.norm(target_ECEF) # normalize to unit vector
-                nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # used to get correct facing for star tracker. Nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                new_target = guid.target_tracking_quat(target_ECEF, nadir_vector, ECI_2_ECEF) # create orientation quaternion from cartesian target
+                target_vector = self.ECEF_target - r_ECEF # calculate target vector in ECEF cartesian coordinates
+                target_vector = target_vector/np.linalg.norm(target_vector) # normalize to unit vector
+                new_target = guid.target_tracking_quat(target_vector, nadir_vector_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
             elif self.guidance_mode == "NADIR": # Continually face +z nadir (+x as close to ram as possible)
-                nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                new_target = guid.nadir_quat(nadir_vector, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
+                new_target = guid.nadir_quat(nadir_vector_ECEF, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
             elif self.guidance_mode == "MAX_DRAG" or self.guidance_mode == "MIN_DRAG":
-                nadir_vector = true_ECI_2_ECEF @ (-r_CE_N / np.linalg.norm(r_CE_N)) # nadir vector is opposite of vector from earth. Convert to ECEF to emulate GPS data.
-                new_target = guid.ram_quaternion(self.guidance_mode, v_ECEF, nadir_vector, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
+                new_target = guid.ram_quaternion(self.guidance_mode, v_ECEF, nadir_vector_ECEF, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
             else:
                 print(f"Unknown guidance mode: {self.guidance_mode}")
+            
+            q_last = self.q_target # save for tracking rate calculations
             self.update_target(new_target) # update FSW target
             self.target_history.append(self.q_target)
             

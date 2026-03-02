@@ -18,7 +18,7 @@ def GPS_to_ECEF(lat, lon, height):
 
     return np.asarray([x, y, z])
 
-def target_tracking_quat(target_vector, nadir_vector, ECI_2_ECEF):
+def target_tracking_quat(target_vector, nadir_vector_ECEF, ECI_2_ECEF):
     '''
     Creates an orientation quaternion forming an orientation based on a target
     vector for the z-facing, and orients the +x facing to point into the starfield
@@ -36,8 +36,8 @@ def target_tracking_quat(target_vector, nadir_vector, ECI_2_ECEF):
 
     zvec = R_NE @ (target_vector/np.linalg.norm(target_vector)) # norm target vector and convert to ECI
     
-    neg_nadir = -nadir_vector
-    xvec = neg_nadir - np.dot(neg_nadir, zvec) * zvec # remove component parallel to nadir vector from velocity vector to determine "ram-facing-like" vector
+    neg_nadir_ECI = R_NE @ (-nadir_vector_ECEF)
+    xvec = neg_nadir_ECI - np.dot(neg_nadir_ECI, zvec) * zvec # remove component parallel to nadir vector from velocity vector to determine "ram-facing-like" vector
     xvec = xvec/np.linalg.norm(xvec) # norm
 
     yvec = np.cross(zvec, xvec)
@@ -51,7 +51,7 @@ def target_tracking_quat(target_vector, nadir_vector, ECI_2_ECEF):
     target_quat = quat.quat_from_dcm_scalar_last(C_BN) # Convert DCM to quaternion
     return target_quat
 
-def nadir_quat(nadir_vector, v_ECEF, ECI_2_ECEF):
+def nadir_quat(nadir_vector_ECEF, v_ECEF, ECI_2_ECEF):
     '''
     Creates an orientation quaternion forming an orientation based on a nadir
     vector for the z-facing, and orients the +x facing towards the velocity vector
@@ -60,7 +60,7 @@ def nadir_quat(nadir_vector, v_ECEF, ECI_2_ECEF):
     R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI
     v_ECI = R_NE @ (v_ECEF/np.linalg.norm(v_ECEF)) # norm velocity vector and convert to ECI
     
-    zvec = R_NE @ (nadir_vector/np.linalg.norm(nadir_vector)) # norm target vector and convert to ECI
+    zvec = R_NE @ (nadir_vector_ECEF/np.linalg.norm(nadir_vector_ECEF)) # norm target vector and convert to ECI
     
     xvec = v_ECI - np.dot(v_ECI, zvec) * zvec # remove component parallel to nadir vector from velocity vector to determine "ram-facing-like" vector
     xvec = xvec/np.linalg.norm(xvec) # norm
@@ -76,7 +76,7 @@ def nadir_quat(nadir_vector, v_ECEF, ECI_2_ECEF):
     target_quat = quat.quat_from_dcm_scalar_last(C_BN) # Convert DCM to quaternion
     return target_quat
     
-def ram_quaternion(drag_orientation, v_ECEF, nadir_vec, ECI_2_ECEF):
+def ram_quaternion(drag_orientation, v_ECEF, nadir_vector_ECEF, ECI_2_ECEF):
     '''
     Creates an orientation quaternion forming based on whether maximum or 
     minimum drag is desired. The secondary axis is defined as the nadir 
@@ -86,7 +86,7 @@ def ram_quaternion(drag_orientation, v_ECEF, nadir_vec, ECI_2_ECEF):
     R_NE = ECI_2_ECEF.T
     drag_facing = R_NE @ (v_ECEF/np.linalg.norm(v_ECEF)) # norm velocity vector and convert to ECI
     
-    nadir_ECI = R_NE @ nadir_vec
+    nadir_ECI = R_NE @ nadir_vector_ECEF
     nadir_facing = nadir_ECI - np.dot(nadir_ECI, drag_facing) * drag_facing # remove component parallel to velocity vector from nadir vector to determine "downwards-pointing" vector
     nadir_facing = nadir_facing/np.linalg.norm(nadir_facing) # norm 
     
@@ -140,6 +140,8 @@ def kepler_values(r0_vec, v0_vec, dt):
     Chi = sqrt_mu*dt*alpha # initial guess for first iteration
     psi, c2, c3 = psi_c2_c3(Chi, alpha)
     
+    iterations = 0
+    max_iter = 100000
     while(True):
         Chi_new = Chi + (sqrt_mu * dt - Chi**3*c3 - r0*vr0*Chi**2*c2/sqrt_mu-r0*Chi*(1-psi*c3)) / (Chi**2*c2 + r0*vr0*Chi*(1-psi*c3)/sqrt_mu + r0*(1-psi*c2))
         psi, c2, c3 = psi_c2_c3(Chi_new, alpha)
@@ -148,6 +150,11 @@ def kepler_values(r0_vec, v0_vec, dt):
             Chi = Chi_new
             break
         Chi = Chi_new # update Chi and iterate again
+        
+        iterations += 1
+        if iterations > max_iter:
+            print("Maximum iterations reached in Kepler Propagation. Exiting.")
+            return None
         
     # calculate universal variables
     f = 1-Chi**2/r0*c2
@@ -163,7 +170,7 @@ def R3(theta): # used for Earth rotation calculations. Not a perfect model for E
                      [s,  c, 0.0],
                      [0.0, 0.0, 1.0]])
 
-def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, r_satellite, v_satellite, target_ECEF):
+def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, r_ECEF, v_ECEF, target_ECEF):
     '''
     A function to determine how long the spacecraft can enter low-power mode
     before it will be within range of a set of GPS coordinates for fine-pointing
@@ -173,7 +180,8 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, 
     ----------
     time_range : time in hours up to which overpass possibility should be checked [hours]
     max_distance : maximum distance from target in meters [m]
-    
+    r_satellite: position relative to Earth in ECI
+    v_satellite_ velocity relative to Earth in ECI   
     '''
     omega_earth = 7.2921150e-5
     large_dt = 60*5 # for coarse overpass determination (five minutes)
@@ -189,17 +197,21 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, 
     # itrs.rotation_at(t) returns the rotation matrix that maps ICRF/ECI -> ITRS/ECEF.
     R_ecef_from_eci = itrs.rotation_at(time)
     R_eci_from_ecef = R_ecef_from_eci.T # get current Earth rotation angle relative to ECI
-    theta0 = np.arctan2(R_eci_from_ecef[1, 0], R_eci_from_ecef[0, 0]) # Get Earth's rotation angle in ECI at current time. Radians in [-pi, pi].
+    theta0 = np.arctan2(R_eci_from_ecef[1, 0], R_eci_from_ecef[0, 0]) # Get Earth's rotation angle in ECI at current time. Radians in [-pi, pi]. Uses NumPy indexing.
+    
+    # convert orbital vector parameters from ECEF to ECI
+    r_ECI = R_eci_from_ecef @ r_ECEF
+    v_ECI = R_eci_from_ecef @ v_ECEF
     
     def distance_to_target_eci(dt):
-        r_eci = kepler_values(r_satellite, v_satellite, dt)
+        r_eci = kepler_values(r_ECI, v_ECI, dt)
         theta = theta0 + dt * omega_earth
         target_eci = R3(theta) @ target_ECEF
         return np.linalg.norm(r_eci - target_eci)
     
-    time_offset = 0
-    t_end = time_range_hours*3600
-    while time_offset < t_end: # scan until maximum time for window which satisifies minimum time criteria
+    time_offset = 0 # window search offset
+    t_end = time_range_hours*3600 # convert hours to seconds
+    while time_offset < t_end: # scan up until maximum time for a window which satisifies minimum time criteria
         
         # first coarse scan to find window
         overpass_time = None
