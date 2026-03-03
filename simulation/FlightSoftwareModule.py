@@ -93,7 +93,7 @@ class FlightSoftware(sysModel.SysModel):
         self.q_180_rot = quat.axis_angle_to_quaternion([1,0,0], -180) # translate CFC targets to +z side/viewpoint of satellite. Chose rotation about x axis for this one so that satellite +x facing doesn't change in guidance functions
         
         # Controller gains
-        Jmin = np.min(np.linalg.eigvals(self.satInertia)) # maximum principal moment of inertia (Markley & Crassidis defines this with the minimum principal moment of inertia, but maximum works better???)
+        Jmin = np.min(np.linalg.eigvals(self.satInertia)) # maximum principal moment of inertia (Markley & Crassidis defines this with the minimum principal moment of inertia as a safe upper bound to avoid instability, but maximum works better)
         self.detumble_gain = 4*np.pi/config["orbital_period"]*(1+np.sin(config["orbital_inclination"]*2*np.pi/180))*Jmin # gain based on minimal principal moment of inertia as defined in Markley & Crassidis
 
         # Kalman filter object to store filter states and sensor values
@@ -111,7 +111,6 @@ class FlightSoftware(sysModel.SysModel):
     def set_time_zero_from_iso_utc(self, iso_utc: str): # used to initialize ephemeris start time for GPS timestamp emulation. Only used in simulation software, not flight software.
         s = iso_utc.replace("Z", "+00:00") # Accepts formats "2026-02-10T00:00:00Z" or "2026-02-10T00:00:00+00:00"
         self.time_zero = datetime.fromisoformat(s).astimezone(timezone.utc)
-        print(self.time_zero, type(self.time_zero))
         
     def Reset(self, currentTimeNanos): # required by Basilisk even if Reset does nothing
         pass
@@ -293,7 +292,7 @@ class FlightSoftware(sysModel.SysModel):
             elif self.control_mode == "ORBITS":
                 pass # mode to simply visualize orbits with large timespans
             else:
-                print("ERROR: Unknown mission mode specified", flush = True)
+                print("ERROR: Unknown control mode specified", flush = True)
                 self.crashTheKernel = True
         
         else: # if controller should be off, simulate wheel shutdown by sending required torques to null wheelspeeds. This is only required in simulation, as wheel cogging will have the same affect uncommanded for the real satellite.

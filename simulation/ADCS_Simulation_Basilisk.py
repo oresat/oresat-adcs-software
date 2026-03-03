@@ -209,8 +209,7 @@ def sim_main(config):
     mtbConfigParams.GtMatrix_B = [1., 0., 0., # expects single 1x(3*n) array
                                   0., 1., 0.,
                                   0., 0., 1.]
-    # mtbConfigParams.maxMtbDipoles = [0.5e-2, 0.5e-2, 0.75e-2] # individual rod Dipole limits. Currently set to max continuous limit, not burst limit [A·m^2] (OLD LIMIT, WRONG VALUES???)
-    mtbConfigParams.maxMtbDipoles = [1, 1, 1] # individual rod Dipole limits [A·m^2]
+    mtbConfigParams.maxMtbDipoles = [2.326784361405822, 2.326784361405822, 0.37338038792999995] # individual rod Dipole limits when using current of 0.1 Amps [A·m^2]
 
     mtbCfgMsg = messaging.MTBArrayConfigMsg().write(mtbConfigParams)
     
@@ -360,15 +359,15 @@ if __name__ == "__main__":
         viz_scaling = 5 # 3D-model scaling factor
     
         # Inertia tensor data
-        Jxx = 0.01650237
-        Jxy = 0.00000711
-        Jxz = 0.00004547
+        Jxx = 0.057
+        Jxy = 0.01
+        Jxz = 0.0
         Jyx = Jxy
-        Jyy = 0.015962
-        Jyz = 0.00003107
+        Jyy = 0.048
+        Jyz = 0.0
         Jzx = Jxz
         Jzy = Jyz
-        Jzz = 0.00651814
+        Jzz = 0.02
     else:
         sat_3D_file = "OreSat_Simplified_Model.obj"
         viz_scaling = 7 # 3D-model scaling factor
@@ -416,8 +415,8 @@ if __name__ == "__main__":
     init_rot_axis = [1, 0, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     
-    omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin rates [RPM]
-    # omega_init_rpm = np.array([0.5, 0.2, 0.1])
+    # omega_init_rpm = np.array([3.0, 0.4, 0.7])  # initial spin rates [RPM]
+    omega_init_rpm = np.array([0.5, 0.2, 0.1])
     # omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin rates [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
@@ -444,8 +443,8 @@ if __name__ == "__main__":
     # target_lon = -104.895788
     # target_height = 1716 # [m]
         
-    if ("RW" in control_mode): # realistic RW sim setup
-        sim_time = 100
+    if control_mode in ("RW_POINTING", "THERMAL_SPIN"): # realistic RW sim setup
+        sim_time = 1000
         dynamics_update_time = .1
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
@@ -459,16 +458,21 @@ if __name__ == "__main__":
         use_skyfield = False
         omega_init_rad = np.array([0.0, 0.0, 0.0]) # ensure no excessive spinning
     else: # realistic MTB sim setup
-        sim_time = 30000
+        sim_time = 12000
         dynamics_update_time = 1
-        fsw_update_time = 10 # suggested fsw rate of no less than 5 seconds for stability
+        if control_mode == "DETUMBLE":
+            fsw_update_time = 2 # suggested fsw rate of no less than 5 seconds for stability when using MTB_POINTING, and no more than 2 when using DETUMBLE
+        else:
+            fsw_update_time = 10
+        activate_on_overpass = False
         if ST_update_rate < fsw_update_time:
             ST_update_rate = fsw_update_time # if ST update rate is faster than FSW, FSW throws an error
-    
+
     print(f"Satellite: {satellite}")
     print(f"Mission Mode: {control_mode}")
     print(f"View Device: {pointing_reference}")
-    print(f"Guidance Mode: {guidance_mode}\n")
+    print(f"Guidance Mode: {guidance_mode}")
+    print(f"Activate On Overpass Mode: {activate_on_overpass}\n")
     
     config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,
               "satellite":satellite, "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "control_mode":control_mode,
