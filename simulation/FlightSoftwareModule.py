@@ -88,7 +88,7 @@ class FlightSoftware(sysModel.SysModel):
         
         # Select the spacecraft pointing reference (which axis/sensor defines boresight):
         # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), CFC (Cirrus Flux Camera, -z on body)    
-        self.pointing = config["pointing_reference"]
+        self.pointing_reference = config["pointing_reference"]
         self.q_90_rot = quat.axis_angle_to_quaternion([0,1,0], -90) # translate star tracker targets to +z side of satellite by rotating by 90 degrees CW about the y axis
         self.q_180_rot = quat.axis_angle_to_quaternion([1,0,0], -180) # translate CFC targets to +z side/viewpoint of satellite. Chose rotation about x axis for this one so that satellite +x facing doesn't change in guidance functions
         
@@ -308,11 +308,11 @@ class FlightSoftware(sysModel.SysModel):
             self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
     
     def update_target(self, target_quat):
-        if self.pointing == "ST":
+        if self.pointing_reference == "ST":
             self.q_target = quat.quat_mult(self.q_90_rot, target_quat) # define target in body coordinates
-        elif self.pointing == "SC":
+        elif self.pointing_reference == "SC":
             self.q_target = target_quat # target does not require rotation
-        elif self.pointing == "CFC":
+        elif self.pointing_reference == "CFC":
             self.q_target = quat.quat_mult(self.q_180_rot, target_quat) # define target in body coordinates
         else:
             print("ERROR: UNKNOWN POINTING REFERENCE")
