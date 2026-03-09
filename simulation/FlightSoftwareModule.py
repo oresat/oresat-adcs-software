@@ -50,6 +50,7 @@ class FlightSoftware(sysModel.SysModel):
         self.omega_earth = 7.2921150e-5 # sidereal rotation rate of Earth for propogation calculations. Approximation suffices for the calculations we're doing
         self.r_earth = 4.07e7 # approximate earth radius for line-of-sight (LOS) calculations
         self.activate_on_overpass = config["activate_on_overpass"] # determines whether overpass time should be calculated, and an activation time for control systems set
+        self.use_integrator = config["use_integrator"] # LQR tuning with or without integrator terms for steady state error corrections
         
         self.q_target = np.array([0,0,0,1]) # attribute initialization, set to real value in sim main
         omega_target_rpm = np.array([0.0, 0.0, 0.0]) # [RPM]
@@ -72,10 +73,34 @@ class FlightSoftware(sysModel.SysModel):
         self.controllerStartTime = 0 # time at which controller should activate [seconds]
         self.controllerEndTime = None # time at which controller should turn off. Used for deactivation after overpass. When set to None controller will not be deactivated
         
+        '''
+        QUALITATIVE values by LQR tuning ONLY
+        Smaller values INCREASE weighting, i.e. .0001 means that variable will
+        be much more heavily weighted in the LQR tuning algorithm than .1
+        '''
+        
         max_input = 0.001 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error = 1
         LQR_max_rate = 0.2
         self.K_RW = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
+        if self.use_integrator:
+            integrator_gain = .01
+            K = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input, self.use_integrator, integrator_gain)
+            self.K_RW_int = K[:, :6] # extract "PD" portion of gain matrix
+            self.K_integrator = K[:, 6:] # extract integrator term
+            
+            self.state_integral = 0 # error term
+            self.rf = 0 # filtered reference for slow ramp of integral term when dealing with step inputs
+            omega_f = 0.0001 # filter rate
+            self.a_filter = np.exp(-omega_f*self.updateTime)
+            
+            # print(self.a_filter)
+            # print(K)
+            # print(get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input))
+            # print(self.K_RW)
+            # print(self.K_integrator)
+            # from sys import exit
+            # exit()
         
         max_input_mag = 3 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error_mag = 0.5
@@ -308,11 +333,11 @@ class FlightSoftware(sysModel.SysModel):
             self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
     
     def update_target(self, target_quat):
-        if self.pointing_reference == "ST":
+        if self.pointing_reference == "ST": # +z facing of satellite used as pointing reference
             self.q_target = quat.quat_mult(self.q_90_rot, target_quat) # define target in body coordinates
-        elif self.pointing_reference == "SC":
+        elif self.pointing_reference == "SC":# +x facing of satellite used as pointing reference
             self.q_target = target_quat # target does not require rotation
-        elif self.pointing_reference == "CFC":
+        elif self.pointing_reference == "CFC": # -z facing of satellite used as pointing reference
             self.q_target = quat.quat_mult(self.q_180_rot, target_quat) # define target in body coordinates
         else:
             print("ERROR: UNKNOWN POINTING REFERENCE")
@@ -345,8 +370,18 @@ class FlightSoftware(sysModel.SysModel):
     
     def RW_controller(self, q_error, omega):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector
-        return -self.K_RW @ x # invert sign for control
+        if self.use_integrator and (quat.error_angle(q_error) < 1): # LQR controller with integral term
+            self.rf = self.rf*self.a_filter + (1-self.a_filter)*q_error[:3] # filtered error reference for slow ramp of integral term
+            self.state_integral += self.rf * self.updateTime
+            return -self.K_RW_int @ x - self.K_integrator @ self.state_integral
+        else:
+            self.rf = 0
+            return -self.K_RW @ x # invert sign for control
     
+    def RW_int_controller(self, q_error, omega): # LQR controller with integral term
+        x = np.concatenate((q_error[:3], omega)) # assemble state vector
+        return -self.K_RW @ x # invert sign for control
+        
     def mag_LQR_controller(self, q_error, omega):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector
         return -self.K_MAG @ x # invert sign for control

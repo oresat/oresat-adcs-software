@@ -42,12 +42,11 @@ def add_integrators(A, B, C):
 
     return A_aug, B_aug
 
-def get_gain_matrix(J, timestep, max_error, max_rate, max_input, use_integrator = False):
+def get_gain_matrix(J, timestep, max_error, max_rate, max_input, use_integrator = False, max_integrator = 0.1):
     #----------------- LQR matrices--------------------------------------------
     max_error = max_error # q_vec error
     max_velocity = max_rate # ω_sat
-    max_integrator = 0.1 # integrator term in Q matrix, integrator state, accumulated error (shouldnt exceed Q values for quaternion error)
-    
+    # max_integrator = 0.1 # integrator term in Q matrix, integrator state, accumulated error (shouldnt exceed Q values for quaternion error)
     Q = np.diag([1/max_error**2, 1/max_error**2, 1/max_error**2, 1/max_velocity**2, 1/max_velocity**2, 1/max_velocity**2, 1/max_integrator**2, 1/max_integrator**2, 1/max_integrator**2])
     R = np.diag([1/max_input**2, 1/max_input**2, 1/max_input**2])
     #--------------------------------------------------------------------------
@@ -60,7 +59,6 @@ def get_gain_matrix(J, timestep, max_error, max_rate, max_input, use_integrator 
     B = np.block([[np.zeros((3,3))], [np.linalg.inv(J)]])
     C = np.identity(6) # sensors for all inputs
     C_aug = np.eye(3, 6) # integrator only cares about attitude error, only integrate quaternion values (top half of C matrix)
-    
     
     if use_integrator:
         A_aug, B_aug = add_integrators(A, B, C_aug)
@@ -103,8 +101,8 @@ if __name__ == "__main__":
                   [Jyx, Jyy, Jyz], 
                   [Jzx, Jzy, Jzz]])
     
-    useInt = False
-    K = get_RW_gain_matrix(J, 0.1, 0.1, 0.05, useInt)
+    useInt = True
+    K = get_gain_matrix(J, 0.1, 0.1, 0.05, 0.01, useInt, 0.3)
     if useInt:
         print("LQR gain matrix K_int:", K)
     else:

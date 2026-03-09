@@ -242,11 +242,11 @@ def sim_main(config):
     
     # determine initial pointing vector for relative target calculations
     sat_q_init = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle) # account for any rotations of the satellite it self at sim initialization
-    if fsw.pointing == "ST":
+    if fsw.pointing_reference == "ST":
         q_init = quat.quat_mult(quat.axis_angle_to_quaternion([0,1,0], 90), sat_q_init)
-    elif fsw.pointing == "SC":
+    elif fsw.pointing_reference == "SC":
         q_init = sat_q_init
-    elif fsw.pointing == "CFC":
+    elif fsw.pointing_reference == "CFC":
         q_init = quat.quat_mult(quat.axis_angle_to_quaternion([0,1,0], 180), sat_q_init)
     else:
         print("ERROR: Invalid pointing reference selected!")
@@ -427,12 +427,13 @@ if __name__ == "__main__":
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "SC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     control_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
+    use_integrator = True # LQR tuning with or without integrator terms for steady state error corrections
 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
     # guidance_mode = None
     guidance_mode = "TARGET" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
-    activate_on_overpass = True
-    use_skyfield = True
+    activate_on_overpass = False
+    use_skyfield = False
     # KSAT coordinates
     target_lat = 78.231500
     target_lon = 15.411100
@@ -444,8 +445,8 @@ if __name__ == "__main__":
     # target_height = 1716 # [m]
         
     if control_mode in ("RW_POINTING", "THERMAL_SPIN"): # realistic RW sim setup
-        sim_time = 1000
-        dynamics_update_time = .1
+        sim_time = 100
+        dynamics_update_time = .01
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
@@ -467,7 +468,8 @@ if __name__ == "__main__":
         activate_on_overpass = False
         if ST_update_rate < fsw_update_time:
             ST_update_rate = fsw_update_time # if ST update rate is faster than FSW, FSW throws an error
-
+    
+    
     print(f"Satellite: {satellite}")
     print(f"Mission Mode: {control_mode}")
     print(f"View Device: {pointing_reference}")
@@ -480,6 +482,6 @@ if __name__ == "__main__":
               "save_pdf":save_pdf, "save_png":save_png, "plot_basepath":plot_basepath, "use_filter":use_filter, "sigma_gyro":sigma_gyro, "sigma_bias":sigma_bias, "P_b0":P_b0,
               "sigma_ST":sigma_ST, "P_ST_0":P_ST_0, "ST_update_rate":ST_update_rate, "error_time_check":error_time_check, "guidance_mode":guidance_mode, 
               "target_lat":target_lat, "target_lon":target_lon, "target_height":target_height, "sat_3D_file":sat_3D_file, "viz_scaling":viz_scaling, "use_skyfield":use_skyfield,
-              "activate_on_overpass":activate_on_overpass}
+              "activate_on_overpass":activate_on_overpass, "use_integrator":use_integrator}
     
     sim_main(config)
