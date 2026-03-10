@@ -350,8 +350,8 @@ def sim_main(config):
         
 if __name__ == "__main__":
     # select satellite model attributes
-    satellite = "OreSat1"
-    # satellite = "SENTINEL"
+    # satellite = "OreSat1"
+    satellite = "SENTINEL"
     
     # select 3D model file
     if satellite == "SENTINEL":
@@ -433,7 +433,7 @@ if __name__ == "__main__":
     # guidance_mode = None
     guidance_mode = "TARGET" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
     activate_on_overpass = False
-    use_skyfield = False
+    use_skyfield = False # TURN BACK ON
     # KSAT coordinates
     target_lat = 78.231500
     target_lon = 15.411100
@@ -445,7 +445,7 @@ if __name__ == "__main__":
     # target_height = 1716 # [m]
         
     if control_mode in ("RW_POINTING", "THERMAL_SPIN"): # realistic RW sim setup
-        sim_time = 500
+        sim_time = 100
         dynamics_update_time = .01
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME

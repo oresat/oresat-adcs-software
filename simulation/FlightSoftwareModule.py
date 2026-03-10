@@ -97,19 +97,11 @@ class FlightSoftware(sysModel.SysModel):
             self.K_RW_int = K[:, :6] # extract "PD" portion of gain matrix
             self.K_integrator = K[:, 6:] # extract integrator term
             
-            self.state_integral = 0 # error integral
-            self.rf = 0 # filtered reference for slow ramp of integral term when dealing with step inputs
+            self.state_integral = np.zeros(3) # error integral
+            self.rf = np.zeros(3) # filtered reference for slow ramp of integral term when dealing with step inputs
             omega_f = 0.00001 # filter rate
             self.a_filter = np.exp(-omega_f*self.updateTime)
-            
-            # print(self.a_filter)
-            # print(K)
-            # print(get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input))
-            # print(self.K_RW)
-            # print(self.K_integrator)
-            # from sys import exit
-            # exit()
-        
+
         max_input_mag = 3 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error_mag = 0.5
         LQR_max_rate_mag = 0.0003
