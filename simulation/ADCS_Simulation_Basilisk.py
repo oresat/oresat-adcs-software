@@ -350,8 +350,8 @@ def sim_main(config):
         
 if __name__ == "__main__":
     # select satellite model attributes
-    # satellite = "OreSat1"
-    satellite = "SENTINEL"
+    satellite = "OreSat1"
+    # satellite = "SENTINEL"
     
     # select 3D model file
     if satellite == "SENTINEL":
@@ -445,7 +445,7 @@ if __name__ == "__main__":
     # target_height = 1716 # [m]
         
     if control_mode in ("RW_POINTING", "THERMAL_SPIN"): # realistic RW sim setup
-        sim_time = 100
+        sim_time = 500
         dynamics_update_time = .01
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME

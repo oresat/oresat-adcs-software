@@ -79,6 +79,14 @@ class FlightSoftware(sysModel.SysModel):
         be much more heavily weighted in the LQR tuning algorithm than .1
         '''
         
+        ''' 
+        Best tuning ratios found thusfar:
+        max_error = 1
+        max_rate = max_error/5
+        max_input = max_error/1000
+        integrator_gain = max_error/100
+        '''
+        
         max_input = 0.001 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error = 1
         LQR_max_rate = 0.2
@@ -89,9 +97,9 @@ class FlightSoftware(sysModel.SysModel):
             self.K_RW_int = K[:, :6] # extract "PD" portion of gain matrix
             self.K_integrator = K[:, 6:] # extract integrator term
             
-            self.state_integral = 0 # error term
+            self.state_integral = 0 # error integral
             self.rf = 0 # filtered reference for slow ramp of integral term when dealing with step inputs
-            omega_f = 0.0001 # filter rate
+            omega_f = 0.00001 # filter rate
             self.a_filter = np.exp(-omega_f*self.updateTime)
             
             # print(self.a_filter)
