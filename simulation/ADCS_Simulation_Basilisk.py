@@ -74,8 +74,8 @@ def sim_main(config):
     # true orbit parameters for SENTINEL mission
     oe = orbitalMotion.ClassicElements()
     Re = 6371e3 # radius of Earth
-    apoapsis = 550e3
-    periapsis = 536e3
+    apoapsis = 600e3
+    periapsis = 580e3
     ra = Re + apoapsis
     rp = Re + periapsis
     oe.a = 0.5*(rp + ra)
@@ -343,7 +343,7 @@ def sim_main(config):
         print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, sat_q_init))}") # calculate orientation/angle change based on initial attitude
         if (config["sim_time"] >= config["error_time_check"]):
             print(f"Max error after {config["error_time_check"]} seconds:", max(error_true[int(config["error_time_check"] / config["dynamics_update_time"]):])) # this just checks for maximum error after a certain sim time (i.e. if large oscillations occur after steady-state should have been reached)
-        print(f"Final error: {error_true[-1]:.3f} degrees")
+        print(f"Final error: {error_true[-1]:.4f} degrees")
     if config["use_filter"] == True:
         print("\nFilter updates:", fsw.ticks)
         print("Filter corrections:", fsw.tracker_count)
@@ -431,9 +431,10 @@ if __name__ == "__main__":
 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
     # guidance_mode = None
-    guidance_mode = "TARGET" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
+    guidance_mode = "MAX_DRAG" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
     activate_on_overpass = False
-    use_skyfield = False # TURN BACK ON
+    use_skyfield = True
+    
     # KSAT coordinates
     target_lat = 78.231500
     target_lon = 15.411100

@@ -47,7 +47,7 @@ class FlightSoftware(sysModel.SysModel):
         self.error_filter = [] # used for tracking and graphing filter error (estimated error based on filter state estimates)
         self.target_history = [] # only used if self.guidance_mode is not None
         self.time_zero = 0 # initialized in sim main, used to keep track of GPS time
-        self.omega_earth = 7.2921150e-5 # sidereal rotation rate of Earth for propogation calculations. Approximation suffices for the calculations we're doing
+        self.omega_earth = 7.2921150e-5 # sidereal rotation rate of Earth for propogation calculations [rad/s]. Approximation suffices for the calculations we're doing
         self.r_earth = 4.07e7 # approximate earth radius for line-of-sight (LOS) calculations
         self.activate_on_overpass = config["activate_on_overpass"] # determines whether overpass time should be calculated, and an activation time for control systems set
         self.use_integrator = config["use_integrator"] # LQR tuning with or without integrator terms for steady state error corrections
@@ -126,6 +126,7 @@ class FlightSoftware(sysModel.SysModel):
         self.EKF = Multiplicative_Extended_Kalman_Filter(config["P_ST_0"], config["sigma_ST"], config["P_b0"], config["sigma_gyro"], config["sigma_bias"])
         
         self.last_skyfield_frame = None # stores last Skyfield ECI_2_ECEF rotation matrix
+        self.last_frame_time = None # stores last time Skyfield ECI_2_ECEF rotation matrix was updated
         self.skyfield_rate = int(1/self.updateTime) # convert update rate to ticks
         self.ST_rate_check = int(config["ST_update_rate"]/self.updateTime) # how many fsw 'ticks' between star tracker update
         self.tracker_count = 0
@@ -174,10 +175,10 @@ class FlightSoftware(sysModel.SysModel):
             true_ECI_2_ECEF = np.asarray(earthState.J20002Pfix) # sim-internal transform matrix from ECI to ECEF frame
             
         '''
-        Overpass window calculations.
+        Overpass window calculations. Performed once on first FSW loop.
         '''
         
-        if self.ticks == 1 and self.activate_on_overpass: # determine time to overpass and set control system activation time
+        if self.activate_on_overpass and self.ticks == 1: # determine time to overpass and set control system activation time
             time_range = 72 # check this range of flight time [hours]
             max_distance = 2800e3 # 2800 km from target [m]
             r_ECEF = true_ECI_2_ECEF @ r_CN_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
@@ -213,8 +214,7 @@ class FlightSoftware(sysModel.SysModel):
 
         if self.guidance_mode is not None:
             '''
-            These next few lines are simply to emulate GPS ECEF output, and
-            calculate nadir vector in ECEF
+            These next few lines emulate GPS ECEF output and calculate nadir vector in ECEF
             '''
 
             r_ECEF = true_ECI_2_ECEF @ r_CN_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
@@ -226,9 +226,13 @@ class FlightSoftware(sysModel.SysModel):
                     dt = self.time_zero + timedelta(seconds=currentTimeNanos * 1e-9)
                     t = self.skyfield_timescale.from_datetime(dt)
                     ECI_2_ECEF = self.skyfield_EOP.rotation_at(t) # inertial -> ECEF rotation matrix
-                    self.last_skyfield_frame = ECI_2_ECEF
-                else:
+                    self.last_skyfield_frame = ECI_2_ECEF # update for propagation
+                    self.last_frame_time = currentTimeNanos # update for propagation
+                else: # propagate Skyfield rotation matrix. This is done in sim only to save time (Skyfield is very slow, increases sim time by > 25%). Not reflected in flight software.
                     ECI_2_ECEF = self.last_skyfield_frame # if skyfield didn't update this loop, use saved rotation matrix (zero order hold)
+                    theta_earth = self.omega_earth*(currentTimeNanos-self.last_frame_time)*1e-9 # rotation angle of Earth about it's axis since last frame update
+                    R = self.z_rot_DCM(-theta_earth) # create rotation matrix. Negative sign because this matrix maps ECI → ECEF. Earth rotates +theta about +z, but coordinates of an inertial vector expressed in the rotating ECEF frame change by −theta.
+                    ECI_2_ECEF = R @ self.last_skyfield_frame # if skyfield didn't update this loop, use saved rotation matrix (zero order hold)
             else:
                 ECI_2_ECEF = true_ECI_2_ECEF # if not using skyfield, use sim-internal conversion matrix
             
@@ -370,7 +374,9 @@ class FlightSoftware(sysModel.SysModel):
     
     def RW_controller(self, q_error, omega):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector
+        
         if self.use_integrator and (quat.error_angle(q_error) < 1): # LQR controller with integral term
+            # print("INTEGRATOR IN USE") # print so that odd behavior is more easily identified next time. Comment out for intentional use.
             self.rf = self.rf*self.a_filter + (1-self.a_filter)*q_error[:3] # filtered error reference for slow ramp of integral term
             self.state_integral += self.rf * self.updateTime
             return -self.K_RW_int @ x - self.K_integrator @ self.state_integral
@@ -393,4 +399,9 @@ class FlightSoftware(sysModel.SysModel):
             [-bz,   0,  bx],
             [by, -bx,   0]
         ])
+    
+    def z_rot_DCM(self, theta):
+        return np.array([[np.cos(theta), -np.sin(theta), 0],
+                         [np.sin(theta), np.cos(theta), 0],
+                         [0,             0,             1]])
     

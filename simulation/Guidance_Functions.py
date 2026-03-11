@@ -34,7 +34,7 @@ def target_tracking_quat(target_vector, nadir_vector_ECEF, ECI_2_ECEF):
     # xvec = xvec/np.linalg.norm(xvec) # norm
     
 
-    zvec = R_NE @ (target_vector/np.linalg.norm(target_vector)) # norm target vector and convert to ECI
+    zvec = R_NE @ (target_vector/np.linalg.norm(target_vector)) # norm target vector and convert to ECI for primary facing
     
     neg_nadir_ECI = R_NE @ (-nadir_vector_ECEF)
     xvec = neg_nadir_ECI - np.dot(neg_nadir_ECI, zvec) * zvec # remove component parallel to nadir vector from velocity vector to determine "ram-facing-like" vector
@@ -60,7 +60,7 @@ def nadir_quat(nadir_vector_ECEF, v_ECEF, ECI_2_ECEF):
     R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI
     v_ECI = R_NE @ (v_ECEF/np.linalg.norm(v_ECEF)) # norm velocity vector and convert to ECI
     
-    zvec = R_NE @ (nadir_vector_ECEF/np.linalg.norm(nadir_vector_ECEF)) # norm target vector and convert to ECI
+    zvec = R_NE @ (nadir_vector_ECEF/np.linalg.norm(nadir_vector_ECEF)) # norm target vector and convert to ECI for primary facing
     
     xvec = v_ECI - np.dot(v_ECI, zvec) * zvec # remove component parallel to nadir vector from velocity vector to determine "ram-facing-like" vector
     xvec = xvec/np.linalg.norm(xvec) # norm
