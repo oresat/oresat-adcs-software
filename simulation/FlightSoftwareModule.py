@@ -43,7 +43,7 @@ class FlightSoftware(sysModel.SysModel):
         self.output_states = config["print_states"] # output state messages (or not) for debugging
         self.use_filter = config["use_filter"]
         self.guidance_mode = config["guidance_mode"] # True or False, set tracking mode to slowly slew satellite over time to emulate target tracking mode
-        self.crashTheKernel = False # intentional exit to catch errors. Crashes the kernel because of SWIG. 
+        self.crashTheKernel = False # intentional exit to catch errors. Crashes the kernel because of SWIG behavior and difficulty with standard Python error-catching techniques. 
         self.error_filter = [] # used for tracking and graphing filter error (estimated error based on filter state estimates)
         self.target_history = [] # only used if self.guidance_mode is not None
         self.time_zero = 0 # initialized in sim main, used to keep track of GPS time
@@ -92,7 +92,7 @@ class FlightSoftware(sysModel.SysModel):
         LQR_max_rate = 0.2
         self.K_RW = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
         if self.use_integrator:
-            integrator_gain = .01
+            integrator_gain = 1
             K = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input, self.use_integrator, integrator_gain)
             self.K_RW_int = K[:, :6] # extract "PD" portion of gain matrix
             self.K_integrator = K[:, 6:] # extract integrator term
@@ -101,6 +101,11 @@ class FlightSoftware(sysModel.SysModel):
             self.rf = np.zeros(3) # filtered reference for slow ramp of integral term when dealing with step inputs
             omega_f = 0.00001 # filter rate
             self.a_filter = np.exp(-omega_f*self.updateTime)
+            
+            print(self.K_RW)
+            print(K)
+            import sys
+            sys.exit()
 
         max_input_mag = 3 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error_mag = 0.5
@@ -373,21 +378,28 @@ class FlightSoftware(sysModel.SysModel):
                 self.torque_vals[i] = max(-self.maxTorque, min(wheel_torque[i], self.maxTorque))
     
     def RW_controller(self, q_error, omega):
-        x = np.concatenate((q_error[:3], omega)) # assemble state vector
-        
+        x = np.concatenate((q_error[:3], omega)) # assemble state vector            
+
         if self.use_integrator and (quat.error_angle(q_error) < 1): # LQR controller with integral term
             # print("INTEGRATOR IN USE") # print so that odd behavior is more easily identified next time. Comment out for intentional use.
             self.rf = self.rf*self.a_filter + (1-self.a_filter)*q_error[:3] # filtered error reference for slow ramp of integral term
             self.state_integral += self.rf * self.updateTime
-            return -self.K_RW_int @ x - self.K_integrator @ self.state_integral
+            return -self.K_RW_int @ x #- self.K_integrator @ self.state_integral
         else:
             self.rf = 0
             return -self.K_RW @ x # invert sign for control
-    
-    def RW_int_controller(self, q_error, omega): # LQR controller with integral term
-        x = np.concatenate((q_error[:3], omega)) # assemble state vector
-        return -self.K_RW @ x # invert sign for control
         
+    # def RW_controller(self, q_error, omega):
+    #     x = np.concatenate((q_error[:3], omega)) # assemble state vector
+        
+    #     int_angle = 2
+    #     if quat.error_angle(q_error) < int_angle:
+    #         self.rf = self.rf*self.a_filter + (1-self.a_filter)*q_error[:3] # filtered error reference for slow ramp of integral term
+    #         self.state_integral += self.rf * self.updateTime
+        
+    #     alpha = self.compute_alpha(quat.error_angle(q_error), 0.5, int_angle)
+    #     return -self.K_RW @ x - alpha * (self.K_integrator @ self.state_integral)
+    
     def mag_LQR_controller(self, q_error, omega):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector
         return -self.K_MAG @ x # invert sign for control
@@ -402,6 +414,14 @@ class FlightSoftware(sysModel.SysModel):
     
     def z_rot_DCM(self, theta):
         return np.array([[np.cos(theta), -np.sin(theta), 0],
-                         [np.sin(theta), np.cos(theta), 0],
-                         [0,             0,             1]])
+                         [np.sin(theta),  np.cos(theta), 0],
+                         [0,              0,             1]])
     
+    def compute_alpha(self, angle, a_on=0.5, a_off=2.0):
+        if angle <= a_on:
+            return 1.0
+        elif angle >= a_off:
+            return 0.0
+        else:
+            t = (a_off - angle) / (a_off - a_on)
+            return t * t * (3.0 - 2.0 * t)
