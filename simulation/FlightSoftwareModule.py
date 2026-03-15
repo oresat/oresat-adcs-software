@@ -102,10 +102,10 @@ class FlightSoftware(sysModel.SysModel):
             omega_f = 0.00001 # filter rate
             self.a_filter = np.exp(-omega_f*self.updateTime)
             
-            print(self.K_RW)
-            print(K)
-            import sys
-            sys.exit()
+            # print(self.K_RW)
+            # print(K)
+            # import sys
+            # sys.exit()
 
         max_input_mag = 3 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error_mag = 0.5
@@ -189,6 +189,12 @@ class FlightSoftware(sysModel.SysModel):
             r_ECEF = true_ECI_2_ECEF @ r_CN_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
             v_ECEF = true_ECI_2_ECEF @ v_CN_N # Spacecraft orbital velocity vector. Convert to ECEF to emulate GPS data.
             start_time, end_time = guid.time_to_overpass(self, currentTimeNanos, time_range, max_distance, r_ECEF, v_ECEF, self.ECEF_target)
+            if start_time == -1:
+                print("No overpass window found. Exiting sim...")
+                exit()
+            elif (start_time == -2):
+                print("Sufficiently large overpass window not found. Exiting sim...")
+                exit()
             self.controllerStartTime = start_time
             self.controllerEndTime = end_time
         
@@ -379,7 +385,7 @@ class FlightSoftware(sysModel.SysModel):
     
     def RW_controller(self, q_error, omega):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector            
-
+        return -self.K_RW @ x
         if self.use_integrator and (quat.error_angle(q_error) < 1): # LQR controller with integral term
             # print("INTEGRATOR IN USE") # print so that odd behavior is more easily identified next time. Comment out for intentional use.
             self.rf = self.rf*self.a_filter + (1-self.a_filter)*q_error[:3] # filtered error reference for slow ramp of integral term

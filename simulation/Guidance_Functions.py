@@ -211,6 +211,7 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, 
     
     time_offset = 0 # window search offset
     t_end = time_range_hours*3600 # convert hours to seconds
+    found_any_window = False # used to track second error type where overpass windows are found, but are not long enough
     while time_offset < t_end: # scan up until maximum time for a window which satisifies minimum time criteria
         
         # first coarse scan to find window
@@ -218,29 +219,33 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, 
         for dt in range(time_offset, t_end, large_dt): # check all future positions in propagation intervals
             if distance_to_target_eci(dt) <= max_distance:
                 overpass_time = dt # we are passing over within range at this time
+                found_any_window = True # used to log 
                 break
-        
-        if overpass_time is None: # no overpass found within window
-            print(f"\n\nERROR: Overpass window not found in specified time window of {time_range_hours} hours!")
-            print(f"Check if inclination allows for overpass within {max_distance/1e3} kilometers\n")
-            return 0, None
+        if overpass_time is None: # no overpass found within total time window, exit while loop
+            break
         
         # second scan with finer interval to narrow down window-entry time
         lower_bound = max(overpass_time - large_dt, time_offset) # wind clock back by one time interval in order to scan in finer intervals
         upper_bound = overpass_time + 1 # include the final time step with +1
         
+        window_start = None
         for dt in range(lower_bound, upper_bound, small_dt): # check all future positions in finer propagation intervals
             if distance_to_target_eci(dt) <= max_distance: 
                 window_start = dt # save time at which SC is in range
                 print(f"\nOverpass window entry predicted to occur in {window_start} seconds")
                 break
+        if window_start is None: # Guard against fine search not finding an overpass window (shouldn't be possible, but safety critical error)
+            break
         
         # third step: find window exit time
+        window_exit = None
         for dt in range(window_start, window_start+maximum_window, exit_check_increment): # check all future positions in propagation intervals
             if distance_to_target_eci(dt) > max_distance:
                 window_exit = dt # window exit at this time
                 print(f"Overpass window exit predicted to occur in {window_exit} seconds")
                 break
+        if window_exit is None: # Guard against exit not being found (could happen if algorithm is poorly tuned)
+            window_exit = min(window_start + maximum_window, t_end)
 
         if (window_exit - window_start) >= min_window_time: # if an acceptable window has been found, return value
             controller_start = max(0, window_start - lead_time) # ensure controller can't see negative activation time (would work anyways in current implementatino, but this avoids future bugs)
@@ -250,6 +255,11 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, 
         # Too short: advance offset and try again
         time_offset = window_exit + skip_after_window
     
+    if not found_any_window:
+        print(f"\n\nERROR: Overpass window not found in specified time window of {time_range_hours} hours!")
+        print(f"Check if inclination allows for overpass within {max_distance/1e3} kilometers\n")
+        return -1, None
+    
     print(f"\n\nERROR: Sufficiently large overpass window not found in specified time window of {time_range_hours} hours!")
     print(f"Check if inclination allows for overpass within {max_distance/1e3} kilometers\n")
-    return 0, None
+    return -2, None
