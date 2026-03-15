@@ -385,7 +385,7 @@ class FlightSoftware(sysModel.SysModel):
     
     def RW_controller(self, q_error, omega):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector            
-        return -self.K_RW @ x
+
         if self.use_integrator and (quat.error_angle(q_error) < 1): # LQR controller with integral term
             # print("INTEGRATOR IN USE") # print so that odd behavior is more easily identified next time. Comment out for intentional use.
             self.rf = self.rf*self.a_filter + (1-self.a_filter)*q_error[:3] # filtered error reference for slow ramp of integral term
