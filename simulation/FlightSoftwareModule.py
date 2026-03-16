@@ -175,7 +175,7 @@ class FlightSoftware(sysModel.SysModel):
         '''
         
         if self.activate_on_overpass and self.ticks == 1: # determine time to overpass and set control system activation time
-            time_range = 72 # check this range of flight time [hours]
+            time_range = 24 # check this range of flight time [hours] Past 24 hours, kepler propagation isn't very reliable
             max_distance = 2800e3 # 2800 km from target [m]
             r_ECEF = true_ECI_2_ECEF @ r_CN_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
             v_ECEF = true_ECI_2_ECEF @ v_CN_N # Spacecraft orbital velocity vector. Convert to ECEF to emulate GPS data.
