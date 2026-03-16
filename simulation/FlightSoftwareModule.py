@@ -92,6 +92,7 @@ class FlightSoftware(sysModel.SysModel):
         LQR_max_rate = 0.2
         self.K_RW = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
         if self.use_variable_gain:
+            self.gain_mode = 0 # start with "low" gain
             max_input = 0.01 # QUALITATIVE value for max torque used by LQR tuning ONLY
             LQR_max_error = .05
             LQR_max_rate = 0.2
