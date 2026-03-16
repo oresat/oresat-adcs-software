@@ -427,12 +427,12 @@ if __name__ == "__main__":
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "SC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
     control_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
-    use_integrator = True # LQR tuning with or without integrator terms for steady state error corrections
+    use_variable_gain = True # LQR tuning with or without integrator terms for steady state error corrections
 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
     # guidance_mode = None
     guidance_mode = "MAX_DRAG" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
-    activate_on_overpass = True
+    activate_on_overpass = False
     use_skyfield = True
     
     # KSAT coordinates
@@ -483,6 +483,6 @@ if __name__ == "__main__":
               "save_pdf":save_pdf, "save_png":save_png, "plot_basepath":plot_basepath, "use_filter":use_filter, "sigma_gyro":sigma_gyro, "sigma_bias":sigma_bias, "P_b0":P_b0,
               "sigma_ST":sigma_ST, "P_ST_0":P_ST_0, "ST_update_rate":ST_update_rate, "error_time_check":error_time_check, "guidance_mode":guidance_mode, 
               "target_lat":target_lat, "target_lon":target_lon, "target_height":target_height, "sat_3D_file":sat_3D_file, "viz_scaling":viz_scaling, "use_skyfield":use_skyfield,
-              "activate_on_overpass":activate_on_overpass, "use_integrator":use_integrator}
+              "activate_on_overpass":activate_on_overpass, "use_variable_gain":use_variable_gain}
     
     sim_main(config)

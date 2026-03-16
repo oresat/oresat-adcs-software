@@ -50,7 +50,7 @@ class FlightSoftware(sysModel.SysModel):
         self.omega_earth = 7.2921150e-5 # sidereal rotation rate of Earth for propogation calculations [rad/s]. Approximation suffices for the calculations we're doing
         self.r_earth = 4.07e7 # approximate earth radius for line-of-sight (LOS) calculations
         self.activate_on_overpass = config["activate_on_overpass"] # determines whether overpass time should be calculated, and an activation time for control systems set
-        self.use_integrator = config["use_integrator"] # LQR tuning with or without integrator terms for steady state error corrections
+        self.use_variable_gain = config["use_variable_gain"] # LQR tuning with or without integrator terms for steady state error corrections
         
         self.q_target = np.array([0,0,0,1]) # attribute initialization, set to real value in sim main
         omega_target_rpm = np.array([0.0, 0.0, 0.0]) # [RPM]
@@ -91,22 +91,12 @@ class FlightSoftware(sysModel.SysModel):
         LQR_max_error = 1
         LQR_max_rate = 0.2
         self.K_RW = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
-        if self.use_integrator:
-            integrator_gain = 1
-            K = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input, self.use_integrator, integrator_gain)
-            self.K_RW_int = K[:, :6] # extract "PD" portion of gain matrix
-            self.K_integrator = K[:, 6:] # extract integrator term
+        if self.use_variable_gain:
+            max_input = 0.01 # QUALITATIVE value for max torque used by LQR tuning ONLY
+            LQR_max_error = .05
+            LQR_max_rate = 0.2
+            self.K_RW_fine = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input) # define a fine pointing controller with aggressive error gains
             
-            self.state_integral = np.zeros(3) # error integral
-            self.rf = np.zeros(3) # filtered reference for slow ramp of integral term when dealing with step inputs
-            omega_f = 0.00001 # filter rate
-            self.a_filter = np.exp(-omega_f*self.updateTime)
-            
-            # print(self.K_RW)
-            # print(K)
-            # import sys
-            # sys.exit()
-
         max_input_mag = 3 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error_mag = 0.5
         LQR_max_rate_mag = 0.0003
@@ -296,7 +286,7 @@ class FlightSoftware(sysModel.SysModel):
         currentTime = currentTimeNanos * 1e-9
         if (currentTime >= self.controllerStartTime and (self.controllerEndTime is None or currentTime < self.controllerEndTime)): # turn controller on at specified time
             if self.control_mode == "RW_POINTING":
-                desired_torque = self.RW_controller(q_error, omega) # compute desired 3-axis torque from controller (standard LQR controller)
+                desired_torque = self.RW_controller(q_error, omega, currentTimeNanos*1e-9) # compute desired 3-axis torque from controller (standard LQR controller)
                 desired_torque += tau_ff # feedforward torque, only non-zero for tracking mode
                 wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
@@ -383,16 +373,24 @@ class FlightSoftware(sysModel.SysModel):
             else:  # Otherwise clamp to max torque bounds
                 self.torque_vals[i] = max(-self.maxTorque, min(wheel_torque[i], self.maxTorque))
     
-    def RW_controller(self, q_error, omega):
+    def RW_controller(self, q_error, omega, currentTimeSecs):
         x = np.concatenate((q_error[:3], omega)) # assemble state vector            
 
-        if self.use_integrator and (quat.error_angle(q_error) < 1): # LQR controller with integral term
-            # print("INTEGRATOR IN USE") # print so that odd behavior is more easily identified next time. Comment out for intentional use.
-            self.rf = self.rf*self.a_filter + (1-self.a_filter)*q_error[:3] # filtered error reference for slow ramp of integral term
-            self.state_integral += self.rf * self.updateTime
-            return -self.K_RW_int @ x #- self.K_integrator @ self.state_integral
+        if self.use_variable_gain and (quat.error_angle(q_error) < 1): # LQR controller with integral term
+            transient_time = 30 # seconds
+            if self.gain_mode == 0:
+                self.transient_start = currentTimeSecs
+                self.gain_mode = 1 # switch to transient mode
+                return - self.K_RW @ x # firt step of transient mode returns the same as standard controller
+            elif self.gain_mode == 1:
+                if (self.transient_start >= self.transient_start+transient_time):
+                    self.gain_mode = 2 # switch to full fine-pointing mode
+                gain_switch_time = currentTimeSecs - self.transient_start
+                return (-self.K_RW_fine @ x)*gain_switch_time/transient_time - (self.K_RW @ x)*(1-gain_switch_time/transient_time) # transient mode
+            else:
+                return -self.K_RW_fine @ x # - self.K_integrator @ self.state_integral
         else:
-            self.rf = 0
+            self.gain_mode = 0 # standard gains
             return -self.K_RW @ x # invert sign for control
         
     # def RW_controller(self, q_error, omega):
