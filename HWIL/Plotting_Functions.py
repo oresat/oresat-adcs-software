@@ -44,11 +44,17 @@ def plot_rw_speeds(timeData, dataOmegaRW, numRW, config, errorArray=None, filter
     
     
     if config["save_pdf"] == True:
-        pdf_path = config["plot_basepath"] / "RW_graph.pdf"
+        if config["plot_basepath"] is not None:
+            pdf_path = config["plot_basepath"] / "RW_graph.pdf" 
+        else:
+            pdf_path = "RW_graph.pdf" 
         plt.savefig(pdf_path, dpi=300)
         print(f"Plot saved as {pdf_path}")
     if config["save_png"] == True:
-        png_path = config["plot_basepath"] / "RW_graph.png"
+        if config["plot_basepath"] is not None:
+            png_path = config["plot_basepath"] / "RW_graph.png" 
+        else:
+            png_path = "RW_graph.png" 
         plt.savefig(png_path, dpi=600)
         print(f"Plot saved as {png_path}")
     
@@ -81,11 +87,17 @@ def plot_magfield(times, TAMvalues, orbital_period, config, time_axis = "orbits"
     plt.title("3-Axis Magnetometer Measurements")
     
     if config["save_pdf"] == True:
-        pdf_path = config["plot_basepath"] / "TAM.pdf"
+        if config["plot_basepath"] is not None:
+            pdf_path = config["plot_basepath"] / "TAM.pdf" 
+        else:
+            pdf_path = "TAM.pdf" 
         plt.savefig(pdf_path, dpi=300)
         print(f"Plot saved as {pdf_path}")
     if config["save_png"] == True:
-        png_path = config["plot_basepath"] / "TAM.png"
+        if config["plot_basepath"] is not None:
+            png_path = config["plot_basepath"] / "TAM.png" 
+        else:
+            png_path = "TAM.png" 
         plt.savefig(png_path, dpi=600)
         print(f"Plot saved as {png_path}")
     
@@ -129,11 +141,17 @@ def plot_imu(times, imuValues, orbital_period, config, time_axis = "orbits", err
         plt.title("3-Axis Satellite Body Rates")
         
     if config["save_pdf"] == True:
-        pdf_path = config["plot_basepath"] / "IMU.pdf"
+        if config["plot_basepath"] is not None:
+            pdf_path = config["plot_basepath"] / "IMU.pdf" 
+        else:
+            pdf_path = "IMU.pdf" 
         plt.savefig(pdf_path, dpi=300)
         print(f"Plot saved as {pdf_path}")
     if config["save_png"] == True:
-        png_path = config["plot_basepath"] / "IMU.png"
+        if config["plot_basepath"] is not None:
+            png_path = config["plot_basepath"] / "IMU.png" 
+        else:
+            png_path = "IMU.png" 
         plt.savefig(png_path, dpi=600)
         print(f"Plot saved as {png_path}")
         

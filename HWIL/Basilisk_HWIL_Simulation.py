@@ -1,12 +1,12 @@
 import numpy as np
 import time
-from Basilisk.simulation import spacecraft, starTracker, imuSensor, reactionWheelStateEffector, magneticFieldWMM, magnetometer, MtbEffector # import simulation related support
+from Basilisk.simulation import spacecraft, starTracker, imuSensor, reactionWheelStateEffector, magneticFieldWMM, magnetometer, MtbEffector, simSynch # import simulation related support
 from Basilisk.utilities import SimulationBaseClass, macros, vizSupport, simIncludeGravBody, orbitalMotion, simIncludeRW, unitTestSupport # import general simulation support files
 from Basilisk.architecture import messaging
 from Basilisk import __path__
 from Basilisk.utilities import RigidBodyKinematics as rbk
 from Plotting_Functions import plot_rw_speeds, plot_magfield, plot_imu
-from FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
+from HWIL_FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
 import Quaternions as quat
 from pathlib import Path
 from sys import exit
@@ -38,11 +38,11 @@ def sim_main(config):
     # create spacecraft object
     scObject = spacecraft.Spacecraft() # initialize object
     scObject.ModelTag = config["satellite"] # name object
-    scObject.hub.mHub = mass  # [kg], not sure this is required given inertial space, but should be realistic
-    scObject.hub.IHubPntBc_B = J # assign OreSat inertia matrix
-    initial_MRP = (np.array(init_rot_axis)/np.linalg.norm(np.array(init_rot_axis))) * np.tan(init_rot_angle*macros.D2R/4.0) # MRP set to customize initial inertial attitude
+    scObject.hub.mHub = config["mass"]  # [kg], not sure this is required given inertial space, but should be realistic
+    scObject.hub.IHubPntBc_B = config["J"] # assign OreSat inertia matrix
+    initial_MRP = (np.array(config["init_rot_axis"])/np.linalg.norm(np.array(config["init_rot_axis"]))) * np.tan(config["init_rot_angle"]*macros.D2R/4.0) # MRP set to customize initial inertial attitude
     scObject.hub.sigma_BNInit = initial_MRP
-    scObject.hub.omega_BN_BInit = omega_init_rad
+    scObject.hub.omega_BN_BInit = config["omega_init_rad"]
     
     ########################## ORBITAL ENVIRONMENT ############################
     
@@ -241,22 +241,19 @@ def sim_main(config):
     mtbEff.mtbCmdInMsg.subscribeTo(fsw.magTorqueOutMsg)  # subscribe magnetorquer command input to flight software control output
     
     # determine initial pointing vector for relative target calculations
-    sat_q_init = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle) # account for any rotations of the satellite it self at sim initialization
-    if fsw.pointing_reference == "ST":
-        q_init = quat.quat_mult(quat.axis_angle_to_quaternion([0,1,0], 90), sat_q_init)
-    elif fsw.pointing_reference == "SC":
-        q_init = sat_q_init
-    elif fsw.pointing_reference == "CFC":
-        q_init = quat.quat_mult(quat.axis_angle_to_quaternion([0,1,0], 180), sat_q_init)
-    else:
-        print("ERROR: Invalid pointing reference selected!")
-        exit()
+    # sat_q_init = quat.axis_angle_to_quaternion(config["init_rot_axis"], config["init_rot_angle"]) # account for any rotations of the satellite it self at sim initialization
+    # if fsw.pointing_reference == "ST":
+    #     q_init = quat.quat_mult(quat.axis_angle_to_quaternion([0,1,0], 90), sat_q_init)
+    # elif fsw.pointing_reference == "SC":
+    #     q_init = sat_q_init
+    # elif fsw.pointing_reference == "CFC":
+    #     q_init = quat.quat_mult(quat.axis_angle_to_quaternion([0,1,0], 180), sat_q_init)
+    # else:
+    #     print("ERROR: Invalid pointing reference selected!")
+    #     exit()
 
-    q_rot = quat.axis_angle_to_quaternion(sat_rot_axis, sat_rot_angle)
-    fsw.update_target(quat.quat_mult(q_rot, q_init))
-    
-    # print(f"\nSatellite view device is \"{fsw.pointing}\" with initial reference: {q_init}")
-    # print(f"Satellite initial pointing target: {fsw.q_target}\n")
+    # q_rot = quat.axis_angle_to_quaternion(config["sat_rot_axis"], config["sat_rot_angle"]) 
+    # fsw.update_target(quat.quat_mult(q_rot, q_init))
     
     ############################## SIMULATION #################################
     # log reaction wheel behavior
@@ -267,16 +264,24 @@ def sim_main(config):
     stateRec = scObject.scStateOutMsg.recorder(macros.sec2nano(dynamics_update_time)) # create dynamics recorder
     sim.AddModelToTask("dynamicsTask", stateRec) # add recorder to dynamics simulation
     
+    '''
+    Vizard activation with livestreaming
+    '''
+    clockSync = simSynch.ClockSynch()
+    clockSync.accelFactor = sim_accel_factor
+    sim.AddModelToTask("dynamicsTask", clockSync)
+    
     basePath = r"C:\Users\benne\OneDrive\Master's Thesis\Code\Viz_Archive"
-    if viz_filename:
-        fileName = basePath + rf"\{viz_filename}"
+    custom_filename = config["viz_filename"]
+    if custom_filename:
+        fileName = basePath + rf"\{custom_filename}"
     else:
         fileName = __file__
     
     current_dir = Path(__file__).parent.resolve() # find current working directory such that any system running code directly from git can use the simplified model
     model_file_path = current_dir / config["sat_3D_file"]
 
-    viz = vizSupport.enableUnityVisualization(sim, "dynamicsTask", scObject, saveFile=fileName, liveStream=False, # let Vizard visualize data
+    viz = vizSupport.enableUnityVisualization(sim, "dynamicsTask", scObject, saveFile=fileName, liveStream=live_visualization, # let Vizard visualize data
                                               rwEffectorList=rwStateEffector) # add reaction wheel list to visualization
     vizSupport.setActuatorGuiSetting(viz, viewRWPanel=True, viewRWHUD=True)
     s_factor = config["viz_scaling"] # 3D-model scaling factor
@@ -284,6 +289,7 @@ def sim_main(config):
                                  modelPath=str(model_file_path), # Vizard expects filepath as a string
                                  scale=[-s_factor, s_factor, s_factor], # scale model and mirror on x-axis (don't know why the model is otherwise improperly mirrored)
                                  rotation=[0,np.pi/2,np.pi/2]) # rotate to properly align body axes with simulation axes
+    
     
     # simulate:
     sim.InitializeSimulation() # initialize simulation
@@ -338,15 +344,15 @@ def sim_main(config):
     plot_imu(plot_times, imuValues, orbital_period, config, time_axis)
     
     print(f"\nSimulation completed in {end-start:.2f} seconds\nSimulated time of flight: {config["sim_time"]} seconds")
-    if config["control_mode"] == "RW_POINTING" or config["control_mode"] == "MTB_POINTING":
-        print(f"\nFinal target was: {fsw.q_target}")
-        print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, sat_q_init))}") # calculate orientation/angle change based on initial attitude
-        if (config["sim_time"] >= config["error_time_check"]):
-            print(f"Max error after {config["error_time_check"]} seconds:", max(error_true[int(config["error_time_check"] / config["dynamics_update_time"]):])) # this just checks for maximum error after a certain sim time (i.e. if large oscillations occur after steady-state should have been reached)
-        print(f"Final error: {error_true[-1]:.4f} degrees")
-    if config["use_filter"] == True:
-        print("\nFilter updates:", fsw.ticks)
-        print("Filter corrections:", fsw.tracker_count)
+    # if config["control_mode"] == "RW_POINTING" or config["control_mode"] == "MTB_POINTING":
+    #     print(f"\nFinal target was: {fsw.q_target}")
+        # print(f"Angle from origin: {quat.error_angle(quat.quat_error(fsw.q_target, sat_q_init))}") # calculate orientation/angle change based on initial attitude
+        # if (config["sim_time"] >= config["error_time_check"]):
+        #     print(f"Max error after {config["error_time_check"]} seconds:", max(error_true[int(config["error_time_check"] / config["dynamics_update_time"]):])) # this just checks for maximum error after a certain sim time (i.e. if large oscillations occur after steady-state should have been reached)
+        # print(f"Final error: {error_true[-1]:.4f} degrees")
+    # if config["use_filter"] == True:
+        # print("\nFilter updates:", fsw.ticks)
+        # print("Filter corrections:", fsw.tracker_count)
         
 if __name__ == "__main__":
     # select satellite model attributes
@@ -388,7 +394,9 @@ if __name__ == "__main__":
                   [Jzx, Jzy, Jzz]])
     
     mass = 3.05353136 # satellite mass [kg]
-                  
+    
+    live_visualization = False
+    sim_accel_factor = 50 # how much faster sim runs than real time
     viz_filename = None # sim visualization savename
     print_states = False # print states in flight software
     save_pdf = True # save plots as PDF's to target folder
@@ -409,7 +417,7 @@ if __name__ == "__main__":
     
     sigma_ST = 2.4e-6 # [rad] measurement noise (instantaneous orientation error)
     P_ST_0 = 8.7e-7 # [rad^2] initial star tracker attitude uncertainty
-    ST_update_rate = 1.1 # defined in seconds
+    ST_update_rate = 1 # defined in seconds
     
     # initial satellite states
     init_rot_axis = [1, 0, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
@@ -447,8 +455,8 @@ if __name__ == "__main__":
         
     if control_mode in ("RW_POINTING", "THERMAL_SPIN"): # realistic RW sim setup
         sim_time = 100
-        dynamics_update_time = .01
-        fsw_update_time = .1
+        dynamics_update_time = 0.01
+        fsw_update_time = 0.1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
             exit()
@@ -476,6 +484,7 @@ if __name__ == "__main__":
     print(f"View Device: {pointing_reference}")
     print(f"Guidance Mode: {guidance_mode}")
     print(f"Activate On Overpass Mode: {activate_on_overpass}\n")
+    print(f"Live Vizard Visualization: {live_visualization}\n")
     
     config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,
               "satellite":satellite, "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "control_mode":control_mode,

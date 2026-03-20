@@ -42,7 +42,7 @@ def sim_main(config):
     scObject.hub.IHubPntBc_B = J # assign OreSat inertia matrix
     initial_MRP = (np.array(init_rot_axis)/np.linalg.norm(np.array(init_rot_axis))) * np.tan(init_rot_angle*macros.D2R/4.0) # MRP set to customize initial inertial attitude
     scObject.hub.sigma_BNInit = initial_MRP
-    scObject.hub.omega_BN_BInit = omega_init_rad
+    scObject.hub.omega_BN_BInit = config["omega_init_rad"]
     
     ########################## ORBITAL ENVIRONMENT ############################
     

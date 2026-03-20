@@ -4,7 +4,6 @@ import numpy as np
 from skyfield.api import load
 from skyfield.framelib import itrs
 from datetime import timedelta, datetime, timezone
-from sys import exit
 
 import Quaternions as quat
 
@@ -31,6 +30,8 @@ class FlightSoftware(sysModel.SysModel):
         self.magTorquePayload = messaging.MTBCmdMsgPayload()
         self.mag_torques = np.zeros(36) # initialize MTB torque input array
         
+        self.rwInertia = config["rw_Inertia"] # reaction wheel inertia (scalar)
+        self.updateTime = config["fsw_update_time"]
         self.use_filter = config["use_filter"]
         self.guidance_mode = config["guidance_mode"] # True or False, set tracking mode to slowly slew satellite over time to emulate target tracking mode
         self.error_filter = [] # used for tracking and graphing filter error (estimated error based on filter state estimates)
@@ -78,9 +79,6 @@ class FlightSoftware(sysModel.SysModel):
         # print(f"({self.ModelTag}) Reset called at {currentTimeNanos * macros.1e-9:.2f} s") # commented out to remove unnecessary printing every simulation
     
     def UpdateState(self, currentTimeNanos):
-        if self.crashTheKernel == True: # This method allows error message printing  *jank intensifies*
-            exit()
-            
         self.ticks += 1
         
         '''
@@ -122,10 +120,13 @@ class FlightSoftware(sysModel.SysModel):
         self.magMsg = self.magMsgIn()
         B = np.asarray(self.magMsg.tam_S)
 
-        self.starTrackerMsg = self.starTrackerMsgIn()
-        q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
-        q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
-
+        if self.ticks % self.ST_rate_check == 0: # emulate slower star tracker update rate
+            self.starTrackerMsg = self.starTrackerMsgIn()
+            q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
+            q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
+        else:
+            q_star_tracker = None
+        
         scState = self.scStateIn()
         r_CN_N = scState.r_CN_N # spacecraft inertial vector (position from COM) from origin (Earth) in ECI frame.
         v_CN_N = scState.v_CN_N # spacecraft velocity vector (position from COM) from origin (Earth) in ECI frame.
@@ -150,7 +151,6 @@ class FlightSoftware(sysModel.SysModel):
             self.rwMotorTorqueOutMsg.write(self.rwMotorTorquePayload, currentTimeNanos, self.moduleID)
         elif np.any(MTB_torques):
             self.command_MTB_torques(MTB_torques, currentTimeNanos)
-            
             
         if not np.any(RW_torques): # if controller should be off, simulate wheel shutdown by sending required torques to null wheelspeeds. This is only required in simulation, as wheel cogging will have the same affect uncommanded for the real satellite.
             # Zero wheel torques    
