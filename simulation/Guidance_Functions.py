@@ -3,6 +3,27 @@ import Quaternions as quat
 from Basilisk.utilities import macros
 from skyfield.framelib import itrs
 
+# class GroundStation:
+#     def __init__(self, name, lat, lon, height):
+#         self.name = name
+#         self.lat = lat
+#         self.lon = lon
+#         self.height = height
+#         self.ECEF = GPS_to_ECEF(lat, lon, height) # convert GPS input to ECEF coordinates
+
+# station_list = [
+#     GroundStation("KSAT", 78.231500, 15.411100, 488),
+#     GroundStation("ESI", 39.608251, -104.895788, 1716),
+#     GroundStation("Deadhorse, AK", 70.201, -148.46, 0),
+#     GroundStation("Tampere", 61.497, 23.761, 0),
+#     GroundStation("Kaspichan", 43.31, 27.15, 0),
+#     GroundStation("Azores (Santa Maria)", 36.973, -25.17, 0),
+#     GroundStation("Columbus, OH", 39.961, -82.999, 0),
+#     GroundStation("Jeju", 33.50, 126.52, 0),
+#     GroundStation("Pretoria", -25.86, 28.45, 0),
+#     GroundStation("Pitea", 65.34, 21.42, 0),
+# ]
+
 def GPS_to_ECEF(lat, lon, height):
     # constants used for GPS-to-ECEF conversion
     a = 6378137.0 # WGS-84 constant: a = semi-major axis
@@ -17,6 +38,27 @@ def GPS_to_ECEF(lat, lon, height):
     z = (N*(1-e2)+height)*sin_lat
 
     return np.asarray([x, y, z])
+
+class GroundStation:
+    def __init__(self, name, lat, lon, height):
+        self.name = name
+        self.lat = lat
+        self.lon = lon
+        self.height = height
+        self.ECEF = GPS_to_ECEF(lat, lon, height) # convert GPS input to ECEF coordinates
+
+station_list = [
+    # GroundStation("ESI", 39.608251, -104.895788, 1716),
+    GroundStation("KSAT_Svalbard", 78.231500, 15.411100, 488), # ASK IF KSAT IS STILL VALID
+    GroundStation("Deadhorse, AK", 70.201, -148.46, 0),
+    GroundStation("Tampere", 61.497, 23.761, 0),
+    GroundStation("Kaspichan", 43.31, 27.15, 0),
+    GroundStation("Azores (Santa Maria)", 36.973, -25.17, 0),
+    GroundStation("Columbus, OH", 39.961, -82.999, 0),
+    GroundStation("Jeju", 33.50, 126.52, 0),
+    GroundStation("Pretoria", -25.86, 28.45, 0),
+    GroundStation("Pitea", 65.34, 21.42, 0),
+]
 
 def target_tracking_quat(target_vector, nadir_vector_ECEF, ECI_2_ECEF):
     '''
@@ -170,7 +212,7 @@ def R3(theta): # used for Earth rotation calculations. Not a perfect model for E
                      [s,  c, 0.0],
                      [0.0, 0.0, 1.0]])
 
-def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, r_ECEF, v_ECEF, target_ECEF):
+def time_to_overpass(fsw_obj, time_range_hours, max_distance, r_ECEF, v_ECEF, target_ECEF):
     '''
     A function to determine how long the spacecraft can enter low-power mode
     before it will be within range of a set of GPS coordinates for fine-pointing
@@ -189,7 +231,7 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, 
     maximum_window = 3600 # large value to ensure exit boundary of overpass window is found
     exit_check_increment = 5 # search for window exit in increments
     lead_time = 100 # lead time before entering window to engage control system. Allows satellite to reorient in time.
-    min_window_time = 300 # minimum overpass time
+    min_window_time = 305 # minimum overpass time
     skip_after_window = 2000 # time to skip after window with insufficient overpass time before searching again
     
     time = fsw_obj.skyfield_timescale.utc(fsw_obj.time_zero) 
@@ -251,6 +293,8 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, 
             controller_start = max(0, window_start - lead_time) # ensure controller can't see negative activation time (would work anyways in current implementatino, but this avoids future bugs)
             controller_end = window_exit
             return controller_start, controller_end
+        else:
+            print("Insufficient overpass duration")
         
         # Too short: advance offset and try again
         time_offset = window_exit + skip_after_window
@@ -263,3 +307,27 @@ def time_to_overpass(fsw_obj, currentTimeNanos, time_range_hours, max_distance, 
     print(f"\n\nERROR: Sufficiently large overpass window not found in specified time window of {time_range_hours} hours!")
     print(f"Check if inclination allows for overpass within {max_distance/1e3} kilometers\n")
     return -2, None
+
+def find_nearest_ground_station(fsw_obj, time_range_hours, max_distance, r_ECEF, v_ECEF):
+    station_found = False # keep track of whether or not we find any of the listed stations in range
+    chosen_station = None # which station we want to use
+    next_overpass = None # how long until closest found overpass [seconds]
+    for station in station_list:
+        print(f"\nScanning {station.name}")
+        start, end = time_to_overpass(fsw_obj, time_range_hours, max_distance, r_ECEF, v_ECEF, station.ECEF)
+        if start == -1 or start == -2:
+            start == None # deal with error messages
+        if (start is not None) and ((next_overpass is None) or (start<next_overpass[0])):
+            station_found = station
+            chosen_station = station
+            next_overpass = [start, end]
+    
+    if station_found:
+        print(f"\nNext overpass opportunity is station {chosen_station.name}")
+        print(f"Overpass window entry predicted to occur in {next_overpass[0]} seconds")
+        print(f"Overpass window exit predicted to occur in {next_overpass[1]} seconds\n")
+        return next_overpass[0], next_overpass[1]
+    else:
+        print("No overpasses found within range")
+        return None, None
+        

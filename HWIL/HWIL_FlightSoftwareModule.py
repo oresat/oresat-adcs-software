@@ -125,7 +125,7 @@ class FlightSoftware(sysModel.SysModel):
             q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
             q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
         else:
-            q_star_tracker = None
+            q_star_tracker = None #TODO does this need to be false for hardware messaging system?
         
         scState = self.scStateIn()
         r_CN_N = scState.r_CN_N # spacecraft inertial vector (position from COM) from origin (Earth) in ECI frame.

@@ -179,7 +179,8 @@ class FlightSoftware(sysModel.SysModel):
             max_distance = 2800e3 # 2800 km from target [m]
             r_ECEF = true_ECI_2_ECEF @ r_CN_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
             v_ECEF = true_ECI_2_ECEF @ v_CN_N # Spacecraft orbital velocity vector. Convert to ECEF to emulate GPS data.
-            start_time, end_time = guid.time_to_overpass(self, currentTimeNanos, time_range, max_distance, r_ECEF, v_ECEF, self.ECEF_target)
+            # start_time, end_time = guid.time_to_overpass(self, time_range, max_distance, r_ECEF, v_ECEF, self.ECEF_target)
+            start_time, end_time = guid.find_nearest_ground_station(self, time_range, max_distance, r_ECEF, v_ECEF)
             if start_time == -1:
                 print("No overpass window found. Exiting sim...")
                 exit()
