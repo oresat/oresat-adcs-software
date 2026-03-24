@@ -1,16 +1,26 @@
 % !TeX root = ../ADCS & GNC Documentation.tex
-\chapter{Concept of Operations}
+\chapter{Concept of Operations (ConOps)}
 
 \section{Overview}
 
 The ADCS system is designed to operate with minimal user interaction. From an operational perspective, the system requires only high-level mission selection and execution parameters, while all attitude control, guidance, and communication alignment are handled autonomously onboard.
+
+At a high level, operation consists of:
+
+\begin{itemize}
+	\item Selecting a mission type
+	\item Defining the duration of the mission
+	\item Optionally specifying whether data should be downlinked as soon as possible
+\end{itemize}
+
+All lower-level behavior, including attitude control, guidance, overpass detection, and communication scheduling, is handled autonomously by the spacecraft.
 
 \section{Mission Definition}
 
 Operation of the system consists of selecting:
 
 \begin{itemize}
-	\item A mission type (e.g. nadir pointing, or max-drag/ram-facing mode)
+	\item A mission type (e.g. nadir pointing or max-drag/ram-facing mode)
 	\item A duration for which the mission should be executed
 \end{itemize}
 
@@ -18,32 +28,37 @@ Once these parameters are defined, the ADCS system executes the mission autonomo
 
 \section{Attitude Modes}
 
-Two primary modes are used:
+The primary attitude modes are used to support scientific or mission-specific objectives:
 
 \begin{itemize}
-	\item \textbf{Nadir Pointing:} The spacecraft maintains its +z axis aligned toward the center of the Earth. This is suitable for maintaining a consistent ground-facing orientation.
+	\item \textbf{Nadir Pointing:} The spacecraft maintains its +z axis aligned toward the center of the Earth. This is suitable for maintaining a consistent ground-facing orientation for Earth observation or similar missions.
 	
-	\item \textbf{Ram-Facing Orientation:} The spacecraft aligns it's +x axis with the velocity vector (ram direction). This results in the radar-occlusion GPS antenna facing anti-ram.
+	\item \textbf{Ram-Facing Orientation:} The spacecraft aligns its +x axis with the velocity vector (ram direction). This configuration is typically used for drag-related or environmental interaction objectives, and results in the radar-occlusion GPS antenna facing anti-ram.
 \end{itemize}
 
 For circular or near-circular orbits, the difference between these modes is minimal, as the velocity vector is nearly perpendicular to the radial (nadir) direction.
 
-In elliptical orbits, however, the velocity vector varies significantly along the orbit, particularly near perigee and apogee. In these cases, ram-facing and nadir-pointing orientations diverge.
+In elliptical orbits, however, the velocity vector varies along the orbit, particularly near perigee and apogee. As a result, ram-facing and nadir-pointing orientations diverge, and the selected mode can significantly affect spacecraft orientation relative to Earth and velocity depending on the orbit of the spacecraft.
 
 \section{Autonomous Overpass Detection and Downlink}
 
 Ground station communication is handled autonomously using pre-defined ground station locations.
 
-After mission completion, if immediate downlink is requested:
+If immediate data downlink is requested following mission completion, the spacecraft performs onboard prediction of future ground station overpasses based on its orbital state.
+
+The operational sequence is as follows:
 
 \begin{itemize}
-	\item The spacecraft monitors its orbit to determine upcoming ground station overpasses
-	\item The next available overpass window is identified
-	\item The spacecraft transitions into the appropriate communication attitude mode (target tracking) once it nears the overpass window
-	\item Data transmission begins once the ground station is within range
+	\item The spacecraft predicts upcoming overpass windows using its current orbital state
+	\item The next suitable overpass window is selected
+	\item The spacecraft enters a low-power or standby mode while awaiting the overpass
+	\item Shortly before entering the overpass window, the spacecraft transitions to a target tracking mode to point toward the ground station
+	\item Data transmission begins once the ground station is within communication range
 \end{itemize}
 
-This process does not require real-time user intervention and is driven by onboard prediction of orbital position relative to known ground station locations.
+Target tracking is used specifically for communication, allowing the spacecraft to actively point toward the ground station during the overpass.
+
+This process is performed entirely onboard and does not require real-time user intervention.
 
 \section{Operational Summary}
 
@@ -52,7 +67,7 @@ From a user perspective, operation of the ADCS system consists of:
 \begin{enumerate}
 	\item Selecting a mission mode
 	\item Specifying the mission duration
-	\item Indicating whether immediate data should be downloaded as soon as possible after mission completion
+	\item Indicating whether immediate data should be downloaded after mission completion
 \end{enumerate}
 
-All subsequent attitude control, guidance, and communication alignment are handled autonomously by the system.
+All subsequent attitude control, guidance, overpass prediction, and communication alignment are handled autonomously by the system.
