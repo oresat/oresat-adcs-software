@@ -216,7 +216,7 @@ The simulation flight software interfaces with the Basilisk messaging system and
 
 \subsection{Hardware Flight Software}
 
-The hardware implementation interfaces with real sensors and actuators via a service-based architecture.
+The hardware implementation interfaces with the Basilisk messaging system for simulated sensor input, runs the actual flight-software on the C3 board, and outputs the control signals to both the physical and simulated actuators in order to compare expected results with hardware performance.
 
 \subsection{Key Distinction}
 
@@ -224,6 +224,7 @@ The primary difference between the two implementations lies in:
 
 \begin{itemize}
 	\item Data acquisition and communication interfaces
+	\item Where the control algorithms run
 \end{itemize}
 
 All estimation, guidance, and control algorithms are identical between simulation and hardware implementations.
@@ -270,4 +271,4 @@ which motivates the linearized state-space formulation used for controller desig
 	\item Earth-fixed frame (ECEF)
 \end{itemize}
 
-All angular velocities and control torques are expressed in the body frame. Appendix elaborates on reference frame nomenclature.
+All angular velocities and control torques are expressed in the body frame. \Cref{app:frames} elaborates on reference frame nomenclature.

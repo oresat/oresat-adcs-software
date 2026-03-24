@@ -1,0 +1,58 @@
+% !TeX root = ../ADCS & GNC Documentation.tex
+\chapter{Concept of Operations}
+
+\section{Overview}
+
+The ADCS system is designed to operate with minimal user interaction. From an operational perspective, the system requires only high-level mission selection and execution parameters, while all attitude control, guidance, and communication alignment are handled autonomously onboard.
+
+\section{Mission Definition}
+
+Operation of the system consists of selecting:
+
+\begin{itemize}
+	\item A mission type (e.g. nadir pointing, or max-drag/ram-facing mode)
+	\item A duration for which the mission should be executed
+\end{itemize}
+
+Once these parameters are defined, the ADCS system executes the mission autonomously for the specified duration.
+
+\section{Attitude Modes}
+
+Two primary modes are used:
+
+\begin{itemize}
+	\item \textbf{Nadir Pointing:} The spacecraft maintains its +z axis aligned toward the center of the Earth. This is suitable for maintaining a consistent ground-facing orientation.
+	
+	\item \textbf{Ram-Facing Orientation:} The spacecraft aligns it's +x axis with the velocity vector (ram direction). This results in the radar-occlusion GPS antenna facing anti-ram.
+\end{itemize}
+
+For circular or near-circular orbits, the difference between these modes is minimal, as the velocity vector is nearly perpendicular to the radial (nadir) direction.
+
+In elliptical orbits, however, the velocity vector varies significantly along the orbit, particularly near perigee and apogee. In these cases, ram-facing and nadir-pointing orientations diverge.
+
+\section{Autonomous Overpass Detection and Downlink}
+
+Ground station communication is handled autonomously using pre-defined ground station locations.
+
+After mission completion, if immediate downlink is requested:
+
+\begin{itemize}
+	\item The spacecraft monitors its orbit to determine upcoming ground station overpasses
+	\item The next available overpass window is identified
+	\item The spacecraft transitions into the appropriate communication attitude mode (target tracking) once it nears the overpass window
+	\item Data transmission begins once the ground station is within range
+\end{itemize}
+
+This process does not require real-time user intervention and is driven by onboard prediction of orbital position relative to known ground station locations.
+
+\section{Operational Summary}
+
+From a user perspective, operation of the ADCS system consists of:
+
+\begin{enumerate}
+	\item Selecting a mission mode
+	\item Specifying the mission duration
+	\item Indicating whether immediate data should be downloaded as soon as possible after mission completion
+\end{enumerate}
+
+All subsequent attitude control, guidance, and communication alignment are handled autonomously by the system.

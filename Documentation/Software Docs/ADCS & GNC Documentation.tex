@@ -1,11 +1,7 @@
-\documentclass[Letter, 11pt, oneside, ngerman]{scrreprt}
+\documentclass[letterpaper, 11pt, oneside, english]{scrreprt}
 
 % Koma-Script in distinct versions has a bug which has impact on the layout when using footsepline.
 % With version >3.17 the bug is fixed. Update the KOMA package if necessary.
-
-\title{Title of Bachelorthesis}
-\author{Sebastian Benner}
-\date{31.\,01.~2022}
 
 \input{./Layout_Settings/Packages.tex}
 \input{./Layout_Settings/Layout.tex}
@@ -41,9 +37,12 @@
 \include{./Chapters/Chapter 3}
 \include{./Chapters/Chapter 4}
 \include{./Chapters/Chapter 5}
+\include{./Chapters/Chapter 6}
+
 
 \appendix
 \renewcommand{\chaptername}{Appendix}
+\crefalias{chapter}{appendix} % required to force "Chapter" to become "Appendix" when using Cref (this wasn't a problem with older documents, can't find problem so using this method now)
 \include{./Appendix/Frame_Terminology}
 
 \end{document}
