@@ -190,3 +190,12 @@ dkms.conf
 *.42
 simulation/_VizFiles/adcs_simulation_basilisk_UnityViz.bin
 HWIL/_VizFiles/Basilisk_HWIL_Simulation_UnityViz.bin
+
+# Latex files
+*.aux
+*.bbl
+*.blg
+*.lof
+*.lot
+*.synctex.gz
+*.toc

@@ -1,0 +1,6 @@
+basilisk==2.7.21
+control==0.10.1
+matplotlib==3.10.8
+numpy==2.4.3
+scipy==1.17.1
+skyfield==1.53

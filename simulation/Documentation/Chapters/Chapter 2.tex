@@ -1,0 +1,57 @@
+% !TeX root = ../ADCS & GNC Documentation.tex
+\chapter{State Estimation}
+
+\section{Overview}
+
+Attitude estimation is performed using a Multiplicative Extended Kalman Filter (MEKF).
+
+\section{Asynchronous Sensor Fusion}
+
+The state estimation architecture is designed to operate with asynchronous sensor updates. This is required due to the differing update rates of the onboard sensors.
+
+The IMU provides angular velocity measurements at a high rate, while the star tracker provides attitude measurements at a significantly lower rate (on the order of 2 Hz). Additionally, due to uncertainty in the CAN bus communication protocols, exact timings of these sensor updates cannot be guaranteed.
+
+The Multiplicative Extended Kalman Filter (MEKF) is structured to accommodate this disparity in measurement availability:
+
+\begin{itemize}
+	\item IMU measurements are used continuously in the propagation step
+	\item Star tracker measurements are incorporated only when available for correction
+\end{itemize}
+
+Between measurement updates, the filter performs state propagation using a zero-order hold assumption on angular velocity. When higher-rate IMU data is available, midpoint integration is used to improve propagation accuracy.
+
+This asynchronous design ensures that the estimator remains stable and accurate despite the differing sensor update rates.
+
+\section{State Definition}
+
+\[
+x =
+\begin{bmatrix}
+	\delta \theta \\
+	b
+\end{bmatrix}
+\]
+
+where $\delta \theta$ represents the small-angle attitude error and $b$ represents gyro bias.
+
+\section{Prediction}
+
+\begin{itemize}
+	\item Quaternion propagation via exponential map
+	\item Covariance propagation using linearized dynamics
+\end{itemize}
+
+\section{Correction}
+
+\begin{itemize}
+	\item Innovation derived from quaternion error
+	\item Joseph-form covariance update for numerical stability
+\end{itemize}
+
+\section{Implementation Details}
+
+\begin{itemize}
+	\item Hemisphere enforcement is required for stability
+	\item Midpoint integration is used when IMU updates are available
+	\item Zero-order hold is used otherwise
+\end{itemize}

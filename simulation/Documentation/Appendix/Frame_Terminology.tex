@@ -1,0 +1,50 @@
+% !TeX root = ../ADCS & GNC Documentation.tex
+\chapter{Reference Frames and Coordinate Systems}
+
+\section*{Reference Points (First Two Letters)}
+
+\begin{tabular}{ll}
+	\toprule
+	Index & Meaning \\
+	\midrule
+	B & Body frame origin (hub reference point or geometric center) \\
+	C & Spacecraft Center of Mass (CoM) \\
+	E & Earth center \\
+	S & Sun center \\
+	M & Moon center \\
+	N & Inertial frame origin \\
+	H & Hill frame origin \\
+	O & Generic reference origin \\
+	\bottomrule
+\end{tabular}
+
+\section*{Frame Index (Last Letter)}
+
+\begin{tabular}{ll}
+	\toprule
+	Index & Meaning \\
+	\midrule
+	N & Inertial frame (J2000 orientation) \\
+	B & Body frame \\
+	E & Earth-fixed frame (ECEF) \\
+	H & Hill / LVLH frame \\
+	S & Sun frame \\
+	\bottomrule
+\end{tabular}
+
+\section*{Common Basilisk State Vectors}
+
+\begin{tabular}{ll}
+	\toprule
+	Variable & Meaning \\
+	\midrule
+	r\_CN\_N & Position of spacecraft CoM relative to inertial origin, in inertial frame \\
+	v\_CN\_N & Velocity of spacecraft CoM relative to inertial origin, in inertial frame \\
+	r\_BN\_N & Position of body frame origin relative to inertial origin, in inertial frame \\
+	v\_BN\_N & Velocity of body frame origin relative to inertial origin, in inertial frame \\
+	r\_CE\_N & Position of spacecraft CoM relative to Earth center, in inertial frame \\
+	v\_CE\_N & Velocity of spacecraft CoM relative to Earth center, in inertial frame \\
+	r\_CE\_E & Position of spacecraft CoM relative to Earth center, in Earth-fixed frame \\
+	v\_CE\_E & Velocity of spacecraft CoM relative to Earth center, in Earth-fixed frame \\
+	\bottomrule
+\end{tabular}

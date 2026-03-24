@@ -1,0 +1,46 @@
+%% ============================================================
+%%  ***  Page layout
+%% ============================================================
+\geometry{a4paper, top=2.5cm, left=2.5cm, right=2.5cm, bottom=2cm, headsep=10mm, footskip=12mm}
+\singlespacing								% single spacing between lines - as requested by ILS
+\KOMAoptions{parskip=full}					% no indent for new paragraphs
+\renewcommand*\familydefault{\sfdefault}	% change font to Computer Modern Sans - as requested by ILS
+
+
+%% ============================================================
+%%  ***  Header & Footer Layout
+%% ============================================================
+
+\KOMAoptions{headsepline,	% header line
+	footsepline,			% footer line
+	plainheadsepline=true,	% activate header line for plain pages
+	plainfootsepline=true}	% activate footer line for plain pages
+
+%\pagestyle{scrheadings}
+%\ohead{\leftmark}
+%\ofoot{\pagemark}
+
+\renewcommand*\chapterpagestyle{scrheadings}	% Set chapter start pages to scrheadings format
+
+
+%% ============================================================
+%%  ***  Reference style
+%% ============================================================
+\captionsetup{tablewithin=chapter}	% Change 'Table 12' to 'Table 2.3' format - as requested by ILS
+\captionsetup{figurewithin=chapter}	% Change 'Figure 12' to 'Figure 2.3' format - as requested by ILS
+
+\setcounter{secnumdepth}{3} % Adjust section numbering here
+\setcounter{tocdepth}{4}	% Adjust table of contents depth here
+
+
+%% ============================================================
+%%  ***  HYPERLINKS for pdfTeX /
+%% ============================================================
+\hypersetup{
+	pdftitle    = {Mess- und Versuchstechnik Temperaturversuch},
+	pdfsubject  = {Temperaturversuch},
+	pdfauthor   = {Sebastian Benner},
+	pdfborder   = 0 0 0,
+	plainpages  = false,
+	bookmarksnumbered = true
+}

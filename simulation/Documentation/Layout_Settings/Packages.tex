@@ -1,0 +1,59 @@
+%% ============================================================
+%%  ***  LaTeX packages
+%% ============================================================
+
+% Page layout
+\usepackage{geometry}					% Set page layout
+\usepackage{setspace}					% Set line spacing
+\usepackage[automark]{scrlayer-scrpage}	% Koma header and footer package
+
+% Language, coding, and fonts
+\usepackage[english]{babel}     % Language support
+\selectlanguage{english}
+\usepackage[T1]{fontenc}				% Hyphenation for words with Umlauts
+\usepackage{lmodern}				    % Font - as requested by ILS
+
+% Text and formatting
+\usepackage{ulem}						% Underline text
+\usepackage{paralist}				    % Inline lists
+\usepackage{enumitem}                   % Enhanced lists
+\setlist[itemize]{noitemsep, topsep=2pt}
+
+% Tables
+\usepackage{longtable}				    % Tables with page break
+\usepackage{booktabs}				    % Better table rules
+\usepackage{makecell}                   % Multi-line cells
+
+% Graphics and colors
+\usepackage[pdftex]{graphicx}		    % Include graphics
+\usepackage{epstopdf}				    % Include EPS graphics
+\usepackage[svgnames,table,hyperref]{xcolor}	% Advanced colors
+\usepackage{titling} % For custom title alignment
+
+% Math
+\usepackage{amsmath,amsthm}		        % Math environments
+\usepackage{amsfonts}
+
+% Floats
+\usepackage{float}                      % Better control of float placement
+\usepackage[section]{placeins}          % Float barriers for sections
+
+% Algorithm packages
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% Figures
+\usepackage{wrapfig}
+\usepackage{subcaption}
+
+% Other
+\usepackage{cite}				        % BiBTeX references
+\usepackage{pdfpages}				    % Include PDF pages
+\usepackage{caption}				    % Modify caption format
+
+% Hyperlinks and clever references (always load last)
+\usepackage{hyperref}				    % Settings for PDF document
+\usepackage[english]{cleveref}		% Enhanced references
+
+% PDF compatibility
+%\pdfminorversion=7                      % Fix PDF version issue
