@@ -53,9 +53,8 @@ class FlightSoftware(sysModel.SysModel):
         self.use_variable_gain = config["use_variable_gain"] # LQR tuning with or without integrator terms for steady state error corrections
         
         self.q_target = np.array([0,0,0,1]) # attribute initialization, set to real value in sim main
-        omega_target_rpm = np.array([0.0, 0.0, 0.0]) # [RPM]
-        self.omega_target = omega_target_rpm * 2*np.pi/60 # convert to [rad/s]
-        
+        self.spin_omega_target = np.array([0, 0, 0.034]) # approximately 2 degrees per second rotation about the z axis
+
         target_lat = config["target_lat"]
         target_lon = config["target_lon"]
         target_height = config["target_height"]
@@ -70,7 +69,7 @@ class FlightSoftware(sysModel.SysModel):
         self.maxTorque = 0.001 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
         self.thermal_spin_rpm = 1.0 # thermal spin rate about the z-axis (body frame)
-        self.controllerStartTime = 0 # time at which controller should activate [seconds]
+        self.controllerStartTime = 3 # time at which controller should activate [seconds]
         self.controllerEndTime = None # time at which controller should turn off. Used for deactivation after overpass. When set to None controller will not be deactivated
         
         '''
@@ -323,6 +322,11 @@ class FlightSoftware(sysModel.SysModel):
                 self.command_MTB_torques(m_cmd, currentTimeNanos)
             elif self.control_mode == "ORBITS":
                 pass # mode to simply visualize orbits with large timespans
+            elif self.control_mode == "RW_SLOW_ROTATE": # test function to develop a simple "rotate about axis" function to deal with star tracker occlusion:
+                d_omega = self.spin_omega_target-omega # desired delta omega
+                tau = self.satInertia @ d_omega/self.updateTime/5 # divide by five to smooth control inputs
+                wheel_torque = self.G_pinv @ tau
+                self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds)
             else:
                 print("ERROR: Unknown control mode specified", flush = True)
                 self.crashTheKernel = True

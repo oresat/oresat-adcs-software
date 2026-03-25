@@ -3,27 +3,6 @@ import Quaternions as quat
 from Basilisk.utilities import macros
 from skyfield.framelib import itrs
 
-# class GroundStation:
-#     def __init__(self, name, lat, lon, height):
-#         self.name = name
-#         self.lat = lat
-#         self.lon = lon
-#         self.height = height
-#         self.ECEF = GPS_to_ECEF(lat, lon, height) # convert GPS input to ECEF coordinates
-
-# station_list = [
-#     GroundStation("KSAT", 78.231500, 15.411100, 488),
-#     GroundStation("ESI", 39.608251, -104.895788, 1716),
-#     GroundStation("Deadhorse, AK", 70.201, -148.46, 0),
-#     GroundStation("Tampere", 61.497, 23.761, 0),
-#     GroundStation("Kaspichan", 43.31, 27.15, 0),
-#     GroundStation("Azores (Santa Maria)", 36.973, -25.17, 0),
-#     GroundStation("Columbus, OH", 39.961, -82.999, 0),
-#     GroundStation("Jeju", 33.50, 126.52, 0),
-#     GroundStation("Pretoria", -25.86, 28.45, 0),
-#     GroundStation("Pitea", 65.34, 21.42, 0),
-# ]
-
 def GPS_to_ECEF(lat, lon, height):
     # constants used for GPS-to-ECEF conversion
     a = 6378137.0 # WGS-84 constant: a = semi-major axis
