@@ -1,8 +1,12 @@
-\documentclass[letterpaper,11pt,oneside,ngerman]{scrreprt}
+\documentclass[letterpaper,11pt,oneside,english]{scrreprt}
 
 \usepackage{amsmath,amssymb}
 \usepackage{geometry}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{cleveref}
 \geometry{margin=1in}
+
 
 \title{ADCS Concept of Operations (ConOps)}
 \author{Sebastian Benner}
@@ -176,6 +180,38 @@
 		\end{itemize}
 		
 		\item The spacecraft transitions to a stable state and awaits further commands
+	\end{itemize}
+	
+		%==================================================
+	\chapter{Satellite Axis Definitions}
+	
+	OreSat1 and SENTINEL differ in their axis definitions.
+	
+	\section{OreSat1}
+	
+	\begin{figure}[h!]
+		\centering
+		\includegraphics[width=0.65\textwidth]{OreSat1_Axes_Deployed.png}
+		\caption{OreSat1 axis definition}
+		\label{fig:OreSat1}
+	\end{figure}
+	
+	 As illustrated in \Cref{fig:OreSat1}, OreSat1 defines its axes as follows:
+	
+	\begin{itemize}
+		\item +X axis points out along the same axis as the star tracker's boresight
+		\item +Z axis points along the same axis along which the helical antenna is deployed, while -Z is the side of the satellite containing the CFC camera and UHF antennas
+		\item +Y axis is derived from +X and +Z orientations using a standard orthogonal coordinate system
+	\end{itemize}
+	
+	\section{SENTINEL}
+	
+	No image similar to that seen in \Cref{fig:OreSat1} is available to illustrate the SENTINEL axis definitions at the time of writing, which are similar to those of OreSat1, but rotated about the +Y axis by 180 degrees:
+	
+	\begin{itemize}
+		\item +X axis points along the same axis (face???) as the Radio Occultation (RO) antenna, while the -X axis points out along the same axis as the star tracker's boresight
+		\item +Z axis points out of the side of the satellite on which the UHF antenna are mounted, while the -Z points along the same axis along which the helical antenna is deployed
+		\item +Y axis is derived from +X and +Z orientations using a standard orthogonal coordinate system
 	\end{itemize}
 	
 	%==================================================

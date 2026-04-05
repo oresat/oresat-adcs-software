@@ -2,6 +2,7 @@ import numpy as np
 import Quaternions as quat
 from Basilisk.utilities import macros
 from skyfield.framelib import itrs
+from skyfield.api import load
 
 def GPS_to_ECEF(lat, lon, height):
     # constants used for GPS-to-ECEF conversion
@@ -191,7 +192,7 @@ def R3(theta): # used for Earth rotation calculations. Not a perfect model for E
                      [s,  c, 0.0],
                      [0.0, 0.0, 1.0]])
 
-def time_to_overpass(fsw_obj, time_range_hours, max_distance, r_ECEF, v_ECEF, target_ECEF):
+def time_to_overpass(skyfield_timescale, current_time, time_range_hours, max_distance, r_ECEF, v_ECEF, target_ECEF):
     '''
     A function to determine how long the spacecraft can enter low-power mode
     before it will be within range of a set of GPS coordinates for fine-pointing
@@ -213,10 +214,9 @@ def time_to_overpass(fsw_obj, time_range_hours, max_distance, r_ECEF, v_ECEF, ta
     min_window_time = 305 # minimum overpass time
     skip_after_window = 2000 # time to skip after window with insufficient overpass time before searching again
     
-    time = fsw_obj.skyfield_timescale.utc(fsw_obj.time_zero) 
-    
     # itrs.rotation_at(t) returns the rotation matrix that maps ICRF/ECI -> ITRS/ECEF.
-    R_ecef_from_eci = itrs.rotation_at(time)
+    t = skyfield_timescale.utc(current_time) # skyfield_timescale.now() doesn't work in sim because it grabs the system time, which differs from the simulated ephemeris time
+    R_ecef_from_eci = itrs.rotation_at(t)
     R_eci_from_ecef = R_ecef_from_eci.T # get current Earth rotation angle relative to ECI
     theta0 = np.arctan2(R_eci_from_ecef[1, 0], R_eci_from_ecef[0, 0]) # Get Earth's rotation angle in ECI at current time. Radians in [-pi, pi]. Uses NumPy indexing.
     
@@ -287,13 +287,13 @@ def time_to_overpass(fsw_obj, time_range_hours, max_distance, r_ECEF, v_ECEF, ta
     print(f"Check if inclination allows for overpass within {max_distance/1e3} kilometers\n")
     return -2, None
 
-def find_nearest_ground_station(fsw_obj, time_range_hours, max_distance, r_ECEF, v_ECEF):
+def find_nearest_ground_station(skyfield_timescale, current_time, time_range_hours, max_distance, r_ECEF, v_ECEF):
     station_found = False # keep track of whether or not we find any of the listed stations in range
     chosen_station = None # which station we want to use
     next_overpass = None # how long until closest found overpass [seconds]
     for station in station_list:
         print(f"\nScanning {station.name}")
-        start, end = time_to_overpass(fsw_obj, time_range_hours, max_distance, r_ECEF, v_ECEF, station.ECEF)
+        start, end = time_to_overpass(skyfield_timescale, current_time, time_range_hours, max_distance, r_ECEF, v_ECEF, station.ECEF)
         if start == -1 or start == -2:
             start == None # deal with error messages
         if (start is not None) and ((next_overpass is None) or (start<next_overpass[0])):

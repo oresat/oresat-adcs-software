@@ -432,7 +432,7 @@ if __name__ == "__main__":
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
     # guidance_mode = None
     guidance_mode = None # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
-    activate_on_overpass = False
+    activate_on_overpass = True
     use_skyfield = True
     
     # KSAT coordinates

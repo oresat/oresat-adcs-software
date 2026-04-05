@@ -179,7 +179,7 @@ class FlightSoftware(sysModel.SysModel):
             r_ECEF = true_ECI_2_ECEF @ r_CN_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
             v_ECEF = true_ECI_2_ECEF @ v_CN_N # Spacecraft orbital velocity vector. Convert to ECEF to emulate GPS data.
             # start_time, end_time = guid.time_to_overpass(self, time_range, max_distance, r_ECEF, v_ECEF, self.ECEF_target)
-            start_time, end_time = guid.find_nearest_ground_station(self, time_range, max_distance, r_ECEF, v_ECEF)
+            start_time, end_time = guid.find_nearest_ground_station(self.skyfield_timescale, self.time_zero, time_range, max_distance, r_ECEF, v_ECEF)
             if start_time == -1:
                 print("No overpass window found. Exiting sim...")
                 exit()
@@ -314,6 +314,10 @@ class FlightSoftware(sysModel.SysModel):
                     m = np.cross(B, tau_des) / (B @ B)
                     self.command_MTB_torques(m, currentTimeNanos)
             elif self.control_mode == "MTB_POINTING": # Magnetorquer fine pointing controller (experimental)
+                # Magnetorquer control law "Singularity Robust (SR) inverse" taken from: 
+                # Attitude Determination and Control System for Nadir Pointing Using Magnetorquer and Magnetometer
+                # by Nobuo Sugimura, Toshinori Kuwahara, Kazuya Yoshida
+                
                 tau_des = self.mag_LQR_controller(q_error, omega) # desired 3-axis torque in body frame
                 bm = self.b_mat(B)
                 k = 1e-8
@@ -322,7 +326,7 @@ class FlightSoftware(sysModel.SysModel):
                 self.command_MTB_torques(m_cmd, currentTimeNanos)
             elif self.control_mode == "ORBITS":
                 pass # mode to simply visualize orbits with large timespans
-            elif self.control_mode == "RW_SLOW_ROTATE": # test function to develop a simple "rotate about axis" function to deal with star tracker occlusion:
+            elif self.control_mode == "RW_SLOW_ROTATE": # a simple "rotate about z-axis" control mode to deal with star tracker occlusion:
                 d_omega = self.spin_omega_target-omega # desired delta omega
                 tau = self.satInertia @ d_omega/self.updateTime/5 # divide by five to smooth control inputs
                 wheel_torque = self.G_pinv @ tau
