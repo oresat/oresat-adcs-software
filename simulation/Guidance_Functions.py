@@ -76,7 +76,8 @@ def target_tracking_quat(target_vector, nadir_vector_ECEF, ECI_2_ECEF):
 def nadir_quat(nadir_vector_ECEF, v_ECEF, ECI_2_ECEF):
     '''
     Creates an orientation quaternion forming an orientation based on a nadir
-    vector for the z-facing, and orients the +x facing towards the velocity vector
+    vector for the z-facing, and orients the +x facing towards the velocity vector,
+    or as close as possible to it
     '''
     
     R_NE = ECI_2_ECEF.T # rotation matrix from ECEF to ECI

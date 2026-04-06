@@ -348,9 +348,9 @@ class FlightSoftware(sysModel.SysModel):
             self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
     
     def update_target(self, target_quat):
-        if self.pointing_reference == "ST": # +z facing of satellite used as pointing reference
+        if self.pointing_reference == "HELICAL": # +z facing of satellite (where helical is mounted) used as pointing reference
             self.q_target = quat.quat_mult(self.q_90_rot, target_quat) # define target in body coordinates
-        elif self.pointing_reference == "SC":# +x facing of satellite used as pointing reference
+        elif self.pointing_reference == "ST":# +x facing of satellite used as pointing reference
             self.q_target = target_quat # target does not require rotation
         elif self.pointing_reference == "CFC": # -z facing of satellite used as pointing reference
             self.q_target = quat.quat_mult(self.q_180_rot, target_quat) # define target in body coordinates
