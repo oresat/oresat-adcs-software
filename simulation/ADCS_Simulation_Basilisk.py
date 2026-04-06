@@ -244,7 +244,7 @@ def sim_main(config):
     sat_q_init = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle) # account for any rotations of the satellite it self at sim initialization
     if fsw.pointing_reference == "ST":
         q_init = quat.quat_mult(quat.axis_angle_to_quaternion([0,1,0], 90), sat_q_init)
-    elif fsw.pointing_reference == "SC":
+    elif fsw.pointing_reference == "HELICAL" or fsw.pointing_reference == "SC":
         q_init = sat_q_init
     elif fsw.pointing_reference == "CFC":
         q_init = quat.quat_mult(quat.axis_angle_to_quaternion([0,1,0], 180), sat_q_init)
@@ -425,13 +425,13 @@ if __name__ == "__main__":
     sat_rot_angle = 90
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
-    pointing_reference = "SC" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), and CFC (Cirrus Flux Camera, -z on body)  
-    control_mode = "RW_SLOW_ROTATE" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
+    pointing_reference = "HELICAL" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), HELICAL(helical antenna, +z on body, same as SC), and CFC (Cirrus Flux Camera, -z on body)  
+    control_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
     use_variable_gain = False # LQR tuning with or without integrator terms for steady state error corrections
 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
     # guidance_mode = None
-    guidance_mode = None # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
+    guidance_mode = "TARGET" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
     activate_on_overpass = True
     use_skyfield = True
     
@@ -446,7 +446,7 @@ if __name__ == "__main__":
     # target_height = 1716 # [m]
         
     if control_mode in ("RW_POINTING", "THERMAL_SPIN", "RW_SLOW_ROTATE"): # realistic RW sim setup
-        sim_time = 100
+        sim_time = 200
         dynamics_update_time = .01
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME

@@ -142,6 +142,49 @@ where $\lambda = 10^{-8}$ is a small regularization parameter used to avoid nume
 
 This formulation computes the minimum-norm magnetic dipole moment that best approximates the desired torque within the physically achievable subspace.
 
+\section{Detumble Control Law}
+
+The detumble controller used in this system follows the magnetic control formulation described by Markley \& Crassidis in \textit{Fundamentals of Spacecraft Attitude Determination and Control}.
+
+The desired control torque is defined as:
+
+\[
+\tau = \frac{k}{\| \mathbf{B} \|^2} \, (\boldsymbol{\omega} \times \mathbf{B})
+\]
+
+where $\boldsymbol{\omega}$ is the spacecraft angular velocity expressed in the body frame, $\mathbf{B}$ is the measured magnetic field vector, and $k$ is a scalar gain.
+
+\subsection{Control Gain}
+
+The gain is selected based on orbital and spacecraft properties as:
+
+\[
+k = \frac{4\pi}{T_{orbit}} \left(1 + \sin(i)\right) J_{min}
+\]
+
+where $T_{orbit}$ is the orbital period, $i$ is the orbital inclination, and $J_{min}$ is the minimum principal moment of inertia of the spacecraft.
+
+\subsection{Physical Interpretation}
+
+As the spacecraft rotates through the Earth's magnetic field, the cross product $\boldsymbol{\omega} \times \mathbf{B}$ produces a torque direction that opposes rotational motion.
+
+The normalization by $\| \mathbf{B} \|^2$ ensures that the commanded torque remains consistent despite variations in magnetic field strength along the orbit.
+
+\subsection{Implementation Notes}
+
+\begin{itemize}
+	\item The control law is implemented entirely in the body frame
+	\item Angular velocity is obtained directly from IMU measurements
+	\item The magnetic field vector is measured using the average of the onboard magnetometers
+\end{itemize}
+
+\subsection{Limitations}
+
+\begin{itemize}
+	\item Control authority is limited to torques perpendicular to the magnetic field vector
+	\item Performance varies with orbital position due to changes in magnetic field strength and direction
+	\item Convergence is slower than reaction wheel-based control
+\end{itemize}
 
 \section{Integrator Augmentation}
 
