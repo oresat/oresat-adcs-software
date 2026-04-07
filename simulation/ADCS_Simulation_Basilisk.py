@@ -368,6 +368,12 @@ if __name__ == "__main__":
         Jzx = Jxz
         Jzy = Jyz
         Jzz = 0.02
+        
+        R = R = np.diag([1, -1, -1])   # 180 deg rotation about x
+        J = np.array([[Jxx, Jxy, Jxz], # satellite inertia matrix
+                      [Jyx, Jyy, Jyz], 
+                      [Jzx, Jzy, Jzz]])
+        J = R @ J @ R.T
     else:
         sat_3D_file = "OreSat_Simplified_Model.obj"
         viz_scaling = 7 # 3D-model scaling factor
@@ -383,9 +389,9 @@ if __name__ == "__main__":
         Jzy = Jyz
         Jzz = 0.00651814
     
-    J = np.array([[Jxx, Jxy, Jxz], # satellite inertia matrix
-                  [Jyx, Jyy, Jyz], 
-                  [Jzx, Jzy, Jzz]])
+        J = np.array([[Jxx, Jxy, Jxz], # satellite inertia matrix
+                      [Jyx, Jyy, Jyz], 
+                      [Jzx, Jzy, Jzz]])
     
     mass = 3.05353136 # satellite mass [kg]
                   
@@ -415,8 +421,8 @@ if __name__ == "__main__":
     init_rot_axis = [1, 0, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     
-    # omega_init_rpm = np.array([1.0, 0.4, 0.7])  # initial spin rates [RPM]
-    omega_init_rpm = np.array([0.5, 0.2, -0.3])
+    omega_init_rpm = np.array([1.0, 0.4, 0.7])  # initial spin rates [RPM]
+    # omega_init_rpm = np.array([0.5, 0.2, -0.3])
     # omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin rates [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
     
@@ -426,12 +432,12 @@ if __name__ == "__main__":
     
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = "HELICAL" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), HELICAL(helical antenna, +z on body, same as SC), and CFC (Cirrus Flux Camera, -z on body)  
-    control_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
+    control_mode = "DETUMBLE" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
     use_variable_gain = False # LQR tuning with or without integrator terms for steady state error corrections
 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
-    # guidance_mode = None
-    guidance_mode = "TARGET" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
+    guidance_mode = None
+    # guidance_mode = "TARGET" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
     activate_on_overpass = True
     use_skyfield = True
     

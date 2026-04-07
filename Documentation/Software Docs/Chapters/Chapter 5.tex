@@ -37,6 +37,7 @@ This ensures:
 \textbf{Simulation:}
 \begin{itemize}
 	\item Perfect or modeled sensor data (e.g., noiseless or parametrically noisy IMU, star tracker)
+	\item Perfectly predictable intervals between data packets
 \end{itemize}
 
 \textbf{Flight:}
@@ -126,7 +127,7 @@ To maintain consistency between simulation and flight:
 	\item Interfaces are designed so that simulated messages match flight message structures
 \end{itemize}
 
-Where possible, simulation components are structured to mirror flight software interfaces, enabling direct reuse or minimal translation.
+Where possible, simulation components are structured to mirror flight software interfaces, enabling direct reuse or minimal translation. However, due to differences in software architecture, messaging systems, and operating environments, some implementations differ structurally between simulation and flight software. These differences do not affect the underlying algorithms or their resulting behavior, and are limited to interface and execution considerations.
 
 \section{Summary}
 
