@@ -280,7 +280,7 @@ which motivates the linearized state-space formulation used for controller desig
 Coordinate frames provide a structured way to represent position, velocity, and attitude, and to transform these quantities between different reference systems used in the ADCS.
 
 \begin{itemize}
-	\item Body frame (B): A coordinate system fixed to the spacecraft, with axes aligned to the spacecraft geometry. All onboard quantities such as angular velocity, control torque, and actuator commands are expressed in this frame.
+	\item Body frame (B): A coordinate system fixed to the spacecraft, with origin at the center of mass and axes aligned with the spacecraft-defined $+x$, $+y$, and $+z$ body axes as specified by the mechanical and systems design. All onboard quantities such as angular velocity, control torque, and actuator commands are expressed in this frame.
 	\item Inertial frame (ECI): A non-rotating coordinate system centered at the Earth's center of mass, which remains fixed relative to the starfield. This frame is used as the reference for attitude determination and orbital dynamics. The star tracker's output is defined in this frame.
 	\item Earth-fixed frame (ECEF): A coordinate system centered at the Earth's center of mass that rotates with the Earth. In this frame, locations on the Earth's surface remain fixed, making it suitable for representing ground stations and geographic targets. % This frame is used for guidance modes involving all ground targets and attitudes relative to the Earth (such as the ram-facing guidance mode).
 \end{itemize}
