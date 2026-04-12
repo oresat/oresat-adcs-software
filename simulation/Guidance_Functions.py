@@ -288,6 +288,28 @@ def time_to_overpass(skyfield_timescale, current_time, time_range_hours, max_dis
     print(f"Check if inclination allows for overpass within {max_distance/1e3} kilometers\n")
     return -2, None
 
+def is_better_overpass(start, end, next_overpass):
+    # Reject invalid start
+    if start == -1 or start == -2:
+        return False
+
+    # Accept if no current candidate exists
+    if next_overpass is None:
+        return True
+
+    # extract current overpass for comparison
+    current_start, current_end = next_overpass
+
+    # Prefer earlier start
+    if start < current_start:
+        return True
+
+    # Prefer longer duration
+    if (end - start) > (current_end - current_start):
+        return True
+
+    return False
+
 def find_nearest_ground_station(skyfield_timescale, current_time, time_range_hours, max_distance, r_ECEF, v_ECEF):
     station_found = False # keep track of whether or not we find any of the listed stations in range
     chosen_station = None # which station we want to use
@@ -295,9 +317,7 @@ def find_nearest_ground_station(skyfield_timescale, current_time, time_range_hou
     for station in station_list:
         print(f"\nScanning {station.name}")
         start, end = time_to_overpass(skyfield_timescale, current_time, time_range_hours, max_distance, r_ECEF, v_ECEF, station.ECEF)
-        if start == -1 or start == -2:
-            start == None # deal with error messages
-        if (start is not None) and ((next_overpass is None) or (start<next_overpass[0])):
+        if is_better_overpass(start, end, next_overpass):
             station_found = station
             chosen_station = station
             next_overpass = [start, end]

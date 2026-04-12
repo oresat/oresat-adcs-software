@@ -288,7 +288,7 @@ class FlightSoftware(sysModel.SysModel):
         
         ######################### CONTROL LOGIC ###############################
         currentTime = currentTimeNanos * 1e-9
-        if (currentTime >= self.controllerStartTime and (self.controllerEndTime is None or currentTime < self.controllerEndTime)): # turn controller on at specified time
+        if ((self.controllerStartTime is not None) and (currentTime >= self.controllerStartTime) and (self.controllerEndTime is None or currentTime < self.controllerEndTime)): # turn controller on at specified time
             if self.control_mode == "RW_POINTING":
                 desired_torque = self.RW_controller(q_error, omega, currentTimeNanos*1e-9) # compute desired 3-axis torque from controller (standard LQR controller)
                 desired_torque += tau_ff # feedforward torque, only non-zero for tracking mode
