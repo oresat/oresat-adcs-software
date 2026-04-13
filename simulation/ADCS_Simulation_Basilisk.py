@@ -83,7 +83,7 @@ def sim_main(config):
     oe.i = 98.7 * macros.D2R # [degrees]
     oe.Omega = 130 * macros.D2R # [degrees]
     oe.omega = 0 * macros.D2R   # sets perigee vector angle from ascending node in the orbital plane [degrees]
-    oe.f = 60 * macros.D2R      # where the satellite is on the ellipse at epoch (start of sim) [degrees]
+    oe.f = 82 * macros.D2R      # where the satellite is on the ellipse at epoch (start of sim) [degrees]
     
     rN, vN = orbitalMotion.elem2rv(mu_earth, oe)
     oe = orbitalMotion.rv2elem(mu_earth, rN, vN)  # this stores consistent initial orbit elements, fixes numerical errors, particulary with perfectly circular orbits. Consult ChatGPT for detailed explanation.
@@ -452,7 +452,7 @@ if __name__ == "__main__":
     # target_height = 1716 # [m]
         
     if control_mode in ("RW_POINTING", "THERMAL_SPIN", "RW_SLOW_ROTATE"): # realistic RW sim setup
-        sim_time = 5#875
+        sim_time = 800
         dynamics_update_time = .01
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
