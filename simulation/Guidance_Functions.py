@@ -211,8 +211,8 @@ def time_to_overpass(skyfield_timescale, current_time, time_range_hours, max_dis
     small_dt = 5 # for fine overpass determination
     maximum_window = 3600 # large value to ensure exit boundary of overpass window is found
     exit_check_increment = 5 # search for window exit in increments
-    lead_time = 100 # lead time before entering window to engage control system. Allows satellite to reorient in time.
-    min_window_time = 305 # minimum overpass time
+    lead_time = 120 # lead time before entering window to engage control system. Allows satellite to reorient in time.
+    min_window_time = 300 # minimum overpass time
     skip_after_window = 2000 # time to skip after window with insufficient overpass time before searching again
     
     # itrs.rotation_at(t) returns the rotation matrix that maps ICRF/ECI -> ITRS/ECEF.
@@ -268,8 +268,8 @@ def time_to_overpass(skyfield_timescale, current_time, time_range_hours, max_dis
                 break
         if window_exit is None: # Guard against exit not being found (could happen if algorithm is poorly tuned)
             window_exit = min(window_start + maximum_window, t_end)
-
-        if (window_exit - window_start) >= min_window_time: # if an acceptable window has been found, return value
+        
+        if (window_exit - (window_start+lead_time)) >= min_window_time: # if an acceptable window has been found (accounting for activation time), return value
             controller_start = max(0, window_start - lead_time) # ensure controller can't see negative activation time (would work anyways in current implementatino, but this avoids future bugs)
             controller_end = window_exit
             return controller_start, controller_end
@@ -304,8 +304,8 @@ def is_better_overpass(start, end, next_overpass):
     if start < current_start:
         return True
 
-    # Prefer longer duration
-    if (end - start) > (current_end - current_start):
+    # Prefer longer duration if the windows opens at the same time
+    if (start == current_start) and ((end - start) > (current_end - current_start)):
         return True
 
     return False

@@ -80,10 +80,10 @@ def sim_main(config):
     rp = Re + periapsis
     oe.a = 0.5*(rp + ra)
     oe.e = (ra - rp)/(ra + rp)
-    oe.i = 98.7 * macros.D2R
-    oe.Omega = 130 * macros.D2R
-    oe.omega = 0 * macros.D2R   # sets perigee direction in the orbital plane
-    oe.f = 38 * macros.D2R      # where the satellite is on the ellipse at epoch (start of sim)
+    oe.i = 98.7 * macros.D2R # [degrees]
+    oe.Omega = 130 * macros.D2R # [degrees]
+    oe.omega = 0 * macros.D2R   # sets perigee vector angle from ascending node in the orbital plane [degrees]
+    oe.f = 60 * macros.D2R      # where the satellite is on the ellipse at epoch (start of sim) [degrees]
     
     rN, vN = orbitalMotion.elem2rv(mu_earth, oe)
     oe = orbitalMotion.rv2elem(mu_earth, rN, vN)  # this stores consistent initial orbit elements, fixes numerical errors, particulary with perfectly circular orbits. Consult ChatGPT for detailed explanation.
@@ -344,9 +344,9 @@ def sim_main(config):
         if (config["sim_time"] >= config["error_time_check"]):
             print(f"Max error after {config["error_time_check"]} seconds:", max(error_true[int(config["error_time_check"] / config["dynamics_update_time"]):])) # this just checks for maximum error after a certain sim time (i.e. if large oscillations occur after steady-state should have been reached)
         print(f"Final error: {error_true[-1]:.4f} degrees")
-    if config["use_filter"] == True:
-        print("\nFilter updates:", fsw.ticks)
-        print("Filter corrections:", fsw.tracker_count)
+    # if config["use_filter"] == True:
+    #     print("\nFilter updates:", fsw.ticks)
+    #     print("Filter corrections:", fsw.tracker_count)
         
 if __name__ == "__main__":
     # select satellite model attributes
@@ -452,7 +452,7 @@ if __name__ == "__main__":
     # target_height = 1716 # [m]
         
     if control_mode in ("RW_POINTING", "THERMAL_SPIN", "RW_SLOW_ROTATE"): # realistic RW sim setup
-        sim_time = 875
+        sim_time = 5#875
         dynamics_update_time = .01
         fsw_update_time = .1
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
