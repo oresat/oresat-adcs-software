@@ -5,6 +5,7 @@ from Basilisk.utilities import SimulationBaseClass, macros, vizSupport, simInclu
 from Basilisk.architecture import messaging
 from Basilisk import __path__
 from Basilisk.utilities import RigidBodyKinematics as rbk
+from Basilisk.utilities.supportDataTools.dataFetcher import get_path, DataFile
 from Plotting_Functions import plot_rw_speeds, plot_magfield, plot_imu
 from HWIL_FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
 import Quaternions as quat
@@ -55,8 +56,10 @@ def sim_main(config):
     
     # create the magnetic field
     magModule = magneticFieldWMM.MagneticFieldWMM()
+    wmm_path = get_path(DataFile.MagneticFieldData.WMM)
+    magModule.configureWMMFile(str(wmm_path))
     magModule.ModelTag = "WMM" # World Magnetic Model
-    magModule.dataPath = bskPath + '/supportData/MagneticField/'
+    # magModule.dataPath = bskPath + '/supportData/MagneticField/'
     epochMsg = unitTestSupport.timeStringToGregorianUTCMsg('2025 June 27, 10:23:0.0 (UTC)')  # set epoch date/time message for WMM
     magModule.addSpacecraftToModel(scObject.scStateOutMsg) # add spacecraft to the magnetic field module so it can read the sc position messages
     sim.AddModelToTask("dynamicsTask", magModule) # add the magnetic field module to the simulation task
@@ -312,26 +315,28 @@ def sim_main(config):
     q_scalar_first = [rbk.MRP2EP(attitude) for attitude in sigma_BN] # convert MRP's to scalar-first quaternions
     q_scalar_last = [quat.to_scalar_last(q) for q in q_scalar_first] # convert quaternions to scalar-last convention
     
+    # most of this is commented because fsw differences between HWIL and simulation versions
+
     # Target tracking mode requires special error calculations as we are dealing with step changes in target, which happens in fsw, not dynamics
-    if config["guidance_mode"] is not None:
-        tracking_error = [quat.error_angle(quat.quat_error(q_target, q)) for (q_target, q) in zip(fsw.target_history, q_scalar_last[::int(fsw_update_time/dynamics_update_time)])] # calculate step-errors for tracking mode
-        error_true = np.repeat(tracking_error[:-1], fsw_update_time/dynamics_update_time, axis=0) # expand to match plotting times
-        error_true = np.append(error_true, tracking_error[-1])
-    else:
-        error_true = [quat.error_angle(quat.quat_error(fsw.q_target, q)) for q in q_scalar_last] # calculate angle error (degrees) over simulation
+    #if config["guidance_mode"] is not None:
+    #    tracking_error = [quat.error_angle(quat.quat_error(q_target, q)) for (q_target, q) in zip(fsw.target_history, q_scalar_last[::int(fsw_update_time/dynamics_update_time)])] # calculate step-errors for tracking mode
+    #    error_true = np.repeat(tracking_error[:-1], fsw_update_time/dynamics_update_time, axis=0) # expand to match plotting times
+    #    error_true = np.append(error_true, tracking_error[-1])
+    #else:
+    #    error_true = [quat.error_angle(quat.quat_error(fsw.q_target, q)) for q in q_scalar_last] # calculate angle error (degrees) over simulation
     
-    if(config["use_filter"]):
-        error_angles_filter = [quat.error_angle(quaternion) for quaternion in fsw.error_filter[:-1]]
-        error_expanded_filter = np.repeat(error_angles_filter, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
-        error_expanded_filter = np.append(error_expanded_filter, quat.error_angle(fsw.error_filter[-1])) # append final value
-    else:
-        error_expanded_filter = None
+    #if(config["use_filter"]):
+    #    error_angles_filter = [quat.error_angle(quaternion) for quaternion in fsw.error_filter[:-1]]
+    #    error_expanded_filter = np.repeat(error_angles_filter, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
+    #    error_expanded_filter = np.append(error_expanded_filter, quat.error_angle(fsw.error_filter[-1])) # append final value
+    #else:
+    #    error_expanded_filter = None
     
     plot_times = imuRec.times() * 1e-9
     if ("RW" in config["control_mode"]):
-        RW_plot_times = rwSpeedLog.times() * 1e-9 # dynamics process intervals
-        plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, config, error_true, error_expanded_filter)
         time_axis = "seconds"
+        RW_plot_times = rwSpeedLog.times() * 1e-9 # dynamics process intervals
+        # plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, config, error_true, error_expanded_filter)
     else:
         time_axis = "orbits"
         TAMvalues = magSensorRec.tam_S
@@ -401,7 +406,7 @@ if __name__ == "__main__":
     print_states = False # print states in flight software
     save_pdf = True # save plots as PDF's to target folder
     save_png = False # save plots as PNG's to target folder
-    plot_basepath = Path(r"C:\Users\benne\OneDrive\Master's Thesis\Basilisk_Output") # path to which graphs should be saved
+    plot_basepath = Path("./figures") # path to which graphs should be saved
     use_filter = True # whether to use perfect state information or simulate with sensor noise and state estimation (MEKF)
     error_time_check = 100 # time after which maximum error is considered for evaluation
     

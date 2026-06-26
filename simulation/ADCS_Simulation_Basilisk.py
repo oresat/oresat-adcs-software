@@ -281,7 +281,7 @@ def sim_main(config):
     current_dir = Path(__file__).parent.resolve() # find current working directory such that any system running code directly from git can use the simplified model
     model_file_path = current_dir / config["sat_3D_file"]
 
-    viz = vizSupport.enableUnityVisualization(sim, "dynamicsTask", scObject, saveFile=fileName, liveStream=True, # let Vizard visualize data
+    viz = vizSupport.enableUnityVisualization(sim, "dynamicsTask", scObject, saveFile=fileName, liveStream=False, # let Vizard visualize data
                                               rwEffectorList=rwStateEffector) # add reaction wheel list to visualization
     vizSupport.setActuatorGuiSetting(viz, viewRWPanel=True, viewRWHUD=True)
     s_factor = config["viz_scaling"] # 3D-model scaling factor

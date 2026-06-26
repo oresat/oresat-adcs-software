@@ -190,11 +190,9 @@ dkms.conf
 *.42
 simulation/_VizFiles/adcs_simulation_basilisk_UnityViz.bin
 HWIL/_VizFiles/Basilisk_HWIL_Simulation_UnityViz.bin
-<<<<<<< Updated upstream
-*_VisFiles/*.bin
-=======
-*_VizFiles/*
->>>>>>> Stashed changes
+*/_VisFiles/*.bin
+*/figures/*.pdf
+
 
 # Latex files
 *.aux
