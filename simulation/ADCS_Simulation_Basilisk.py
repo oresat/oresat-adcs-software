@@ -12,6 +12,9 @@ from pathlib import Path
 from sys import exit
 bskPath = __path__[0]
 
+from Basilisk.utilities.supportDataTools.dataFetcher import get_path, DataFile
+
+
 # EXAMPLE FOR READING BASILISK MESSAGING SYSTEM AND ATTRIBUTES. USED FOR DOCUMENTATION, DO NOT DELETE!!!
 # message = scObject.scStateOutMsg.read()   # works before or after ExecuteSimulation()
 # print(dir(message))
@@ -55,8 +58,10 @@ def sim_main(config):
     
     # create the magnetic field
     magModule = magneticFieldWMM.MagneticFieldWMM()
+    wmm_path = get_path(DataFile.MagneticFieldData.WMM)
+    magModule.configureWMMFile(str(wmm_path))
     magModule.ModelTag = "WMM" # World Magnetic Model
-    magModule.dataPath = bskPath + '/supportData/MagneticField/'
+    # magModule.dataPath = bskPath + '/supportData/MagneticField/' # old version
     epochMsg = unitTestSupport.timeStringToGregorianUTCMsg('2025 June 27, 10:23:0.0 (UTC)')  # set epoch date/time message for WMM
     magModule.addSpacecraftToModel(scObject.scStateOutMsg) # add spacecraft to the magnetic field module so it can read the sc position messages
     sim.AddModelToTask("dynamicsTask", magModule) # add the magnetic field module to the simulation task
@@ -276,7 +281,7 @@ def sim_main(config):
     current_dir = Path(__file__).parent.resolve() # find current working directory such that any system running code directly from git can use the simplified model
     model_file_path = current_dir / config["sat_3D_file"]
 
-    viz = vizSupport.enableUnityVisualization(sim, "dynamicsTask", scObject, saveFile=fileName, liveStream=False, # let Vizard visualize data
+    viz = vizSupport.enableUnityVisualization(sim, "dynamicsTask", scObject, saveFile=fileName, liveStream=True, # let Vizard visualize data
                                               rwEffectorList=rwStateEffector) # add reaction wheel list to visualization
     vizSupport.setActuatorGuiSetting(viz, viewRWPanel=True, viewRWHUD=True)
     s_factor = config["viz_scaling"] # 3D-model scaling factor
@@ -399,7 +404,8 @@ if __name__ == "__main__":
     print_states = False # print states in flight software
     save_pdf = True # save plots as PDF's to target folder
     save_png = False # save plots as PNG's to target folder
-    plot_basepath = Path(r"C:\Users\benne\OneDrive\Master's Thesis\Basilisk_Output") # path to which graphs should be saved
+    
+    plot_basepath = Path("./figures") # path to which graphs should be saved
     use_filter = True # whether to use perfect state information or simulate with sensor noise and state estimation (MEKF)
     error_time_check = 100 # time after which maximum error is considered for evaluation
     
