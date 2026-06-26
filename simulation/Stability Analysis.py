@@ -57,7 +57,7 @@ if __name__ == "__main__":
                   [Jzx, Jzy, Jzz]])
     
     useInt = False
-    K = get_gain_matrix(J, 0.1, .1, 0.01, useInt)
+    K = get_gain_matrix(J, 0.1, 0.1, 0.05, 0.01, useInt, 0.3)
     
     bode_dict = axis_margins(J, K)
     print(bode_dict)
