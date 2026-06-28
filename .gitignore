@@ -190,7 +190,7 @@ dkms.conf
 *.42
 simulation/_VizFiles/adcs_simulation_basilisk_UnityViz.bin
 HWIL/_VizFiles/Basilisk_HWIL_Simulation_UnityViz.bin
-*/_VisFiles/*.bin
+*/_VizFiles/*.bin
 */figures/*.pdf
 
 

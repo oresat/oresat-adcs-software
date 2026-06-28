@@ -355,12 +355,12 @@ def sim_main(config):
         
 if __name__ == "__main__":
     # select satellite model attributes
-    # satellite = "OreSat1"
-    satellite = "SENTINEL"
+    satellite = "OreSat1"
+    # satellite = "SENTINEL"
     
     # select 3D model file
     if satellite == "SENTINEL":
-        sat_3D_file = "3U_Simplified_Model.obj"
+        sat_3D_file = "models/3U_Simplified_Model.obj"
         viz_scaling = 5 # 3D-model scaling factor
     
         # Inertia tensor data
@@ -380,7 +380,7 @@ if __name__ == "__main__":
                       [Jzx, Jzy, Jzz]])
         J = R @ J @ R.T
     else:
-        sat_3D_file = "OreSat_Simplified_Model.obj"
+        sat_3D_file = "models/OreSat_Simplified_Model.obj"
         viz_scaling = 7 # 3D-model scaling factor
         
         # Inertia tensor data
