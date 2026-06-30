@@ -517,17 +517,10 @@ if __name__ == "__main__":
     #omega_init_rpm = -np.array([0.3, 0.2, 0.1])  # initial spin rates [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
 
-    # print(omega_init_rad)
-
     # command rotations relative to initial orientation
     sat_rot_axis = [0, 1, 0]
     sat_rot_angle = 90
     
-    # command rotations relative to initial orientation
-    sat_rot_axis = [0, 1, 0]
-    sat_rot_angle = 90
-
-
 
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     
