@@ -12,6 +12,7 @@ from pathlib import Path
 from sys import exit
 bskPath = __path__[0]
 
+import matplotlib.pyplot as plt
 from Basilisk.utilities.supportDataTools.dataFetcher import get_path, DataFile
 
 
@@ -208,7 +209,9 @@ def sim_main(config):
     mtbEff.ModelTag = "MtbEff"
     scObject.addDynamicEffector(mtbEff)
     sim.AddModelToTask("dynamicsTask", mtbEff)
-    
+    mtbLog = mtbEff.mtbOutMsg.recorder()
+    sim.AddModelToTask("dynamicsTask", mtbLog)
+
     mtbConfigParams = messaging.MTBArrayConfigMsgPayload()
     mtbConfigParams.numMTB = 3
     mtbConfigParams.GtMatrix_B = [1., 0., 0., # expects single 1x(3*n) array
@@ -273,18 +276,22 @@ def sim_main(config):
     # add spacecraft state recording in order to read attitudes for plotting
     stateRec = scObject.scStateOutMsg.recorder(macros.sec2nano(dynamics_update_time)) # create dynamics recorder
     sim.AddModelToTask("dynamicsTask", stateRec) # add recorder to dynamics simulation
-    
-    basePath = r"C:\Users\benne\OneDrive\Master's Thesis\Code\Viz_Archive"
+     
     if viz_filename:
-        fileName = basePath + rf"\{viz_filename}"
+        fileName = "./{viz_filename}"
     else:
         fileName = __file__
     
     current_dir = Path(__file__).parent.resolve() # find current working directory such that any system running code directly from git can use the simplified model
     model_file_path = current_dir / config["sat_3D_file"]
 
-    viz = vizSupport.enableUnityVisualization(sim, "dynamicsTask", scObject, saveFile=fileName, liveStream=False, # let Vizard visualize data
+
+
+    viz = vizSupport.enableUnityVisualization(sim, "dynamicsTask", scObject, 
+                                              saveFile=fileName, 
+                                              liveStream=False, # let Vizard visualize data
                                               rwEffectorList=rwStateEffector) # add reaction wheel list to visualization
+ 
     vizSupport.setActuatorGuiSetting(viz, viewRWPanel=True, viewRWHUD=True)
     s_factor = config["viz_scaling"] # 3D-model scaling factor
     vizSupport.createCustomModel(viz,
@@ -331,12 +338,90 @@ def sim_main(config):
     plot_times = imuRec.times() * 1e-9
     if ("RW" in config["control_mode"]):
         RW_plot_times = rwSpeedLog.times() * 1e-9 # dynamics process intervals
-        plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, config, error_true, error_expanded_filter)
+
         time_axis = "seconds"
+        plot_rw_speeds(RW_plot_times, rwSpeedLog.wheelSpeeds, numRW, config, error_true, error_expanded_filter)
+        
+        time_axis = "orbits"
+        TAMvalues = magSensorRec.tam_S
+        plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
+
+        fig, ax2 = plt.subplots(figsize=(8,4))
+        ax2.plot(RW_plot_times, np.average(np.abs(rwSpeedLog.wheelSpeeds), 1), 'r--', label='True Error')
+        
+        plt.title("Total wheel momentum")
+        plt.legend()
+    
+        
+        if config["save_pdf"] == True:
+            pdf_path = config["plot_basepath"] / "tot_speed_graph.pdf"
+            plt.savefig(pdf_path, dpi=300)
+            print(f"Plot saved as {pdf_path}")
+        if config["save_png"] == True:
+            png_path = config["plot_basepath"] / "tot_speed_graph.png"
+            plt.savefig(png_path, dpi=600)
+            print(f"Plot saved as {png_path}")
+  
+        fig, ax3 = plt.subplots(figsize=(8,4))
+        ax3.plot(mtbLog.times() *1e-9, mtbLog.mtbNetTorque_B, 'r--', label='Torque')
+        ax3.set_ylim([-1e-7, 1e-7])
+        plt.title("MTB Net Torque")
+        plt.legend()
+    
+        
+        if config["save_pdf"] == True:
+            pdf_path = config["plot_basepath"] / "mtb_torque_graph.pdf"
+            plt.savefig(pdf_path, dpi=300)
+            print(f"Plot saved as {pdf_path}")
+        if config["save_png"] == True:
+            png_path = config["plot_basepath"] / "mtb_torque_graph.png"
+            plt.savefig(png_path, dpi=600)
+            print(f"Plot saved as {png_path}")
+        
+        plt.show(block=False)
+       
     else:
         time_axis = "orbits"
         TAMvalues = magSensorRec.tam_S
         plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
+
+        fig, ax2 = plt.subplots(figsize=(8,4))
+        ax2.plot(plot_times, tracking_error, 'r--', label='True Error')
+        
+        plt.title("Error")
+        plt.legend()
+    
+        
+        if config["save_pdf"] == True:
+            pdf_path = config["plot_basepath"] / "Err_graph.pdf"
+            plt.savefig(pdf_path, dpi=300)
+            print(f"Plot saved as {pdf_path}")
+        if config["save_png"] == True:
+            png_path = config["plot_basepath"] / "Err_graph.png"
+            plt.savefig(png_path, dpi=600)
+            print(f"Plot saved as {png_path}")
+        
+        plt.show(block=False)
+ 
+        fig, ax3 = plt.subplots(figsize=(8,4))
+        ax3.plot(mtbLog.times() *1e-9, mtbLog.mtbNetTorque_B, 'r--', label='Torque')
+        ax3.set_ylim([-0.000005, 0.000005])
+        plt.title("MTB Net Torque")
+        plt.legend()
+    
+        
+        if config["save_pdf"] == True:
+            pdf_path = config["plot_basepath"] / "mtb_torque_graph.pdf"
+            plt.savefig(pdf_path, dpi=300)
+            print(f"Plot saved as {pdf_path}")
+        if config["save_png"] == True:
+            png_path = config["plot_basepath"] / "mtb_torque_graph.png"
+            plt.savefig(png_path, dpi=600)
+            print(f"Plot saved as {png_path}")
+        
+        plt.show(block=False)
+     
+    
     
     imuValues = imuRec.AngVelPlatform
     # if config["control_mode"] == "MTB_POINTING": # print with quaternion error
@@ -410,46 +495,71 @@ if __name__ == "__main__":
     plot_basepath = Path("./figures") # path to which graphs should be saved
     use_filter = True # whether to use perfect state information or simulate with sensor noise and state estimation (MEKF)
     error_time_check = 100 # time after which maximum error is considered for evaluation
+
+
     
-    # sensor noise parameters
-    # Keep two separate parameters
-    # sigma_gyro_density = 0.014 * D2R (for MEKF Q_matrix)
-    # sigma_gyro_rms = 0.1 * D2R (for Basilisk imu.PMatrixGyro)
-    
-    # sigma_gyro = 0.1 * macros.D2R # instantaneous white noise (datasheet gives value in degrees, convert to radians) (not sure which to use)
+    # SENSOR NOISE PARAMETERS
+    # gyroscope
     sigma_gyro = 0.014 * macros.D2R # instantaneous white noise (datasheet gives value in degrees, convert to radians) (not sure which to use)
-    # sigma_gyro = 1 * macros.D2R # instantaneous white noise (datasheet gives value in degrees, convert to radians) (not sure which to use)
     sigma_bias = 1e-5 # slow random bias drift (random walk)
     P_b0 = 1 * macros.D2R # [rad/s] initial gyro uncertainty
-    
+    # star tracker
     sigma_ST = 2.4e-6 # [rad] measurement noise (instantaneous orientation error)
-    # sigma_ST = 0.01
     P_ST_0 = 8.7e-7 # [rad^2] initial star tracker attitude uncertainty
-    # P_ST_0 = 0.01
     ST_update_rate = 1.1 # defined in seconds
     
+    # SIMULATION INITIAL STATE
     # initial satellite states
-    init_rot_axis = [1, 0, 0]# this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
+    init_rot_axis = [1, 0, 0] # this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
     
     omega_init_rpm = -np.array([1.5, 0.4, 0.7])  # initial spin rates [RPM]
-    # omega_init_rpm = np.array([0.5, 0.2, -0.3])
-    # omega_init_rpm = np.array([0.0, 0.0, 0.0])  # initial spin rates [RPM]
+    #omega_init_rpm = -np.array([0.3, 0.2, 0.1])  # initial spin rates [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
-    
+
+    # print(omega_init_rad)
+
     # command rotations relative to initial orientation
     sat_rot_axis = [0, 1, 0]
     sat_rot_angle = 90
     
+    # command rotations relative to initial orientation
+    sat_rot_axis = [0, 1, 0]
+    sat_rot_angle = 90
+
+
+
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
-    pointing_reference = "HELICAL" # Modes are ST (Star Tracker, +x on body), SC (Selfie Camera, +z on body), HELICAL(helical antenna, +z on body, same as SC), and CFC (Cirrus Flux Camera, -z on body)  
-    control_mode = "RW_POINTING" # Valid modes are DETUMBLE, RW_POINTING, MTB_POINTING, THERMAL_SPIN, ORBITS. ORBITS is for long-duration visualization without controls
-    use_variable_gain = False # LQR tuning with or without integrator terms for steady state error corrections
+    
+    # Modes are: 
+    # ST (Star Tracker, +x on body), 
+    # SC (Selfie Camera, +z on body), 
+    # HELICAL(helical antenna, +z on body, same as SC)
+    # CFC (Cirrus Flux Camera, -z on body)  
+    pointing_reference = "HELICAL" 
+    
+    # Valid modes are 
+    # DETUMBLE:
+    # RW_POINTING:
+    # MTB_POINTING: 
+    # THERMAL_SPIN: 
+    # ORBITS: for long-duration visualization without controls
+    control_mode = "RW_POINTING" 
+
+
+    # LQR tuning with or without integrator terms for steady state error corrections
+    use_variable_gain = False 
 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
-    # guidance_mode = None
-    guidance_mode = "TARGET" # Valid modes are TARGET, NADIR, MAX_DRAG, MIN_DRAG, or None. Max and min drag modes face +x or +z into ram direction respectively.
-    activate_on_overpass = True
+    # Valid modes are 
+    # TARGET, 
+    # NADIR, 
+    # MAX_DRAG: face +x into ram direction
+    # MIN_DRAG: face +z into ram direction
+    guidance_mode = "NADIR" 
+    
+
+    activate_on_overpass = False
     use_skyfield = True
     
     # KSAT coordinates
@@ -463,9 +573,9 @@ if __name__ == "__main__":
     # target_height = 1716 # [m]
         
     if control_mode in ("RW_POINTING", "THERMAL_SPIN", "RW_SLOW_ROTATE"): # realistic RW sim setup
-        sim_time = 800
-        dynamics_update_time = .01
-        fsw_update_time = .1
+        sim_time = 20000
+        dynamics_update_time = .2
+        fsw_update_time = 1.0
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
             print("\nWARNING: FSW update time too large for stable convergence with reaction wheels\nExiting sim")
             exit()
@@ -477,12 +587,16 @@ if __name__ == "__main__":
         use_skyfield = False
         omega_init_rad = np.array([0.0, 0.0, 0.0]) # ensure no excessive spinning
     else: # realistic MTB sim setup
-        sim_time = 12000
-        dynamics_update_time = 1
-        if control_mode == "DETUMBLE":
-            fsw_update_time = 2 # suggested fsw rate of no less than 5 seconds for stability when using MTB_POINTING, and no more than 2 when using DETUMBLE
-        else:
-            fsw_update_time = 10
+        sim_time = 300000
+        
+        dynamics_update_time = 2
+        fsw_update_time = 2
+        
+        #if control_mode == "DETUMBLE":
+        #    fsw_update_time = 2 # suggested fsw rate of no less than 5 seconds for stability when using MTB_POINTING, and no more than 2 when using DETUMBLE
+        #else:
+        #    fsw_update_time = 10
+        
         activate_on_overpass = False
         
     if fsw_update_time < dynamics_update_time:
@@ -497,12 +611,41 @@ if __name__ == "__main__":
     print(f"Guidance Mode: {guidance_mode}")
     print(f"Activate On Overpass Mode: {activate_on_overpass}\n")
     
-    config = {"J":J, "mass":mass, "init_rot_axis":init_rot_axis, "init_rot_angle":init_rot_angle, "omega_init_rpm":omega_init_rpm, "omega_init_rad":omega_init_rad,
-              "satellite":satellite, "sat_rot_axis":sat_rot_axis, "sat_rot_angle":sat_rot_angle, "pointing_reference":pointing_reference, "control_mode":control_mode,
-              "sim_time":sim_time, "dynamics_update_time":dynamics_update_time, "fsw_update_time":fsw_update_time, "viz_filename":viz_filename, "print_states":print_states,
-              "save_pdf":save_pdf, "save_png":save_png, "plot_basepath":plot_basepath, "use_filter":use_filter, "sigma_gyro":sigma_gyro, "sigma_bias":sigma_bias, "P_b0":P_b0,
-              "sigma_ST":sigma_ST, "P_ST_0":P_ST_0, "ST_update_rate":ST_update_rate, "error_time_check":error_time_check, "guidance_mode":guidance_mode, 
-              "target_lat":target_lat, "target_lon":target_lon, "target_height":target_height, "sat_3D_file":sat_3D_file, "viz_scaling":viz_scaling, "use_skyfield":use_skyfield,
-              "activate_on_overpass":activate_on_overpass, "use_variable_gain":use_variable_gain}
+    config = {"J":J, 
+              "mass":mass, 
+              "init_rot_axis":init_rot_axis, 
+              "init_rot_angle":init_rot_angle, 
+              "omega_init_rpm":omega_init_rpm, 
+              "omega_init_rad":omega_init_rad,
+              "satellite":satellite, 
+              "sat_rot_axis":sat_rot_axis, 
+              "sat_rot_angle":sat_rot_angle, 
+              "pointing_reference":pointing_reference, 
+              "control_mode":control_mode,
+              "sim_time":sim_time, 
+              "dynamics_update_time":dynamics_update_time, 
+              "fsw_update_time":fsw_update_time, 
+              "viz_filename":viz_filename, 
+              "print_states":print_states,
+              "save_pdf":save_pdf, 
+              "save_png":save_png, 
+              "plot_basepath":plot_basepath, 
+              "use_filter":use_filter, 
+              "sigma_gyro":sigma_gyro, 
+              "sigma_bias":sigma_bias, 
+              "P_b0":P_b0,
+              "sigma_ST":sigma_ST, 
+              "P_ST_0":P_ST_0, 
+              "ST_update_rate":ST_update_rate, 
+              "error_time_check":error_time_check, 
+              "guidance_mode":guidance_mode, 
+              "target_lat":target_lat, 
+              "target_lon":target_lon, 
+              "target_height":target_height, 
+              "sat_3D_file":sat_3D_file, 
+              "viz_scaling":viz_scaling, 
+              "use_skyfield":use_skyfield,
+              "activate_on_overpass":activate_on_overpass, 
+              "use_variable_gain":use_variable_gain}
     
     sim_main(config)

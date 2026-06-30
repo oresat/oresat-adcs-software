@@ -227,7 +227,7 @@ class FlightSoftware(sysModel.SysModel):
             nadir_vector_ECEF = -r_ECEF / np.linalg.norm(r_ECEF) # used to get correct facing for star tracker. Nadir vector is opposite of vector from earth.
             
             if self.use_skyfield: # if using skyfield, override the sim-internal frame-transformation matrix with skyfield's
-                if self.ticks % self.skyfield_rate == 0 or self.last_skyfield_frame is None: # slow skyfield update for performance reasons. Update rate of 1 second shouldn't introduce more than .005 degrees of error.
+                if self.skyfield_rate == 0 or self.ticks % self.skyfield_rate == 0 or self.last_skyfield_frame is None: # slow skyfield update for performance reasons. Update rate of 1 second shouldn't introduce more than .005 degrees of error.
                     dt = self.time_zero + timedelta(seconds=currentTimeNanos * 1e-9)
                     t = self.skyfield_timescale.from_datetime(dt)
                     ECI_2_ECEF = self.skyfield_EOP.rotation_at(t) # inertial -> ECEF rotation matrix
@@ -294,6 +294,14 @@ class FlightSoftware(sysModel.SysModel):
                 desired_torque += tau_ff # feedforward torque, only non-zero for tracking mode
                 wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
+
+
+                if (quat.error_angle(q_error) <= 0.1 and np.all(np.abs(omega) < 1e-2)):
+                    # implement momentum dumping when somewhat close to target
+                    # same as detumble, but with wheel momentum
+                    desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(H_wheels, B) # detumble controller as defined by Markley & Crassidis
+                    self.command_MTB_torques(desired_torque, currentTimeNanos)
+
             elif self.control_mode == "THERMAL_REORIENT": # can only be set by first part of passive thermal spin controller
                 desired_torque = self.RW_controller(q_error, omega) # compute desired 3-axis torque from controller
                 wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
@@ -324,9 +332,13 @@ class FlightSoftware(sysModel.SysModel):
                 tau_des = self.mag_LQR_controller(q_error, omega) # desired 3-axis torque in body frame
                 bm = self.b_mat(B)
                 k = 1e-8
-                m_cmd = np.linalg.inv(bm.T @ bm + k*np.eye(3))@bm.T@tau_des
-                
-                self.command_MTB_torques(m_cmd, currentTimeNanos)
+
+                m_cmd_lqr = np.linalg.inv(bm.T @ bm + k*np.eye(3))@bm.T@tau_des
+                m_cmd_detumble = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
+
+                m_cmd_end = 0.5*m_cmd_lqr + 0.5*m_cmd_detumble
+                # print(m_cmd_end)
+                self.command_MTB_torques(m_cmd_end, currentTimeNanos)
             elif self.control_mode == "ORBITS":
                 pass # mode to simply visualize orbits with large timespans
             elif self.control_mode == "RW_SLOW_ROTATE": # a simple "rotate about z-axis" control mode to deal with star tracker occlusion:
