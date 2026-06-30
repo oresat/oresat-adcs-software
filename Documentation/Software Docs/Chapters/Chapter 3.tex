@@ -1,0 +1,39 @@
+% !TeX root = ../ADCS & GNC Documentation.tex
+\chapter{Guidance}
+
+\section{Overview}
+
+Guidance defines the desired spacecraft orientation independently of control.
+
+\section{Guidance Modes}
+
+Supported modes include:
+
+\begin{itemize}
+	\item Target tracking
+	\item Nadir pointing
+	\item Drag optimization (maximum or minimum drag orientation)
+\end{itemize}
+
+\section{Target Orientation Definition}
+
+Target quaternions are constructed from geometric relationships between spacecraft position, velocity, and Earth-relative target vectors.
+
+\section{Overpass Determination}
+
+In addition to real-time guidance computation, the system includes functionality to determine ground station overpass windows.
+
+These overpass functions are used to determine when the ADCS system should be active or inactive. They are not intended to be executed within the ADCS flight software itself, but rather externally as part of mission planning or higher-level system logic. In the simulation environment, these functions are invoked directly for testing and validation purposes.
+
+The overpass determination is performed using Keplerian orbit propagation. While computationally efficient, Kepler propagation introduces increasing error over longer time horizons due to unmodeled perturbations.
+
+To account for this limitation, overpass prediction is performed in two stages:
+
+\begin{itemize}
+	\item A coarse search is performed up to 24 hours in advance to identify approximate overpass windows
+	\item A refined search is performed once the spacecraft is within 6 hours of the predicted overpass window to improve accuracy
+\end{itemize}
+
+This two-stage approach balances computational efficiency with sufficient accuracy for operational use.
+
+The resulting overpass windows are used to determine when the ADCS system should transition between active pointing modes and inactive or low-power states.

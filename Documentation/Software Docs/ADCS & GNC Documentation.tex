@@ -1,0 +1,47 @@
+\documentclass[letterpaper, 11pt, oneside, english]{scrreprt}
+
+% Koma-Script in distinct versions has a bug which has impact on the layout when using footsepline.
+% With version >3.17 the bug is fixed. Update the KOMA package if necessary.
+
+\input{./Layout_Settings/Packages.tex}
+\input{./Layout_Settings/Layout.tex}
+\input{./Layout_Settings/Usersettings.tex}
+
+\begin{document}
+
+%% ============================================================
+%%  ***  Cover
+%% ============================================================
+\pagenumbering{gobble}
+\include{./Cover/Cover}
+
+\pagenumbering{Roman}
+\automark[section]{section}
+
+%% ============================================================
+%%  ***  Contents and Lists
+%% ============================================================
+
+% Contents
+\addcontentsline{toc}{chapter}{Contents}
+\tableofcontents
+
+%% ============================================================
+%%  ***  Chapters
+%% ============================================================
+\automark[chapter]{chapter}		% Chapter names in Header
+\pagenumbering{arabic}
+\include{./Chapters/Chapter 1}
+\include{./Chapters/Chapter 2}
+\include{./Chapters/Chapter 3}
+\include{./Chapters/Chapter 4}
+\include{./Chapters/Chapter 5}
+%\include{./Chapters/Chapter 6}
+
+
+\appendix
+\renewcommand{\chaptername}{Appendix}
+\crefalias{chapter}{appendix} % required to force "Chapter" to become "Appendix" when using Cref (this wasn't a problem with older documents, can't find problem so using this method now)
+\include{./Appendix/Frame_Terminology}
+
+\end{document}

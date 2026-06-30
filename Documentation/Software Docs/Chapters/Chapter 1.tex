@@ -1,0 +1,288 @@
+% !TeX root = ../ADCS & GNC Documentation.tex
+\chapter{ADCS Simulation and Software Architecture}
+
+\section{Overview}
+
+The Attitude Determination and Control System (ADCS) simulation environment is designed to support the development, validation, and verification of spacecraft attitude estimation and control algorithms.
+
+The system consists of three primary components:
+
+\begin{itemize}
+	\item A Basilisk-based spacecraft simulation environment
+	\item A simulation flight software (FSW) implementation
+	\item A hardware flight software implementation
+\end{itemize}
+
+All core ADCS algorithms, including estimation, guidance, and control, are shared between simulation and hardware implementations.
+
+\vspace{0.5em}
+
+The simulation is executed from the working directory in the command terminal via:
+
+\begin{verbatim}
+	python ADCS_Simulation_Basilisk.py
+\end{verbatim}
+
+%--------------------------------------------------
+
+\section{Simulation Environment}
+
+The simulation is implemented using the Basilisk framework and is structured into two primary processes:
+
+\begin{itemize}
+	\item \textbf{Dynamics Process}
+	\begin{itemize}
+		\item Rigid body spacecraft dynamics
+		\item Orbital propagation
+		\item Environmental models (gravity, magnetic field)
+	\end{itemize}
+	
+	\item \textbf{Flight Software Process}
+	\begin{itemize}
+		\item Sensor data processing
+		\item State estimation
+		\item Guidance computation
+		\item Control execution
+	\end{itemize}
+\end{itemize}
+
+\subsection{Sensors}
+
+The following sensors are simulated:
+
+\begin{itemize}
+	\item Star tracker (attitude measurement)
+	\item IMU (angular velocity measurement)
+	\item Magnetometer (magnetic field vector)
+\end{itemize}
+
+Sensor models include stochastic noise and bias effects to approximate real hardware behavior.
+
+\subsection{Actuators}
+
+\begin{itemize}
+	\item Reaction wheels (primary control authority)
+	\item Magnetorquers (detumbling and auxiliary control)
+\end{itemize}
+
+%--------------------------------------------------
+
+\section{Simulation Configuration}
+
+The simulation is configured via a centralized parameter dictionary constructed in the main execution script. This configuration defines spacecraft properties, sensor characteristics, control modes, and simulation timing.
+
+\subsection{Spacecraft Properties}
+
+The spacecraft model is selected at runtime. Each model defines:
+
+\begin{itemize}
+	\item Inertia tensor $J$
+	\item Mass
+	\item Visualization model
+\end{itemize}
+
+The inertia tensor is defined as:
+
+\[
+J =
+\begin{bmatrix}
+	J_{xx} & J_{xy} & J_{xz} \\
+	J_{yx} & J_{yy} & J_{yz} \\
+	J_{zx} & J_{zy} & J_{zz}
+\end{bmatrix}
+\]
+
+The simulation supports multiple spacecraft configurations (e.g., SENTINEL, OreSat), each with distinct inertial properties.
+
+\vspace{0.5em}
+
+The spacecraft mass is specified as a scalar parameter and used within the Basilisk dynamics model.
+
+\subsection{Initial Conditions}
+
+The initial attitude is defined using an axis-angle representation:
+
+\begin{itemize}
+	\item Initial rotation axis
+	\item Initial rotation angle
+\end{itemize}
+
+The initial angular velocity is specified in RPM and converted to radians per second:
+
+\[
+\omega_{init} = \omega_{RPM} \cdot \frac{2\pi}{60}
+\]
+
+An additional commanded rotation can be applied to define the initial orientation of the satellite.
+
+\subsection{Sensor Configuration}
+
+Sensor models include both stochastic noise and bias terms.
+
+\paragraph{IMU}
+\begin{itemize}
+	\item $\sigma_{gyro}$: white noise standard deviation
+	\item $\sigma_{bias}$: bias random walk parameter
+	\item $P_{b0}$: initial gyro bias uncertainty
+\end{itemize}
+
+\paragraph{Star Tracker}
+\begin{itemize}
+	\item $\sigma_{ST}$: measurement noise
+	\item $P_{ST,0}$: initial covariance
+	\item Update rate (asynchronous measurement availability)
+\end{itemize}
+
+These parameters are used both in the Basilisk sensor models and the MEKF covariance definitions.
+
+\subsection{Guidance and Targeting}
+
+Guidance behavior is controlled via:
+
+\begin{itemize}
+	\item \texttt{guidance\_mode}: TARGET, NADIR, MAX\_DRAG, MIN\_DRAG, or None
+	\item Target coordinates (latitude, longitude, altitude) for ground target tracking mode
+	\item \texttt{activate\_on\_overpass}: enables ground-pass-triggered activation
+\end{itemize}
+
+Target positions are converted to ECEF coordinates for guidance computations.
+
+\subsection{Control Configuration}
+
+The control system is configured through a set of parameters that determine which actuators are active and how control laws are applied:
+
+\begin{itemize}[itemsep=6pt]
+	\item \texttt{control\_mode}: Defines actuator usage and control laws. Possible modes:
+	\begin{itemize}
+		\item DETUMBLE: Uses magnetorquers for long-duration detumbling.
+		\item RW\_POINTING: Uses reaction wheels for fine-pointing. Guidance for target orientation is defined separately.
+		\item MTB\_POINTING: Uses magnetorquers for coarse-pointing over long periods of time. Guidance for target orientation is defined separately.
+		\item THERMAL\_DETUMBLE: Initiates long-duration detumble, which then transitions to reorientation with reaction wheels to reorient satellite perpendicular to sun vector, and then spin up about the z-axis for passive thermal-stabilization.
+	\end{itemize}
+	
+	\item \texttt{pointing\_reference}: defines boresight-reference or pointing-reference axis of the spacecraft for guidance calculations. Possible modes:
+	\begin{itemize}
+		\item HELICAL: Uses the helical antenna (OreSat +Z axis) as the primary pointing reference
+		\item CFC: Uses the Cirrus Flux Cam (OreSat1's -Z axis) as the primary pointing reference
+		\item ST: Uses the Star Tracker as the primary pointing reference. Added as a potential reference, not actually used in missions.
+	\end{itemize}
+	\item \texttt{use\_variable\_gain}: enables gain scheduling for fine pointing
+\end{itemize}
+
+%Control modes determine which actuators are active and how control laws are applied.
+
+\subsection{Simulation Timing}
+
+Simulation timing is dependent on control mode:
+
+\begin{itemize}
+	\item \texttt{sim\_time}: total simulation duration
+	\item \texttt{dynamics\_update\_time}: integration timestep
+	\item \texttt{fsw\_update\_time}: controller update rate
+\end{itemize}
+
+Different modes use different time scales:
+
+\begin{itemize}
+	\item Reaction wheel control: high-frequency updates (e.g., 0.01–0.1 s)
+	\item Magnetorquer control: lower-frequency updates (e.g., 5–20 s)
+	\item Orbit visualization: coarse updates for long-duration simulation
+\end{itemize}
+
+\subsection{Visualization and Output}
+
+The simulation supports optional visualization and data export:
+
+\begin{itemize}
+	\item 3D model selection and scaling
+	\item Plot saving (PDF, PNG)
+	\item Output directory configuration
+\end{itemize}
+
+\subsection{Additional Features}
+
+\begin{itemize}
+	\item \texttt{use\_filter}: enables MEKF-based state estimation with simulated sensor noise
+	\item \texttt{use\_skyfield}: enables the usage of Skyfield Ephemeris data for guidance functions and simulation
+	\item \texttt{error\_time\_check}: defines time window to be excluded from performance metric evaluation to avoid transient states from skewing data
+\end{itemize}
+
+\subsection{Configuration Assembly}
+
+All parameters are collected into a single dictionary and passed to the simulation entry point:
+
+\begin{verbatim}
+	config = {...}
+	sim_main(config)
+\end{verbatim}
+
+This design enables centralized configuration and consistent parameter propagation across all modules.
+
+%--------------------------------------------------
+
+\section{Flight Software Architecture}
+
+\subsection{Simulation Flight Software}
+
+The simulation flight software interfaces with the Basilisk messaging system and operates within the simulation time framework.
+
+\subsection{Hardware Flight Software}
+
+The hardware implementation interfaces with the Basilisk messaging system for simulated sensor input, runs the actual flight-software on the C3 board, and outputs the control signals to both the physical and simulated actuators in order to compare expected results with hardware performance.
+
+\subsection{Key Distinction}
+
+The primary difference between the two implementations lies in:
+
+\begin{itemize}
+	\item Data acquisition and communication interfaces
+	\item Where the control algorithms run
+\end{itemize}
+
+All estimation, guidance, and control algorithms are identical between simulation and hardware implementations.
+
+%--------------------------------------------------
+
+\section{Coordinate Frames and Attitude Representations}
+
+\subsection{Quaternion Representation}
+
+Quaternions are represented in scalar-last form:
+\[
+q = [q_x,\ q_y,\ q_z,\ q_s]^T
+=
+\begin{bmatrix}
+	q_v \\
+	q_s
+\end{bmatrix}
+\]
+where \(q_v = [q_x,\ q_y,\ q_z]^T\) is the vector portion and \(q_s\) is the scalar portion.
+
+A quaternion representing a rotation of angle \(\theta\) about a unit axis \(\hat{e}\) is given by:
+\[
+q =
+\begin{bmatrix}
+	\hat{e}\sin(\theta/2) \\
+	\cos(\theta/2)
+\end{bmatrix}
+\]
+
+Quaternion multiplication for this project follows the Shuster convention.
+
+The attitude error quaternion is defined as the relative rotation between the current and desired spacecraft attitudes. In the control formulation, only the vector portion of the error quaternion is used directly in the state vector and control law. For small attitude errors,
+\[
+q_{e,v} \approx \frac{1}{2}\delta\theta
+\]
+which motivates the linearized state-space formulation used for controller design.
+
+\subsection{Reference Frames}
+
+Coordinate frames provide a structured way to represent position, velocity, and attitude, and to transform these quantities between different reference systems used in the ADCS.
+
+\begin{itemize}
+	\item Body frame (B): A coordinate system fixed to the spacecraft, with origin at the center of mass and axes aligned with the spacecraft-defined $+x$, $+y$, and $+z$ body axes as specified by the mechanical and systems design. All onboard quantities such as angular velocity, control torque, and actuator commands are expressed in this frame.
+	\item Inertial frame (ECI): A non-rotating coordinate system centered at the Earth's center of mass, which remains fixed relative to the starfield. This frame is used as the reference for attitude determination and orbital dynamics. The star tracker's output is defined in this frame.
+	\item Earth-fixed frame (ECEF): A coordinate system centered at the Earth's center of mass that rotates with the Earth. In this frame, locations on the Earth's surface remain fixed, making it suitable for representing ground stations and geographic targets. % This frame is used for guidance modes involving all ground targets and attitudes relative to the Earth (such as the ram-facing guidance mode).
+\end{itemize}
+
+All angular velocities and control torques are expressed in the body frame. \Cref{app:frames} elaborates on reference frame nomenclature.

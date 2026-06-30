@@ -1,0 +1,256 @@
+% !TeX root = ../ADCS & GNC Documentation.tex
+\chapter{Control System}
+
+\section{State-Space Model}
+
+\[
+\dot{x} =
+\begin{bmatrix}
+	0 & \frac{1}{2}I \\
+	0 & 0
+\end{bmatrix} x +
+\begin{bmatrix}
+	0 \\
+	J^{-1}
+\end{bmatrix} u
+\]
+
+\section{Control Law}
+
+The controller state vector is defined as
+\[
+x =
+\begin{bmatrix}
+	q_{e,v} \\
+	\omega
+\end{bmatrix}
+\]
+where \(q_{e,v}\) is the vector portion of the attitude error quaternion and \(\omega\) is the body-frame angular velocity error. This is used in the resulting control law:
+
+\[
+\tau = u = -Kx
+\]
+
+Where \(u\) is the desired 3-axis body torques of the satellite, and \(K\) is the gain matrix derived from the LQR control design.
+
+\section{LQR Control Design}
+
+The control system is designed using a Linear Quadratic Regulator (LQR) formulation.
+
+The gain matrix $K$ is computed by solving the discrete-time algebraic Riccati equation, following discretization of the continuous-time system using a zero-order hold assumption.
+
+The LQR design is based on qualitative tuning parameters, including:
+
+\begin{itemize}
+	\item Maximum attitude error
+	\item Maximum angular rate
+	\item Maximum actuator torque
+\end{itemize}
+
+These values are not strict physical limits, but rather representative scaling values used to define the relative importance of each state and input. As a result, controller performance is governed by the relative weighting between attitude error, angular velocity, and control effort, rather than the absolute numerical values chosen.
+
+The relationship between these qualitative tuning parameters and the resulting controller gains is established through the construction of the weighting matrices.
+
+\subsection{Weighting Matrices}
+
+The cost function minimized by the LQR controller is of the form:
+
+\[
+J = \sum (x^T Q x + u^T R u)
+\]
+
+The matrices $Q$ and $R$ define the relative weighting of the state error and control effort in the cost function.
+
+\begin{itemize}
+	\item $Q$ penalizes deviations in the state vector, including attitude error and angular velocity
+	\item $R$ penalizes control input effort (actuator torque)
+\end{itemize}
+
+The weighting matrices are constructed using the previously defined qualitative parameters for maximum expected attitude error, angular rate, and actuator torque. These values are used as scaling factors to normalize each term in the cost function.
+
+Specifically, each state and input is weighted inversely proportional to the square of its corresponding characteristic value. This ensures that states with smaller acceptable magnitudes (such as attitude error) are penalized more heavily than those with larger acceptable magnitudes.
+
+As with the overall LQR design, the absolute values used in constructing $Q$ and $R$ are not physically prescriptive. Instead, the resulting controller behavior is determined by the relative weighting between the different state components and control effort. Adjusting these parameters effectively shifts the balance between responsiveness, control authority, and smoothness of the system response.
+
+\section{Gain Design}
+
+\begin{itemize}
+	\item Discretization via zero-order hold
+	\item Gain computation done using the discrete Riccati equation
+\end{itemize}
+
+\section{Variable Gain Control}
+
+An optional variable gain control scheme is implemented to improve fine-pointing performance.
+
+This approach utilizes two separate gain matrices:
+
+\begin{itemize}
+	\item A nominal gain matrix for coarse pointing
+	\item A secondary gain matrix with increased weighting on quaternion error for fine pointing near the target
+\end{itemize}
+
+When the spacecraft approaches the target attitude, the controller transitions from the nominal gain matrix to the fine-pointing gain matrix.
+
+Although a smoothing transition is applied between the two gain sets, this switching behavior introduces a small transient response in the actuator commands. In practice, this manifests as a slight jerk in the reaction wheel torques.
+
+\begin{figure}[h]
+	\centering
+	% Insert figure here
+	\caption{Transient response during gain transition (reaction wheel torque)}
+\end{figure}
+
+\section{Magnetorquer-Pointing Controller}
+
+As mentioned previously, the magnetorquers are primarily used for detumble operations. However, they can also be used for directional pointing over long time scales when paired with a more conservative (slower) LQR tuning.
+
+Unlike reaction wheels, magnetorquers cannot generate arbitrary three-axis torques. The control torque is given by the cross product of the magnetic dipole moment and the local magnetic field, which restricts the achievable torque to the plane orthogonal to the magnetic field vector. As a result, the torque mapping is inherently rank-deficient.
+
+To account for this, the desired control torque produced by the LQR controller must be mapped into the achievable subspace. This is accomplished using a modified control allocation law known as the \textbf{Singularity Robust (SR) inverse}, as described in \textit{Attitude Determination and Control System for Nadir Pointing Using Magnetorquer and Magnetometer} by Sugimura et al.
+
+\subsection{Torque-to-Dipole Mapping}
+
+The control torque generated by magnetorquers is given by
+\[
+\boldsymbol{\tau} = \mathbf{m} \times \mathbf{B}
+\]
+
+This can be written in matrix form as
+\[
+\boldsymbol{\tau} = \mathbf{B}_\times \mathbf{m}
+\]
+
+where $\mathbf{B}_\times$ is the skew-symmetric cross-product matrix of the magnetic field vector:
+\[
+\mathbf{B}_\times =
+\begin{bmatrix}
+	0 & B_z & -B_y \\
+	-B_z & 0 & B_x \\
+	B_y & -B_x & 0
+\end{bmatrix}
+\]
+
+Since $\mathbf{B}_\times$ is rank-deficient (rank 2), it is not invertible. Therefore, the magnetic dipole moment is computed using a singularity-robust inverse:
+
+\[
+\mathbf{m} =
+(\mathbf{B}_\times^T \mathbf{B}_\times + \lambda \mathbf{I})^{-1}
+\mathbf{B}_\times^T \boldsymbol{\tau}_{\text{des}}
+\]
+
+where $\lambda = 10^{-8}$ is a small regularization parameter used to avoid numerical singularities in the OreSat/SENTINEL code.
+
+This formulation computes the minimum-norm magnetic dipole moment that best approximates the desired torque within the physically achievable subspace.
+
+\section{Detumble Control Law}
+
+The detumble controller used in this system follows the magnetic control formulation described by Markley \& Crassidis in \textit{Fundamentals of Spacecraft Attitude Determination and Control}.
+
+The desired control torque is defined as:
+
+\[
+\tau = \frac{k}{\| \mathbf{B} \|^2} \, (\boldsymbol{\omega} \times \mathbf{B})
+\]
+
+where $\boldsymbol{\omega}$ is the spacecraft angular velocity expressed in the body frame, $\mathbf{B}$ is the measured magnetic field vector, and $k$ is a scalar gain.
+
+\subsection{Control Gain}
+
+The gain is selected based on orbital and spacecraft properties as:
+
+\[
+k = \frac{4\pi}{T_{orbit}} \left(1 + \sin(i)\right) J_{min}
+\]
+
+where $T_{orbit}$ is the orbital period, $i$ is the orbital inclination (in radians), and $J_{min}$ is the minimum principal moment of inertia of the spacecraft.
+
+\subsection{Physical Interpretation}
+
+As the spacecraft rotates through the Earth's magnetic field, the cross product $\boldsymbol{\omega} \times \mathbf{B}$ produces a torque direction that opposes rotational motion.
+
+The normalization by $\| \mathbf{B} \|^2$ ensures that the commanded torque remains consistent despite variations in magnetic field strength along the orbit.
+
+\subsection{Implementation Notes}
+
+\begin{itemize}
+	\item The control law is implemented entirely in the body frame
+	\item Angular velocity is obtained directly from IMU measurements
+	\item The magnetic field vector is measured using the average of the onboard magnetometers
+\end{itemize}
+
+\subsection{Limitations}
+
+\begin{itemize}
+	\item Control authority is limited to torques perpendicular to the magnetic field vector
+	\item Performance varies with orbital position due to changes in magnetic field strength and direction
+	\item Convergence is slower than reaction wheel-based control
+\end{itemize}
+
+\section{Integrator Augmentation}
+
+A method for incorporating an integrator term into the controller was implemented to reduce steady-state error.
+
+However, it was found that the baseline controller already achieves extremely small steady-state errors. In practice, the introduction of an integrator provided no meaningful improvement in performance.
+
+Instead, the presence of step changes in the target attitude resulted in increased transient instability when the integrator term was active. These effects outweighed any marginal benefit in steady-state accuracy.
+
+Given that the current steady-state errors are already negligible, and that the real hardware system is expected to exhibit greater limitations due to actuator and sensor imperfections, the integrator-based controller was not retained in the final implementation.
+
+\section{Feedforward Terms}
+
+Feedforward terms are included to:
+
+\begin{itemize}
+	\item Track time-varying reference attitudes
+	\item Compensate for gyroscopic coupling
+\end{itemize}
+
+\section{Actuator Allocation}
+
+Desired body torque is mapped to reaction wheel torques using a wheel configuration matrix.
+
+The matrix $G \in \mathbb{R}^{3 \times n}$ defines the orientation of each reaction wheel in the spacecraft body frame. Each column of $G$ corresponds to the unit vector of a reaction wheel spin axis expressed in body coordinates:
+
+\[
+G =
+\begin{bmatrix}
+	| & | &        & | \\
+	g_1 & g_2 & \cdots & g_n \\
+	| & | &        & |
+\end{bmatrix}
+\]
+
+where each $g_i \in \mathbb{R}^3$ is a unit vector representing the axis of the $i$-th reaction wheel.
+
+The relationship between individual wheel torques $u_{rw}$ and the resulting body torque $\tau$ is given by:
+
+\[
+\tau = G u_{rw}
+\]
+
+Since the system is overactuated for the OreSat/SENTINEL bus for redundancy (e.g., four wheels for three axes), the inverse mapping is computed using the Moore-Penrose pseudoinverse:
+
+\[
+u_{rw} = G^\dagger \tau
+\]
+
+where $G^\dagger$ is the pseudoinverse of the configuration matrix.
+
+This formulation provides a least-squares solution that minimizes control effort while achieving the desired body torque. Care must be taken to ensure consistent sign conventions between the definition of $G$, the actuator model, and the applied torque commands.
+
+\section{Assumptions and Limitations}
+
+\begin{itemize}
+	\item Rigid body dynamics
+	\item Small-angle approximation in estimation
+	\item Simplified actuator saturation modeling
+\end{itemize}
+
+\section{Known Issues}
+
+\begin{itemize}
+	\item Sensitivity to quaternion sign conventions
+	\item Reaction wheel allocation sign consistency
+	\item Dependence on accurate frame transformations
+	\item Small transient torque discontinuity during variable gain transitions
+\end{itemize}

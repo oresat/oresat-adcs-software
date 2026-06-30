@@ -1,0 +1,310 @@
+\documentclass[letterpaper,11pt,oneside,english]{scrreprt}
+
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{cleveref}
+\geometry{margin=1in}
+
+
+\title{ADCS Concept of Operations (ConOps)}
+\author{Sebastian Benner}
+\date{\today}
+
+\begin{document}
+	
+	\maketitle
+	\tableofcontents
+	\newpage
+	
+	%==================================================
+	\chapter{Overview}
+	
+	The Attitude Determination and Control System (ADCS) is not continuously active. Instead, it operates on demand and is invoked either automatically or via commands from the ground.
+	
+	The system is designed to:
+	
+	\begin{itemize}
+		\item Execute specific attitude control tasks when requested
+		\item Transition between defined operational states
+		\item Report completion and status back to the ground
+	\end{itemize}
+	
+	All ADCS operations follow a structured pattern consisting of an initial state, a defined task, and a shutdown operation.
+	
+	%==================================================
+	\chapter{Operational Philosophy}
+	
+	The ADCS operates as a task-based system rather than a continuously running control loop.
+	
+	\begin{itemize}
+		\item The system is activated by either:
+		\begin{itemize}
+			\item Ground command
+			\item Autonomous onboard trigger
+		\end{itemize}
+		
+		\item Once activated, the ADCS performs a defined task
+		
+		\item Upon completion, the system:
+		\begin{itemize}
+			\item Sends a status message indicating completion
+			\item Returns to an inactive or low-power mode if no further tasks are scheduled
+		\end{itemize}
+	\end{itemize}
+	
+	This approach minimizes power usage while maintaining full autonomy during task execution.
+	
+	%==================================================
+	\chapter{Operational States}
+	
+	The ADCS operates within a set of discrete states.
+	
+	\section{Inactive State}
+	
+	\begin{itemize}
+		\item ADCS control is not actively running
+		\item Minimal power consumption
+		\item Awaiting command from ground or autonomous trigger from C3
+	\end{itemize}
+	
+	\section{Active Control State}
+	
+	\begin{itemize}
+		\item ADCS estimation, guidance, and control loops are active
+		\item Spacecraft is executing a defined task
+	\end{itemize}
+	
+	\section{Completed State}
+	
+	\begin{itemize}
+		\item Task objectives have been met
+		\item Spacecraft has reached the desired attitude or condition
+		\item Status message is transmitted to indicate completion
+	\end{itemize}
+	
+		%==================================================
+		
+	\chapter{Operational Summary}
+	
+	All ADCS operations follow a consistent pattern:
+	
+	\begin{enumerate}
+		\item Initial state (inactive or prior state)
+		\item Task invocation (command or autonomous trigger)
+		\item Task execution (control active)
+		\item Task completion
+		\item Status reporting
+		\item Transition to end state (inactive or standby)
+	\end{enumerate}
+	
+	This structure ensures predictable behavior, low power consumption, and clear communication of system status.
+	
+	\section{Nominal Operational Sequence}
+	
+	A typical operational sequence follows the order below:
+	
+	\begin{enumerate}
+		\item Ground command is received specifying:
+		\begin{itemize}
+			\item Mission type
+			\item Duration
+			\item Whether data should be offloaded after completion
+		\end{itemize}
+		
+		\item The ADCS is initialized:
+		\begin{itemize}
+			\item State estimation is initialized
+			\item If necessary, the spacecraft performs a slow rotation about the +z axis until the star tracker is no longer occluded
+		\end{itemize}
+		
+		\item The spacecraft executes the commanded mission for the specified duration
+		
+		\item Upon completion, the system evaluates upcoming ground station overpasses
+		
+		\item If the next overpass is sufficiently far in the future:
+		\begin{itemize}
+			\item The spacecraft enters a low-power mode
+			\item ADCS control is shut down
+		\end{itemize}
+		
+		\item Prior to the overpass window:
+		\begin{itemize}
+			\item The ADCS is reinitialized if previously shut down
+			\item The spacecraft transitions to target tracking mode
+		\end{itemize}
+		
+		\item Data is offloaded during the overpass
+		
+		\item After reaction wheel shutdown, a detumble operation is performed:
+		\begin{itemize}
+			\item Executed at a lower update rate
+			\item Ensures the spacecraft is in an acceptable state for the next mission
+			\item Results in a small residual spin about the +z axis
+		\end{itemize}
+		
+		\item The system sends a final status message and transitions to the inactive state
+	\end{enumerate}
+	
+	%==================================================
+	
+	\chapter{Detumble Operation}
+	
+	\section{Trigger Conditions}
+	
+	Detumble is initiated automatically following deployment.
+	
+	The trigger condition is:
+	
+	\begin{itemize}
+		\item A predefined time delay after deployment
+	\end{itemize}
+	
+	This ensures that the spacecraft begins stabilizing without requiring ground intervention.
+	
+	\section{Execution}
+	
+	\begin{itemize}
+		\item Magnetorquer-based control is used to reduce angular velocity
+		\item The system monitors angular rate until it falls below a defined threshold
+	\end{itemize}
+	
+	\section{Completion}
+	
+	\begin{itemize}
+		\item Once angular rates are sufficiently reduced:
+		\begin{itemize}
+			\item The detumble task is considered complete
+			\item A status message is sent to the ground
+		\end{itemize}
+		
+		\item The spacecraft transitions to a stable state and awaits further commands
+	\end{itemize}
+	
+		%==================================================
+	\chapter{Satellite Axis Definitions}
+	
+	OreSat1 and SENTINEL differ in their axis definitions.
+	
+	\section{OreSat1}
+	
+	\begin{figure}[h!]
+		\centering
+		\includegraphics[width=0.65\textwidth]{OreSat1_Axes_Deployed.png}
+		\caption{OreSat1 axis definition}
+		\label{fig:OreSat1}
+	\end{figure}
+	
+	 As illustrated in \Cref{fig:OreSat1}, OreSat1 defines its axes as follows:
+	
+	\begin{itemize}
+		\item +X axis points out along the same axis as the star tracker's boresight
+		\item +Z axis points along the same axis along which the helical antenna is deployed, while -Z is the side of the satellite containing the CFC camera and UHF antennas
+		\item +Y axis is derived from +X and +Z orientations using a standard orthogonal coordinate system
+	\end{itemize}
+	
+	\section{SENTINEL}
+	
+	No image similar to that seen in \Cref{fig:OreSat1} is available to illustrate the SENTINEL axis definitions at the time of writing, which are similar to those of OreSat1, but rotated about the +X axis by 180 degrees:
+	
+	\begin{itemize}
+		\item +X axis points out along the same axis as the star tracker's boresight
+		\item +Z axis points out of the side of the satellite on which the UHF antenna are mounted, while the -Z points along the same axis along which the helical antenna is deployed
+		\item +Y axis is derived from +X and +Z orientations using a standard orthogonal coordinate system
+	\end{itemize}
+	
+	%==================================================
+	\chapter{Mission Execution}
+	
+	\section{Commanded Operation}
+	
+	Mission execution is initiated via ground command.
+	
+	The command specifies:
+	
+	\begin{itemize}
+		\item Mission type (e.g. nadir pointing, ram-facing orientation)
+		\item Duration of execution
+		\item Whether data should be downlinked after completion
+	\end{itemize}
+	
+	\section{Execution Behavior}
+	
+	Once commanded:
+	
+	\begin{itemize}
+		\item The ADCS transitions from the inactive state to the active control state
+		\item The spacecraft performs the requested mission for the specified duration
+	\end{itemize}
+	
+	\section{Attitude Modes}
+	
+	\begin{itemize}
+		\item \textbf{Nadir Pointing:} Spacecraft +z axis aligned with Earth center
+		\item \textbf{Ram-Facing:} Spacecraft +x axis aligned with velocity vector
+	\end{itemize}
+	
+	For circular or near-circular orbits, these modes are nearly equivalent. In elliptical orbits, the difference becomes more pronounced due to variation in the velocity vector.
+	
+	\section{Completion}
+	
+	\begin{itemize}
+		\item After the specified duration:
+		\begin{itemize}
+			\item The task is terminated
+			\item A status message is transmitted
+		\end{itemize}
+		
+		\item The spacecraft transitions to the completed or inactive state
+	\end{itemize}
+	
+	%==================================================
+	\chapter{Autonomous Downlink Operation}
+	
+	\section{Overview}
+	
+	If data downlink is requested, the spacecraft autonomously schedules communication following mission completion.
+	
+	\section{Overpass Prediction}
+	
+	\begin{itemize}
+		\item The spacecraft predicts upcoming ground station overpasses
+		\item The next suitable overpass window is selected
+	\end{itemize}
+	
+	\section{Pre-Overpass Behavior}
+	
+	\begin{itemize}
+		\item The spacecraft remains in a low-power or standby state
+		\item ADCS is not actively performing high-rate control during this period
+	\end{itemize}
+	
+	\section{Communication Execution}
+	
+	\begin{itemize}
+		\item Shortly before the overpass window:
+		\begin{itemize}
+			\item ADCS is activated
+			\item The spacecraft transitions to target tracking mode
+		\end{itemize}
+		
+		\item The spacecraft points toward the ground station
+		
+		\item Data transmission begins once the ground station is within range
+	\end{itemize}
+	
+	\section{Completion}
+	
+	\begin{itemize}
+		\item After the overpass:
+		\begin{itemize}
+			\item Transmission stops
+			\item A status message is generated
+		\end{itemize}
+		
+		\item The spacecraft returns to an inactive or standby state
+	\end{itemize}
+	
+	
+\end{document}

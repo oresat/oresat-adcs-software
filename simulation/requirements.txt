@@ -1,0 +1,7 @@
+bsk
+control==0.10.1
+matplotlib
+numpy
+scipy
+skyfield==1.53
+pytest
