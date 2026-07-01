@@ -22,8 +22,7 @@ dependencies = [
 dev = [
 	"build",
 	"pandas",
-	"matplotlib",
-	"pgi"
+	"matplotlib"
 ]
 analysis = [
 	"pyephem",

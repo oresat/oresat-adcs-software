@@ -62,6 +62,13 @@ These typically depend on both `oresat_adcs.functions` and `oresta_adcs.configur
 - `manager_class`: Combines controllers and observers into a complete feedback system
 
 
+### Development
+
+To install the development version, use
+
+```
+python3 -m pip install -e .[dev,analysis]
+```
 
 ### Contributing
 
