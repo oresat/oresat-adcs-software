@@ -8,8 +8,8 @@ from sys import exit
 
 from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
 from Kalman_Filter import Multiplicative_Extended_Kalman_Filter
-import Quaternions as quat
-import Guidance_Functions as guid
+import quaternion as quat
+import guidance_functions as guid
 
 from config import GuidanceMode 
 
