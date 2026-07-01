@@ -8,8 +8,10 @@ from sys import exit
 
 from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
 from Kalman_Filter import Multiplicative_Extended_Kalman_Filter
-import Quaternions as quat
-import Guidance_Functions as guid
+import quaternion as quat
+import guidance_functions as guid
+
+from config import GuidanceMode 
 
 class FlightSoftware(sysModel.SysModel):
     def __init__(self, config):
@@ -58,7 +60,7 @@ class FlightSoftware(sysModel.SysModel):
         target_lat = config["target_lat"]
         target_lon = config["target_lon"]
         target_height = config["target_height"]
-        self.ECEF_target = guid.GPS_to_ECEF(target_lat, target_lon, target_height) # convert GPS coordinates to ECEF coordinates
+        self.ECEF_target = guid.gps_to_ecef(target_lat, target_lon, target_height) # convert GPS coordinates to ECEF coordinates
         
         self.use_skyfield = config["use_skyfield"]
         if self.use_skyfield or self.activate_on_overpass:
@@ -241,13 +243,13 @@ class FlightSoftware(sysModel.SysModel):
             else:
                 ECI_2_ECEF = true_ECI_2_ECEF # if not using skyfield, use sim-internal conversion matrix
             
-            if self.guidance_mode == "TARGET": # Tracking a static target on the surface of the earth via GPS coordinates        
+            if self.guidance_mode == GuidanceMode.TARGET: # Tracking a static target on the surface of the earth via GPS coordinates        
                 target_vector = self.ECEF_target - r_ECEF # calculate target vector in ECEF cartesian coordinates
                 target_vector = target_vector/np.linalg.norm(target_vector) # normalize to unit vector
                 new_target = guid.target_tracking_quat(target_vector, nadir_vector_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
-            elif self.guidance_mode == "NADIR": # Continually face +z nadir (+x as close to ram as possible)
+            elif self.guidance_mode == GuidanceMode.NADIR: # Continually face +z nadir (+x as close to ram as possible)
                 new_target = guid.nadir_quat(nadir_vector_ECEF, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
-            elif self.guidance_mode == "MAX_DRAG" or self.guidance_mode == "MIN_DRAG":
+            elif self.guidance_mode == GuidanceMode.MAX_DRAG or self.guidance_mode == GuidanceMode.MIN_DRAG:
                 new_target = guid.ram_quaternion(self.guidance_mode, v_ECEF, nadir_vector_ECEF, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
             else:
                 print(f"Unknown guidance mode: {self.guidance_mode}")

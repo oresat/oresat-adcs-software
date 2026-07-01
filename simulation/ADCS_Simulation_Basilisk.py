@@ -7,7 +7,7 @@ from Basilisk import __path__
 from Basilisk.utilities import RigidBodyKinematics as rbk
 from Plotting_Functions import plot_rw_speeds, plot_magfield, plot_imu
 from FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
-import Quaternions as quat
+import quaternion as quat
 from pathlib import Path
 from sys import exit
 bskPath = __path__[0]
@@ -18,6 +18,9 @@ from Basilisk.utilities.supportDataTools.dataFetcher import get_path, DataFile
 
 # similar file of what is in oresat-simulator
 import basilisk_helpers as bsk_helpers
+
+
+from config import GuidanceMode
 
 
 # EXAMPLE FOR READING BASILISK MESSAGING SYSTEM AND ATTRIBUTES. USED FOR DOCUMENTATION, DO NOT DELETE!!!
@@ -95,7 +98,10 @@ def sim_main(config):
     # To set the spacecraft initial conditions, the following initial position and velocity variables are set:
     scObject.hub.r_CN_NInit = rN  # r_BN_N [m]
     scObject.hub.v_CN_NInit = vN  # v_BN_N [m/s]
-    
+
+    print(rN)
+    print(vN)
+
     # Add spice object for planet rotation and ECEF coordinate simulation. Necessary for guidance algorithms.
     timeInitString = "2026-02-10T20:00:00Z"
     spiceObject = gravFactory.createSpiceInterface(bskPath + "/supportData/EphemerisData/", time=timeInitString, epochInMsg=True) # create SPICE object and point to ephemeris data
@@ -549,7 +555,7 @@ if __name__ == "__main__":
     # NADIR, 
     # MAX_DRAG: face +x into ram direction
     # MIN_DRAG: face +z into ram direction
-    guidance_mode = "NADIR" 
+    guidance_mode = GuidanceMode.NADIR # "NADIR" 
     
 
     activate_on_overpass = False
