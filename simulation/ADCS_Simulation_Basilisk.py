@@ -553,9 +553,10 @@ if __name__ == "__main__":
     # Valid modes are 
     # TARGET, 
     # NADIR, 
+    # SUN,
     # MAX_DRAG: face +x into ram direction
     # MIN_DRAG: face +z into ram direction
-    guidance_mode = GuidanceMode.NADIR # "NADIR" 
+    guidance_mode = GuidanceMode.SUN # "NADIR" 
     
 
     activate_on_overpass = False
@@ -566,6 +567,7 @@ if __name__ == "__main__":
     target_lon = 15.411100
     target_height = 488 # [m]
     
+    time_init_string = "2026-02-10T20:00:00Z"
     # ESI headquarters coordinates
     # target_lat = 39.608251
     # target_lon = -104.895788
@@ -645,6 +647,8 @@ if __name__ == "__main__":
               "viz_scaling":viz_scaling, 
               "use_skyfield":use_skyfield,
               "activate_on_overpass":activate_on_overpass, 
-              "use_variable_gain":use_variable_gain}
+              "use_variable_gain":use_variable_gain,
+              "time_init_string": time_init_string,
+    }
     
     sim_main(config)

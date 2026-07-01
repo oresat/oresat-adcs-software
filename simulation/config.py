@@ -4,8 +4,9 @@ from enum import Enum, IntEnum
 class GuidanceMode(IntEnum):
     TARGET = 0
     NADIR = 1
-    MIN_DRAG = 2
-    MAX_DRAG = 3
+    SUN = 2
+    MIN_DRAG = 3
+    MAX_DRAG = 4
 
 
 class ControlMode(IntEnum):

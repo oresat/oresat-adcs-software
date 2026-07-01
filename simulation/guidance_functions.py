@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
+from datetime import datetime
 import numpy as np
 #from olaf import logger
 from skyfield.framelib import itrs
@@ -57,6 +58,54 @@ station_list = [
 ]
 
 
+def julian_date(iso_date:str) -> float:
+    '''Calculate the julian date.
+
+    Does NOT account for leap second.
+
+    iso_timestamp
+        ISO formatted timestamp in UTC.
+    '''
+    dt = datetime.fromisoformat(iso_date)
+    term1 = int(7/4 * (dt.year + int((dt.month + 9) / 12)))
+    term2 = int(275*dt.month / 9)
+    term3 = (60*dt.hour + dt.minute + dt.second/(60)) / 1440
+    return 1721013.5 + 367*dt.year + dt.day - term1 + term2 + term3
+
+def sun_vector(julian_date, position_ecef, eci_2_ecef):
+    '''Unit vector in inertial coordinates pointing from satellite to the sun.
+
+    More details on page 420 of Markely & Crassidis. For now assume the sun is a constant distance away.
+
+    Parameters
+    ----------
+    julian_date
+    position_ecef
+    '''
+    # time in years
+    T_UT1      = (julian_date - 2451545) / 36525
+    # mean longitude (degrees)
+    mean_long  = (280.46 + 36000.771 * T_UT1) % 360
+    # mean anomaly (radians)
+    mean_anom  = np.radians((357.5277233 + 35999.05034 * T_UT1) % 360)
+    # ecliptic longitude
+    ecl_long   = np.radians(mean_long + 1.914666471 * np.sin(mean_anom) + 0.019994643 * np.sin(2*mean_anom))
+    # ecliptic oblique
+    ecl_oblq   = np.radians(23.439291 - 0.0130042 * T_UT1)
+
+    # unit vector of earth to sun, GCI coordinate frame
+    earth_to_sun = np.array([np.cos(ecl_long),
+                            np.cos(ecl_oblq) * np.sin(ecl_long),
+                            np.sin(ecl_oblq) * np.sin(ecl_long)])
+
+
+    position_eci = eci_2_ecef.T @ (position_ecef / np.linalg.norm(position_ecef))
+    # GCI coordinate frame
+    # mutliply by AU (meters) to get distance in meters
+    sat_to_sun   = 1.496e11 * earth_to_sun - position_eci
+    return sat_to_sun / np.linalg.norm(sat_to_sun)
+
+
 def target_tracking_quat(
     target_vector: np.ndarray, nadir_vector_ecef: np.ndarray, eci_2_ecef: np.ndarray
 ) -> np.ndarray:
@@ -81,6 +130,53 @@ def target_tracking_quat(
     c_bn = np.vstack((xvec, yvec, zvec))  # Create DCM for body orientation in ECI coordinates
 
     target_quat = quat.quat_from_dcm_scalar_last(c_bn)  # Convert DCM to quaternion
+    return target_quat
+
+
+def sun_quat(sun_vector_eci, nadir_vector_ecef, eci_2_ecef) -> np.ndarray:
+    """Finds the nearest sun_vector quaternion relative to ref_quaternion.
+
+    Assumes scalar last notation.
+
+    sun_vector_eci
+        sun vector in eci coordinates
+    nadir_vector_ecef
+        nadir vector in ecef coordinates
+    quat_eci
+        quaternion of body from to ECI coordinates
+    """
+    # calculate the vector in ECI coordinates
+    ecef_2_eci = eci_2_ecef.T
+
+    # make sure it is a unit vector
+    sun_vector_eci = sun_vector_eci / np.linalg.norm(sun_vector_eci)
+    nadir_vector_eci = ecef_2_eci @ (nadir_vector_ecef / np.linalg.norm(nadir_vector_ecef))
+
+    # primary objective
+    # I want +y to face sun (solar panel)
+    yvec = sun_vector_eci
+    yvec = yvec / np.linalg.norm(yvec)
+
+    # secondary objective
+    # I want +x (star tracker) to be away from earth and sun
+    # technically, the opposite direction of this is also valid
+    # also, ensure it is orthogonal to the proper axes!
+    # hold on this is going to flip all the time...
+    xvec = np.cross(sun_vector_eci, nadir_vector_eci)
+    xvec = xvec / np.linalg.norm(xvec)
+
+    zvec = np.cross(xvec, yvec)
+    zvec = zvec / np.linalg.norm(zvec)
+
+    # in some instances where it cannot be guaranteed that
+    # the secondary objective is not orthogonal to the primary objective,
+    # the cross product can be taken one more time
+    xvec = np.cross(yvec, zvec)
+    xvec = xvec / np.linalg.norm(xvec)
+
+    c_bn = np.vstack((xvec, yvec, zvec))  # Create DCM for body orientation in ECI coordinates
+
+    target_quat = quat.quat_from_dcm_scalar_last(c_bn)
     return target_quat
 
 
