@@ -133,7 +133,8 @@ def target_tracking_quat(
     return target_quat
 
 
-def sun_quat(sun_vector_eci, nadir_vector_ecef, eci_2_ecef) -> np.ndarray:
+
+def sun_quat(sun_vector_eci, nadir_vector_ecef, velocity_vector_ecef, eci_2_ecef) -> np.ndarray:
     """Finds the nearest sun_vector quaternion relative to ref_quaternion.
 
     Assumes scalar last notation.
@@ -142,7 +143,11 @@ def sun_quat(sun_vector_eci, nadir_vector_ecef, eci_2_ecef) -> np.ndarray:
         sun vector in eci coordinates
     nadir_vector_ecef
         nadir vector in ecef coordinates
-    quat_eci
+    vect_2_body
+        the vector of the secondary objective in body frame
+    quat
+        A quaternion in eci frame
+    eci_2_ecef
         quaternion of body from to ECI coordinates
     """
     # calculate the vector in ECI coordinates
@@ -151,6 +156,7 @@ def sun_quat(sun_vector_eci, nadir_vector_ecef, eci_2_ecef) -> np.ndarray:
     # make sure it is a unit vector
     sun_vector_eci = sun_vector_eci / np.linalg.norm(sun_vector_eci)
     nadir_vector_eci = ecef_2_eci @ (nadir_vector_ecef / np.linalg.norm(nadir_vector_ecef))
+    velocity_vector_eci = ecef_2_eci @ (velocity_vector_ecef / np.linalg.norm(velocity_vector_ecef))
 
     # primary objective
     # I want +y to face sun (solar panel)
@@ -162,7 +168,18 @@ def sun_quat(sun_vector_eci, nadir_vector_ecef, eci_2_ecef) -> np.ndarray:
     # technically, the opposite direction of this is also valid
     # also, ensure it is orthogonal to the proper axes!
     # hold on this is going to flip all the time...
-    xvec = np.cross(sun_vector_eci, nadir_vector_eci)
+    # find the current eci vector of the +x-axis
+    star_vector_eci = np.cross(nadir_vector_eci, velocity_vector_eci)
+    star_vector_eci = star_vector_eci / np.linalg.norm(star_vector_eci)
+    if np.dot(sun_vector_eci, star_vector_eci) < 0:
+        star_vector_eci = -star_vector_eci
+    
+    # calculate where the x axis is pointing in eci
+    #vect_2_eci = quat.ham_sandwich(np.array([1, 0, 0]), quat_eci, scalar_last=True)
+    #vect_2_eci = vect_2_eci / np.linalg.norm(vect_2_eci)
+    # if the x-axis is already closer to the star axis vector, 
+    # go for it otherwise flip it. 
+    xvec = star_vector_eci  # if np.dot(vect_2_eci, star_axis_eci)>0 else -star_axis_eci
     xvec = xvec / np.linalg.norm(xvec)
 
     zvec = np.cross(xvec, yvec)
@@ -171,8 +188,8 @@ def sun_quat(sun_vector_eci, nadir_vector_ecef, eci_2_ecef) -> np.ndarray:
     # in some instances where it cannot be guaranteed that
     # the secondary objective is not orthogonal to the primary objective,
     # the cross product can be taken one more time
+
     xvec = np.cross(yvec, zvec)
-    xvec = xvec / np.linalg.norm(xvec)
 
     c_bn = np.vstack((xvec, yvec, zvec))  # Create DCM for body orientation in ECI coordinates
 

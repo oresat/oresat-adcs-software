@@ -99,8 +99,6 @@ def sim_main(config):
     scObject.hub.r_CN_NInit = rN  # r_BN_N [m]
     scObject.hub.v_CN_NInit = vN  # v_BN_N [m/s]
 
-    print(rN)
-    print(vN)
 
     # Add spice object for planet rotation and ECEF coordinate simulation. Necessary for guidance algorithms.
     timeInitString = "2026-02-10T20:00:00Z"
@@ -574,7 +572,7 @@ if __name__ == "__main__":
     # target_height = 1716 # [m]
         
     if control_mode in ("RW_POINTING", "THERMAL_SPIN", "RW_SLOW_ROTATE"): # realistic RW sim setup
-        sim_time = 20000
+        sim_time = 100000
         dynamics_update_time = .2
         fsw_update_time = 1.0
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME

@@ -165,8 +165,11 @@ class FlightSoftware(sysModel.SysModel):
             B = np.asarray(self.magMsg.tam_S)
         if self.starTrackerMsgIn.isWritten():
             self.starTrackerMsg = self.starTrackerMsgIn()
-            q_star_tracker = self.starTrackerMsg.qInrtl2Case  # Star Tracker measurement [qs, q1, q2, q3]
-            q_star_tracker = quat.to_scalar_last(q_star_tracker) # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
+            # Star Tracker measurement [qs, q1, q2, q3]
+            # quaternion to go from inertial to case
+            q_star_tracker = self.starTrackerMsg.qInrtl2Case  
+            # convert Basilisk quaternion to scalar last: [q1, q2, q3, qs]
+            q_star_tracker = quat.to_scalar_last(q_star_tracker) 
         if self.scStateIn.isWritten():
             scState = self.scStateIn()
             r_CN_N = scState.r_CN_N # spacecraft inertial vector (position from COM) from origin (Earth) in ECI frame.
@@ -256,8 +259,8 @@ class FlightSoftware(sysModel.SysModel):
                 new_target = guid.ram_quaternion(self.guidance_mode, v_ECEF, nadir_vector_ECEF, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
             elif self.guidance_mode == GuidanceMode.SUN:
                 current_julian_day = self.init_julian_days + (currentTimeNanos*1e-9)/(60*60*24)
-                sun_vector_eci = guid.sun_vector(current_julian_day, r_ECEF, ECI_2_ECEF)
-                new_target = guid.sun_quat(sun_vector_eci, nadir_vector_ECEF, ECI_2_ECEF)
+                sun_vector_eci = guid.sun_vector(current_julian_day, r_ECEF,  ECI_2_ECEF)
+                new_target = guid.sun_quat(sun_vector_eci, nadir_vector_ECEF, v_ECEF, ECI_2_ECEF)
             else:
                 print(f"Unknown guidance mode: {self.guidance_mode}")
             
