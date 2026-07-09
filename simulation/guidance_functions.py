@@ -132,6 +132,61 @@ def target_tracking_quat(
     target_quat = quat.quat_from_dcm_scalar_last(c_bn)  # Convert DCM to quaternion
     return target_quat
 
+def orthonormalize_vectors(a_vect, b_vect):
+    """Make an orthonormal set of two vectors.
+
+    See Gram-Schmidt algorithm."""
+    # normalize a
+    a_vect = a_vect / np.linalg.norm(a_vect)
+    # remove (projection of b on a) from b
+    b_vect = b_vect - b_vect * np.dot(a_vect, b_vect) /  np.dot(b_vect, b_vect)
+    # normalize b
+    b_vect = b_vect / np.linalg.norm(b_vect)
+
+    return a_vect, b_vect
+
+def vector_transform_quat(a_vect, b_vect, scalar_last=False):
+    """Calculate the quaternion to rotate vector a to vector b"""
+
+    # normalize vectors
+    a_vect = a_vect / np.linalg.norm(a_vect)
+    b_vect = b_vect / np.linalg.nrom(b_vect)
+    # calculate the cross product for the axis of rotation
+    axis = np.cross(a_vect, b_vect)
+    radians = np.arccos(np.dot(a_vect, b_vect))
+    result_quat = np.concatenate(np.cos(radians/2), axis * np.sin(radians / 2))
+
+    return result_quat if not scalar_last else np.roll(result_quat, -1)
+
+def orthonormal_transform_quat(a_vect_1, a_vect_2, b_vect_1, b_vect_2):
+    """Find quaternion that will transform one orthonormal set to another.
+
+    Parameters
+    a_1
+        First vector in starting orthonormal set (body frame)
+    a_2
+        Second vector in starting orthonormal set (body frame)
+    b_1
+        First vector in destination orthonormal set (inertial frame)
+    b_2
+        Second vector in destination orthonormal set (inertial frame)
+    """
+    # get the quaternion for the first rotation
+    eci_quat_1 = transform_vectors(a_1, b_1)
+    middle_vect_2 = quat.h_sandwich(middle_quat, a_2)
+    eci_quat_2 = vector_transform_quat(middle_vect_2, b_2)
+
+    # combine two quats in eci refrence frame
+    return hamiltonian(eci_quat_2, eci_quat_1)
+
+
+def one_target_quat(instrument_1_body, target_1_ecef, eci_2_ecef):
+    """Finds the eci quaternion with the smallest rotation to get instrument 1 to point towards target 1
+    """
+    # let me normalize this for you
+    target_1_eci = eci_2_ecef.T @ (target_1_ecef / np.linalg.norm(target_1_ecef))
+
+    return vectors_transform_quat(instrument_1_body, target_1_eci)
 
 
 def sun_quat(sun_vector_eci, nadir_vector_ecef, velocity_vector_ecef, eci_2_ecef) -> np.ndarray:
@@ -175,11 +230,9 @@ def sun_quat(sun_vector_eci, nadir_vector_ecef, velocity_vector_ecef, eci_2_ecef
         star_vector_eci = -star_vector_eci
     
     # calculate where the x axis is pointing in eci
-    #vect_2_eci = quat.ham_sandwich(np.array([1, 0, 0]), quat_eci, scalar_last=True)
-    #vect_2_eci = vect_2_eci / np.linalg.norm(vect_2_eci)
     # if the x-axis is already closer to the star axis vector, 
     # go for it otherwise flip it. 
-    xvec = star_vector_eci  # if np.dot(vect_2_eci, star_axis_eci)>0 else -star_axis_eci
+    xvec = star_vector_eci
     xvec = xvec / np.linalg.norm(xvec)
 
     zvec = np.cross(xvec, yvec)
@@ -188,7 +241,6 @@ def sun_quat(sun_vector_eci, nadir_vector_ecef, velocity_vector_ecef, eci_2_ecef
     # in some instances where it cannot be guaranteed that
     # the secondary objective is not orthogonal to the primary objective,
     # the cross product can be taken one more time
-
     xvec = np.cross(yvec, zvec)
 
     c_bn = np.vstack((xvec, yvec, zvec))  # Create DCM for body orientation in ECI coordinates

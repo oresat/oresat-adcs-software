@@ -247,7 +247,7 @@ def shuster(a_quat, b_quat, scalar_last=False):
 
     # if scalar is supposed to be last, 
     # roll the scalar at the front towards the end
-    return ab if not scalar_last else np.array(ab, -1)
+    return ab if not scalar_last else np.roll(ab, -1)
 
 
 def hamiltonian(a_quat, b_quat, scalar_last=False):
@@ -277,10 +277,7 @@ def hamiltonian(a_quat, b_quat, scalar_last=False):
     # roll the scalar at the front towards the end
     return ab if not scalar_last else np.array(ab, -1)
 
-def ham_sandwich(vect, quat, scalar_last=False):
-    """
-    Alright listen up. For rotations: q * v * q'
-    """
+def h_sandwich(quat, vect, scalar_last=False):
     # if the quaternion is scalar last,
     # change to scalar first and proceed
     if scalar_last:
@@ -290,17 +287,14 @@ def ham_sandwich(vect, quat, scalar_last=False):
     result = hamiltonian(hamiltonian(quat, quat_v), conjugate(quat))
     return result[1:]
 
-def shu_sandwich(vect, quat, scalar_last=False):
-    """
-    This is probably what you want! For rotations: q' * v * q
-    """
+def s_sandwich(quat, vect, scalar_last=False):
     # if the quaternion is scalar last,
     # change to scalar first and proceed
     if scalar_last:
         quat = np.roll(quat, 1)
 
     quat_v = np.array([0, vect[0], vect[1], vect[2]])
-    result = shuster(conjugate(quat), shuster(quat_v, quat))
+    result = shuster(shuster(quat, quat_v), conjugate(quat))
     
     return result[1:]
 
