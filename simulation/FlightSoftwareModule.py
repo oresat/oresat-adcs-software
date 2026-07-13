@@ -9,7 +9,11 @@ from sys import exit
 from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
 from Kalman_Filter import Multiplicative_Extended_Kalman_Filter
 import quaternion as quat
-import guidance_functions as guid
+import groundstation_utils as gs_utils
+import guidance_utils as guide_utils
+#import guidance_functions as guid
+
+
 
 from config import GuidanceMode 
 
@@ -61,7 +65,8 @@ class FlightSoftware(sysModel.SysModel):
         target_lat = config["target_lat"]
         target_lon = config["target_lon"]
         target_height = config["target_height"]
-        self.ECEF_target = guid.gps_to_ecef(target_lat, target_lon, target_height) # convert GPS coordinates to ECEF coordinates
+        self.ECEF_target = gs_utils.gps_to_ecef(target_lat, target_lon, target_height) # convert GPS coordinates to ECEF coordinates
+        # self.ECEF_target = guid.gps_to_ecef(target_lat, target_lon, target_height) # convert GPS coordinates to ECEF coordinates
         
         self.use_skyfield = config["use_skyfield"]
         if self.use_skyfield or self.activate_on_overpass:
@@ -126,7 +131,7 @@ class FlightSoftware(sysModel.SysModel):
         self.gyro_bias_drift_rate = 0.015 * macros.D2R # [rad/s/K] additional bias drift dependent on difference between current and reference (25 C) temperatures
         self.EKF = Multiplicative_Extended_Kalman_Filter(config["P_ST_0"], config["sigma_ST"], config["P_b0"], config["sigma_gyro"], config["sigma_bias"])
         
-        self.init_julian_days = guid.julian_date(self.time_init_string)
+        self.init_julian_days = guide_utils.julian_date(self.time_init_string)
         self.last_skyfield_frame = None # stores last Skyfield ECI_2_ECEF rotation matrix
         self.last_frame_time = None # stores last time Skyfield ECI_2_ECEF rotation matrix was updated
         self.skyfield_rate = int(1/self.updateTime) # convert update rate to ticks
@@ -188,7 +193,8 @@ class FlightSoftware(sysModel.SysModel):
             r_ECEF = true_ECI_2_ECEF @ r_CN_N # Convert Earth-centered inertial to ECEF to emulate GPS data. Technical name is r_CE_E, using r_ECEF for readability
             v_ECEF = true_ECI_2_ECEF @ v_CN_N # Spacecraft orbital velocity vector. Convert to ECEF to emulate GPS data.
             # start_time, end_time = guid.time_to_overpass(self, time_range, max_distance, r_ECEF, v_ECEF, self.ECEF_target)
-            start_time, end_time = guid.find_nearest_ground_station(self.skyfield_timescale, self.time_zero, time_range, max_distance, r_ECEF, v_ECEF)
+            start_time, end_time = gs_utils.find_nearest_ground_station(self.skyfield_timescale, self.time_zero, time_range, max_distance, r_ECEF, v_ECEF)
+            # start_time, end_time = guid.find_nearest_ground_station(self.skyfield_timescale, self.time_zero, time_range, max_distance, r_ECEF, v_ECEF)
             if start_time == -1:
                 print("No overpass window found. Exiting sim...")
                 exit()
@@ -252,15 +258,15 @@ class FlightSoftware(sysModel.SysModel):
             if self.guidance_mode == GuidanceMode.TARGET: # Tracking a static target on the surface of the earth via GPS coordinates        
                 target_vector = self.ECEF_target - r_ECEF # calculate target vector in ECEF cartesian coordinates
                 target_vector = target_vector/np.linalg.norm(target_vector) # normalize to unit vector
-                new_target = guid.target_tracking_quat(target_vector, nadir_vector_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
+                new_target = guide_utils.target_tracking_quat(target_vector, nadir_vector_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
             elif self.guidance_mode == GuidanceMode.NADIR: # Continually face +z nadir (+x as close to ram as possible)
-                new_target = guid.nadir_quat(nadir_vector_ECEF, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
+                new_target = guide_utils.nadir_quat(nadir_vector_ECEF, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
             elif self.guidance_mode == GuidanceMode.MAX_DRAG or self.guidance_mode == GuidanceMode.MIN_DRAG:
-                new_target = guid.ram_quaternion(self.guidance_mode, v_ECEF, nadir_vector_ECEF, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
+                new_target = guide_utils.ram_quaternion(self.guidance_mode, v_ECEF, nadir_vector_ECEF, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
             elif self.guidance_mode == GuidanceMode.SUN:
                 current_julian_day = self.init_julian_days + (currentTimeNanos*1e-9)/(60*60*24)
-                sun_vector_eci = guid.sun_vector(current_julian_day, r_ECEF,  ECI_2_ECEF)
-                new_target = guid.sun_quat(sun_vector_eci, nadir_vector_ECEF, v_ECEF, ECI_2_ECEF)
+                sun_vector_eci = guide_utils.sun_vector(current_julian_day, r_ECEF,  ECI_2_ECEF)
+                new_target = guide_utils.sun_quat(sun_vector_eci, nadir_vector_ECEF, v_ECEF, ECI_2_ECEF)
             else:
                 print(f"Unknown guidance mode: {self.guidance_mode}")
             

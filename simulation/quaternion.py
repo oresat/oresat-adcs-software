@@ -10,7 +10,8 @@ import numpy as np
 
 ArrayLike = Union[Sequence[float], np.ndarray]
 
-def conjugate(quat, scalar_last=False):
+
+def conjugate(quat, scalar_last=False) -> np.ndarray:
     """Compute the conjugate of a quaternion.
 
     Paramaters
@@ -21,7 +22,12 @@ def conjugate(quat, scalar_last=False):
         set to true if input and output should be scalar last
     """
     qs, qi, qj, qk = quat if not scalar_last else np.roll(quat, -1)
-    return np.array([qs, -qi, -qj, -qk]) if not scalar_last else np.array([-qi, -qj, -qk, qs])
+    return (
+        np.array([qs, -qi, -qj, -qk])
+        if not scalar_last
+        else np.array([-qi, -qj, -qk, qs])
+    )
+
 
 def quat_conjugate(q: ArrayLike) -> np.ndarray:
     """Compute the conjugate of a quaternion
@@ -229,28 +235,7 @@ def quat_from_dcm_scalar_last(m: np.ndarray) -> np.ndarray:
     return q
 
 
-def shuster(a_quat, b_quat, scalar_last=False):
-    """Compute the shuster product of two quaternions.
-
-    Note the cross product of the vector component is NEGATIVE.
-    Typically, if the notation is \otimes, it is shuster.
-    
-    """
-
-    if scalar_last:
-        # convert scalar last to scalar first
-        a_quat = np.roll(a_quat, 1)
-        b_quat = np.roll(b_quat, 1)
-
-    ab_vector = (a_quat[0]*b_quat[1:] + b_quat[0]*a_quat[1:]) - np.cross(a_quat[1:], b_quat[1:])
-    ab = np.array([a_quat[0]*b_quat[0] - np.dot(a_quat[1:], b_quat[1:]), ab_vector[0], ab_vector[1], ab_vector[2]])
-
-    # if scalar is supposed to be last, 
-    # roll the scalar at the front towards the end
-    return ab if not scalar_last else np.roll(ab, -1)
-
-
-def hamiltonian(a_quat, b_quat, scalar_last=False):
+def hamiltonian(a_quat: np.ndarray, b_quat: np.ndarray, scalar_last: bool = False):
     """Compute the hamiltonian product of two quaternions.
 
     Note the cross product of the vector is POSITIVE.
@@ -270,12 +255,54 @@ def hamiltonian(a_quat, b_quat, scalar_last=False):
         a_quat = np.roll(a_quat, 1)
         b_quat = np.roll(b_quat, 1)
 
-    ab_vector = (a_quat[0]*b_quat[1:]) + (b_quat[0]*a_quat[1:]) + np.cross(a_quat[1:], b_quat[1:])
-    ab = np.array([a_quat[0]*b_quat[0] - np.dot(a_quat[1:], b_quat[1:]), ab_vector[0], ab_vector[1], ab_vector[2]])
+    ab_vector = (
+        (a_quat[0] * b_quat[1:])
+        + (b_quat[0] * a_quat[1:])
+        + np.cross(a_quat[1:], b_quat[1:])
+    )
+    ab = np.array(
+        [
+            a_quat[0] * b_quat[0] - np.dot(a_quat[1:], b_quat[1:]),
+            ab_vector[0],
+            ab_vector[1],
+            ab_vector[2],
+        ]
+    )
 
-    # if scalar is supposed to be last, 
+    # if scalar is supposed to be last,
     # roll the scalar at the front towards the end
     return ab if not scalar_last else np.array(ab, -1)
+
+
+def shuster(a_quat, b_quat, scalar_last=False):
+    """Compute the shuster product of two quaternions.
+
+    Note the cross product of the vector component is NEGATIVE.
+    Typically, if the notation is \otimes, it is shuster.
+
+    """
+
+    if scalar_last:
+        # convert scalar last to scalar first
+        a_quat = np.roll(a_quat, 1)
+        b_quat = np.roll(b_quat, 1)
+
+    ab_vector = (a_quat[0] * b_quat[1:] + b_quat[0] * a_quat[1:]) - np.cross(
+        a_quat[1:], b_quat[1:]
+    )
+    ab = np.array(
+        [
+            a_quat[0] * b_quat[0] - np.dot(a_quat[1:], b_quat[1:]),
+            ab_vector[0],
+            ab_vector[1],
+            ab_vector[2],
+        ]
+    )
+
+    # if scalar is supposed to be last,
+    # roll the scalar at the front towards the end
+    return ab if not scalar_last else np.roll(ab, -1)
+
 
 def h_sandwich(quat, vect, scalar_last=False):
     # if the quaternion is scalar last,
@@ -287,6 +314,7 @@ def h_sandwich(quat, vect, scalar_last=False):
     result = hamiltonian(hamiltonian(quat, quat_v), conjugate(quat))
     return result[1:]
 
+
 def s_sandwich(quat, vect, scalar_last=False):
     # if the quaternion is scalar last,
     # change to scalar first and proceed
@@ -295,6 +323,5 @@ def s_sandwich(quat, vect, scalar_last=False):
 
     quat_v = np.array([0, vect[0], vect[1], vect[2]])
     result = shuster(shuster(quat, quat_v), conjugate(quat))
-    
-    return result[1:]
 
+    return result[1:]

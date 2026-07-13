@@ -541,7 +541,7 @@ if __name__ == "__main__":
     # MTB_POINTING: 
     # THERMAL_SPIN: 
     # ORBITS: for long-duration visualization without controls
-    control_mode = "RW_POINTING" 
+    control_mode = "DETUMBLE" 
 
 
     # LQR tuning with or without integrator terms for steady state error corrections
@@ -572,7 +572,7 @@ if __name__ == "__main__":
     # target_height = 1716 # [m]
         
     if control_mode in ("RW_POINTING", "THERMAL_SPIN", "RW_SLOW_ROTATE"): # realistic RW sim setup
-        sim_time = 100000
+        sim_time = 10000
         dynamics_update_time = .2
         fsw_update_time = 1.0
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
