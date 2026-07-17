@@ -586,10 +586,10 @@ if __name__ == "__main__":
         use_skyfield = False
         omega_init_rad = np.array([0.0, 0.0, 0.0]) # ensure no excessive spinning
     else: # realistic MTB sim setup
-        sim_time = 300000
+        sim_time = 30000
         
-        dynamics_update_time = 2
-        fsw_update_time = 2
+        dynamics_update_time = 1
+        fsw_update_time = 1
         
         #if control_mode == "DETUMBLE":
         #    fsw_update_time = 2 # suggested fsw rate of no less than 5 seconds for stability when using MTB_POINTING, and no more than 2 when using DETUMBLE

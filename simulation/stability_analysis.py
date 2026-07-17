@@ -1,6 +1,6 @@
 import numpy as np
 import control as ct
-from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
+from discrete_state_space import get_gain_matrix
 
 def axis_margins(J, K, delay_s=None, axis_names=("x","y","z")):
     """
@@ -57,7 +57,15 @@ if __name__ == "__main__":
                   [Jzx, Jzy, Jzz]])
     
     useInt = False
-    K = get_gain_matrix(J, 0.1, 0.1, 0.05, 0.01, useInt, 0.3)
+    K = get_gain_matrix(J, 0.1, 0.1, 0.05, 0.01, useInt)
     
     bode_dict = axis_margins(J, K)
-    print(bode_dict)
+    print(
+        "\n".join(
+            str(key1) + ": \n\t" + "\n\t".join(
+                str(key2) + ": " + str(val2) for key2, val2 in val1.items()
+            )
+            for key1, val1 in bode_dict.items()
+        )
+    )
+    

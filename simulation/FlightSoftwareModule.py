@@ -6,12 +6,11 @@ from skyfield.framelib import itrs
 from datetime import timedelta, datetime, timezone
 from sys import exit
 
-from ADCS_Discrete_State_Space_Calculator import get_gain_matrix
-from Kalman_Filter import Multiplicative_Extended_Kalman_Filter
+from discrete_state_space import get_gain_matrix
+from kalman_filter import MEKF
 import quaternion as quat
 import groundstation_utils as gs_utils
 import guidance_utils as guide_utils
-#import guidance_functions as guid
 
 
 
@@ -129,7 +128,7 @@ class FlightSoftware(sysModel.SysModel):
         
         # Kalman filter object to store filter states and sensor values
         self.gyro_bias_drift_rate = 0.015 * macros.D2R # [rad/s/K] additional bias drift dependent on difference between current and reference (25 C) temperatures
-        self.EKF = Multiplicative_Extended_Kalman_Filter(config["P_ST_0"], config["sigma_ST"], config["P_b0"], config["sigma_gyro"], config["sigma_bias"])
+        self.EKF = MEKF(config["P_ST_0"], config["sigma_ST"], config["P_b0"], config["sigma_gyro"], config["sigma_bias"])
         
         self.init_julian_days = guide_utils.julian_date(self.time_init_string)
         self.last_skyfield_frame = None # stores last Skyfield ECI_2_ECEF rotation matrix
@@ -140,6 +139,7 @@ class FlightSoftware(sysModel.SysModel):
         self.ticks = 0
         
         self.omega_desired_prev = np.zeros(3)
+        self.EKF.reset(q_init = None, omega_init = None, time_init = 0)
     
     def set_time_zero_from_iso_utc(self, iso_utc: str): # used to initialize ephemeris start time for GPS timestamp emulation. Only used in simulation software, not flight software.
         s = iso_utc.replace("Z", "+00:00") # Accepts formats "2026-02-10T00:00:00Z" or "2026-02-10T00:00:00+00:00"
@@ -352,9 +352,7 @@ class FlightSoftware(sysModel.SysModel):
                 k = 1e-8
 
                 m_cmd_lqr = np.linalg.inv(bm.T @ bm + k*np.eye(3))@bm.T@tau_des
-                m_cmd_detumble = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
 
-                m_cmd_end = 0.5*m_cmd_lqr + 0.5*m_cmd_detumble
                 # print(m_cmd_end)
                 self.command_MTB_torques(m_cmd_end, currentTimeNanos)
             elif self.control_mode == "ORBITS":
