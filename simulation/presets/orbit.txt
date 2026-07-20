@@ -1,0 +1,2 @@
+
+'orbital_period': np.float64(5779.874842400362), 'orbital_inclination': 1.7226399717184033}

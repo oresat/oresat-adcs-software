@@ -14,7 +14,7 @@ import guidance_utils as guide_utils
 
 
 
-from config import GuidanceMode 
+from config import GuidanceMode, PointingReference, ControlMode
 
 class FlightSoftware(sysModel.SysModel):
     def __init__(self, config):
@@ -39,10 +39,10 @@ class FlightSoftware(sysModel.SysModel):
         self.magTorquePayload = messaging.MTBCmdMsgPayload()
         self.mag_torques = np.zeros(36) # initialize MTB torque input array
         
-        self.G = config["G"]
+        self.G = config["rw_G"]
         self.G_transpose = self.G.T # save repeated calculations each iteration
         self.G_pinv = -np.linalg.pinv(self.G) # pseudo inverse matrix for torque calculations. Negated because of Basilisk conventions (I think)
-        self.rwInertia = config["rw_Inertia"] # reaction wheel inertia (scalar)
+        self.rwInertia = config["rw_inertia"] # reaction wheel inertia (scalar)
         self.satInertia = config["J"] # satellite inertia tensor (matrix)
         self.updateTime = config["fsw_update_time"]
         self.output_states = config["print_states"] # output state messages (or not) for debugging
@@ -307,42 +307,49 @@ class FlightSoftware(sysModel.SysModel):
         ######################### CONTROL LOGIC ###############################
         currentTime = currentTimeNanos * 1e-9
         if ((self.controllerStartTime is not None) and (currentTime >= self.controllerStartTime) and (self.controllerEndTime is None or currentTime < self.controllerEndTime)): # turn controller on at specified time
-            if self.control_mode == "RW_POINTING":
+            if self.control_mode == ControlMode.RW_POINTING:
                 desired_torque = self.RW_controller(q_error, omega, currentTimeNanos*1e-9) # compute desired 3-axis torque from controller (standard LQR controller)
                 desired_torque += tau_ff # feedforward torque, only non-zero for tracking mode
                 wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
 
 
-                if (quat.error_angle(q_error) <= 0.1 and np.all(np.abs(omega) < 1e-2)):
+                
+                #if (quat.error_angle(q_error) <= 0.1 and np.all(np.abs(omega) < 1e-2)):
                     # implement momentum dumping when somewhat close to target
                     # same as detumble, but with wheel momentum
-                    desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(H_wheels, B) # detumble controller as defined by Markley & Crassidis
-                    self.command_MTB_torques(desired_torque, currentTimeNanos)
+                #    desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(H_wheels, B) # detumble controller as defined by Markley & Crassidis
+                #    self.command_MTB_torques(desired_torque, currentTimeNanos)
 
-            elif self.control_mode == "THERMAL_REORIENT": # can only be set by first part of passive thermal spin controller
+            elif self.control_mode == ControlMode.THERMAL_REORIENT: # can only be set by first part of passive thermal spin controller
                 desired_torque = self.RW_controller(q_error, omega) # compute desired 3-axis torque from controller
                 wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
                 if (quat.error_angle(q_error) <= 0.1 and np.all(np.abs(omega) < 1e-6)):
                     #zero wheel speeds?
-                    self.control_mode = "SPINUP"
+                    self.control_mode = ControlMode.SPINUP
+                    # thermal spinup
                     print(f"SWITCHING TO MAGNETORQUER SPINUP AT {currentTimeNanos*1e-9} SECONDS, {omega}")
-            elif self.control_mode == "DETUMBLE":
+            elif self.control_mode == ControlMode.DETUMBLE:
                 desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
                 self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
-            elif self.control_mode == "THERMAL_SPIN":
-                desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
+            elif self.control_mode == ControlMode.THERMAL_DETUMBLE:
+                # thermal detumble
+                # detumble controller as defined by Markley & Crassidis
+                desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) 
                 self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
                 if (np.all(np.abs(omega) < 1e-4)):
-                    self.control_mode = "THERMAL_REORIENT"
+                    self.control_mode = ControlMode.THERMAL_REORIENT
                     print(f"SWITCHING TO REACTION WHEEL REORIENTATION AT {currentTimeNanos*1e-9} SECONDS")
-            elif self.control_mode == "SPINUP": # spinup satellite for thermal spin about the axis
+            elif self.control_mode == ControlMode.THERMAL_SPINUP: 
+                # thermal spinup
+                # spinup satellite for thermal spin about the axis
                 if (omega[2] < self.thermal_spin_rpm*2*np.pi/60): # while satellite is spinning slower than set rate about the z axis, spin up
                     tau_des = [0,0,1] # spin about the z axis
                     m = np.cross(B, tau_des) / (B @ B)
                     self.command_MTB_torques(m, currentTimeNanos)
-            elif self.control_mode == "MTB_POINTING": # Magnetorquer fine pointing controller (experimental)
+            elif self.control_mode == ControlMode.MTB_POINTING: 
+                # Magnetorquer fine pointing controller (experimental)
                 # Magnetorquer control law "Singularity Robust (SR) inverse" taken from: 
                 # Attitude Determination and Control System for Nadir Pointing Using Magnetorquer and Magnetometer
                 # by Nobuo Sugimura, Toshinori Kuwahara, Kazuya Yoshida
@@ -355,9 +362,9 @@ class FlightSoftware(sysModel.SysModel):
 
                 # print(m_cmd_end)
                 self.command_MTB_torques(m_cmd_end, currentTimeNanos)
-            elif self.control_mode == "ORBITS":
+            elif self.control_mode == ControlMode.IDLE:
                 pass # mode to simply visualize orbits with large timespans
-            elif self.control_mode == "RW_SLOW_ROTATE": # a simple "rotate about z-axis" control mode to deal with star tracker occlusion:
+            elif self.control_mode == ControlMode.RW_SLOW_ROTATE: # a simple "rotate about z-axis" control mode to deal with star tracker occlusion:
                 d_omega = self.spin_omega_target-omega # desired delta omega
                 tau = self.satInertia @ d_omega/self.updateTime/5 # divide by five to smooth control inputs
                 wheel_torque = self.G_pinv @ tau
@@ -379,11 +386,11 @@ class FlightSoftware(sysModel.SysModel):
             self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
     
     def update_target(self, target_quat):
-        if self.pointing_reference == "ST": # +x facing of satellite used as pointing reference
+        if self.pointing_reference == PointingReference.STAR_TRACKER: # +x facing of satellite used as pointing reference
             self.q_target = quat.quat_mult(self.q_90_rot, target_quat) # define target in body coordinates
-        elif self.pointing_reference == "HELICAL" or self.pointing_reference == "SC":# +z facing of satellite used as pointing reference
+        elif self.pointing_reference == PointingReference.HELICAL:# +z facing of satellite used as pointing reference
             self.q_target = target_quat # target does not require rotation
-        elif self.pointing_reference == "CFC": # -z facing of satellite used as pointing reference
+        elif self.pointing_reference == PointingReference.CIRRUS_FLUX: # -z facing of satellite used as pointing reference
             self.q_target = quat.quat_mult(self.q_180_rot, target_quat) # define target in body coordinates
         else:
             print("ERROR: UNKNOWN POINTING REFERENCE")
