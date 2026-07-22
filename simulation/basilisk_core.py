@@ -438,6 +438,27 @@ def sim_main(config):
         print(f"Plot saved as {png_path}")
 
 
+    # Plot solar panel data
+    fig, ax = plt.subplots()
+    sp_time = solar_panel_recs[0].times()*1e-9
+    for sp_data in sp_group_data:
+        ax.plot(sp_time, sp_data)
+        print(dir(sp_data))
+
+    ax.plot(sp_time, np.sum(sp_group_data, axis=0))
+    
+    if config["save_pdf"] == True:
+        pdf_path = config["plot_basepath"] / "solar_panel_net_power.pdf"
+        plt.savefig(pdf_path, dpi=300)
+        print(f"Plot saved as {pdf_path}")
+    if config["save_png"] == True:
+        png_path = config["plot_basepath"] / "solar_panel_net_power.png"
+        plt.savefig(png_path, dpi=600)
+        print(f"Plot saved as {png_path}")
+
+
+
+
     # get true attitude error without sensor noise for graphing and filter comparison
     sigma_BN = np.array(stateRec.sigma_BN) # collects recorded spacecraft attitudes in MRP form. Extra rotation not necessary (as with filtered error in fsw) as it uses the same body frame as our system.
     q_scalar_first = [rbk.MRP2EP(attitude) for attitude in sigma_BN] # convert MRP's to scalar-first quaternions
