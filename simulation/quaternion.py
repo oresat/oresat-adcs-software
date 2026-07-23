@@ -239,7 +239,7 @@ def hamiltonian(a_quat: np.ndarray, b_quat: np.ndarray, scalar_last: bool = Fals
     """Compute the hamiltonian product of two quaternions.
 
     Note the cross product of the vector is POSITIVE.
-    Typically, if the notation is \odot, it is the Hamiltonian
+    Typically, if the notation is \\odot, it is the Hamiltonian
     as opposed to the Shuster.
 
     Parameters
@@ -278,7 +278,7 @@ def shuster(a_quat, b_quat, scalar_last=False):
     """Compute the shuster product of two quaternions.
 
     Note the cross product of the vector component is NEGATIVE.
-    Typically, if the notation is \otimes, it is shuster.
+    Typically, if the notation is \\otimes, it is shuster.
 
     """
 

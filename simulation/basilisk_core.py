@@ -1,7 +1,7 @@
 import numpy as np
 import time
 from Basilisk.simulation import spacecraft, starTracker, imuSensor, reactionWheelStateEffector, magneticFieldWMM, magnetometer, MtbEffector # import simulation related support
-from Basilisk.utilities import SimulationBaseClass, macros, vizSupport, simIncludeGravBody, orbitalMotion, simIncludeRW, unitTestSupport # import general simulation support files
+from Basilisk.utilities import SimulationBaseClass, macros, vizSupport, simIncludeGravBody, orbitalMotion, simIncludeRW, simHelpers # import general simulation support files
 from Basilisk.architecture import messaging
 from Basilisk import __path__
 from Basilisk.utilities import RigidBodyKinematics as rbk
@@ -68,7 +68,7 @@ def sim_main(config):
 
     mu_earth = gravFactory.gravBodies.get("earth").mu
 
-    epoch_msg = unitTestSupport.timeStringToGregorianUTCMsg('2025 June 27, 10:23:0.0 (UTC)')  # set epoch date/time message for WMM
+    epoch_msg = simHelpers.timeStringToGregorianUTCMsg('2025 June 27, 10:23:0.0 (UTC)')  # set epoch date/time message for WMM
     
     # create the magnetic field
     mag_model, mag_msg, mag_rec = bsk_helpers.get_mag_model("WMM", scObject)
@@ -79,7 +79,6 @@ def sim_main(config):
     sim.AddModelToTask("dynamicsTask", mag_rec)
 
     print(mag_model.envOutMsgs)
-    print(dir(mag_model.envOutMsgs))
    
     # create orbit properties using classical orbit elements. 
     # Assuming perfectly circular orbit for now.
@@ -271,6 +270,8 @@ def sim_main(config):
     sim.AddModelToTask("dynamicsTask", battery)
     sim.AddModelToTask("dynamicsTask", battery_rec)
 
+    # create base power sink
+
 
     # nHat_b, area (m^2), efficiency
     # area is about 2 x 4 
@@ -443,7 +444,6 @@ def sim_main(config):
     sp_time = solar_panel_recs[0].times()*1e-9
     for sp_data in sp_group_data:
         ax.plot(sp_time, sp_data)
-        print(dir(sp_data))
 
     ax.plot(sp_time, np.sum(sp_group_data, axis=0))
     

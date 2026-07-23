@@ -70,72 +70,76 @@ def sun_vector(julian_date, position_ecef, eci_2_ecef):
     return sat_to_sun / np.linalg.norm(sat_to_sun)
 
 
-def orthonormalize_vectors(a_vect, b_vect):
-    """Make an orthonormal set of two vectors.
+def orthonormalize_vectors(vect_1, vect_2):
+    """Make an orthonormal set of two vectors (see Gram-Schmidt algorithm).
 
-    See Gram-Schmidt algorithm."""
-    # normalize a
-    a_vect = a_vect / np.linalg.norm(a_vect)
-    # remove (projection of b on a) from b
-    b_vect = b_vect - b_vect * np.dot(a_vect, b_vect) / np.dot(b_vect, b_vect)
-    # normalize b
-    b_vect = b_vect / np.linalg.norm(b_vect)
+    Parameters
+    ----------
+    vect_1
+        First vector which is only normalized
+    vect_2
+        Second vector which is made orthonormal to first vector
+    """
+    # normalize first vector
+    vect_1 = vect_1 / np.linalg.norm(vect_1)
+    # make orthogonal: remove (projection of vect_2 on vect_1) from vect_2
+    vect_2 = vect_2 - vect_1 * np.dot(vect_1, vect_2) / np.dot(vect_2, vect_2)
+    # normalize vect_2
+    vect_2 = vect_2 / np.linalg.norm(vect_2)
 
-    return a_vect, b_vect
+    return vect_1, vect_2
 
 
-def vector_transform_quat(a_vect, b_vect, scalar_last=False):
-    """Calculate the quaternion to rotate vector a to vector b"""
+def vector_transform_quat(normvect_1, normvect_2, scalar_last=False):
+    """Calculate the quaternion to rotate normalized vector 1 to normalized vector 2.
 
-    # normalize vectors
-    a_vect = a_vect / np.linalg.norm(a_vect)
-    b_vect = b_vect / np.linalg.norm(b_vect)
+    Parameters
+    ----------
+    normvect_1
+        normalized vector 1
+    normvect_2
+        normalized vector 1
+    scalar_last
+        Put the scalar term of the quaternion last
+    """
     # calculate the cross product for the axis of rotation
-    axis = np.cross(a_vect, b_vect)
+    axis = np.cross(normvect_1, normvect_2)
     axis = axis / np.linalg.norm(axis)
-    radians = np.arccos(np.dot(a_vect, b_vect))
-    scalar = np.array(np.cos(radians / 2))
-    vector = np.array(axis * np.sin(radians / 2))
-    result_quat = np.array([
-        scalar,
-        vector[0],
-        vector[1],
-        vector[2]
-        ])
+    radians = np.arccos(np.dot(normvect_1, normvect_2))
+    result_quat = np.array(
+        [
+            np.cos(radians / 2),
+            axis[0] * np.sin(radians / 2),
+            axis[1] * np.sin(radians / 2),
+            axis[2] * np.sin(radians / 2),
+        ]
+    )
 
     return result_quat if not scalar_last else np.roll(result_quat, -1)
 
 
-def orthonormal_transform_quat(a_vect_1, b_vect_1, a_vect_2, b_vect_2):
-    """Find quaternion that will transform one orthonormal set to another.
+def one_boresight_quat(boresight_1, target_1, scalar_last=False):
+    """Calculate the quaternion with the smallest rotation to align boresight with target.
 
     Parameters
-    a_1
-        First vector in starting orthonormal set (body frame)
-    b_1
-        First vector in destination orthonormal set (inertial frame)
-    a_2
-        Second vector in starting orthonormal set (body frame)
-    b_2
-        Second vector in destination orthonormal set (inertial frame)
+    ----------
+    boresight_1
+        boresight vector in body coordinates, does not need to be normalized first
+    target_1
+        target vector in inertial coordinates (ECI)
+    scalar_last
+        Put the scalar term of the quaternion last
     """
-    # get the quaternion for the first rotation
-    eci_quat_1 = vector_transform_quat(a_vect_1, b_vect_1)
-    middle_vect_2 = quat.h_sandwich(eci_quat_1, a_vect_2)
-    eci_quat_2 = vector_transform_quat(middle_vect_2, b_vect_2)
+    b_1 = boresight_1 / np.linalg.norm(boresight_1)
+    t_1 = target_1 / np.linalg.norm(target_1)
+    result_quat = vector_transform_quat(normvect_1=b_1, normvect_2=t_1)
 
-    # combine two quats in eci refrence frame
-    return quat.hamiltonian(eci_quat_2, eci_quat_1)
+    return result_quat if not scalar_last else np.roll(result_quat, -1)
 
 
-def one_boresight_quat(instrument_1_body, target_1_ecef, eci_2_ecef):
-    """Finds the eci quaternion with the smallest rotation to get instrument 1 to point towards target 1"""
-    # let me normalize this for you
-    target_1_eci = eci_2_ecef.T @ (target_1_ecef / np.linalg.norm(target_1_ecef))
-
-    return vector_transform_quat(instrument_1_body, target_1_eci)
-
-def two_boresights_quat(boresight_1, target_1, boresight_2, target_2, scalar_last=False):
+def two_boresights_quat(
+    boresight_1, target_1, boresight_2, target_2, scalar_last=False
+):
     """Find quaternion transformation, prioritizing one boresight-target pair over another.
 
     The higher priority boresight-target pair will attempt to be aligned.
@@ -152,14 +156,30 @@ def two_boresights_quat(boresight_1, target_1, boresight_2, target_2, scalar_las
     boresight_2
         vector in body frame with lower priority (minimize error)
     target_2
-        vector in inertial frame with lower priority (minimize error)"""
-    # make orthonormal pairs
-    b_1, b_2 = orthonormalize_vectors(boresight_1, boresight_2)
-    t_1, t_2 = orthonormalize_vectors(target_1, target_2)
-    # find the transformation from one pair to the other
-    result_quat = orthonormal_transform_quat(b_1, t_1, b_2, t_2)
+        vector in inertial frame with lower priority (minimize error)
+    """
+    # Make boresights and targets into orthonormal pairs.
+    b_1, b_2 = orthonormalize_vectors(vect_1=boresight_1, vect_2=boresight_2)
+    t_1, t_2 = orthonormalize_vectors(vect_1=target_1, vect_2=target_2)
+
+    # Find the quaternion to match the orthonormal pairs.
+
+    # Calculate the quaternion for the first boresight
+    # to be aligned with the first target.
+    quat_1 = vector_transform_quat(normvect_1=b_1, normvect_2=t_1)
+    # Apply the quaternion to the second boresight to get an
+    # intermediate boresight vector in inertial frame.
+    middle_b_2 = quat.h_sandwich(quat=quat_1, vect=b_2)
+    # Calculate the quaternion for the second boresight to be
+    # aligned with second target.
+    quat_2 = vector_transform_quat(normvect_1=middle_b_2, normvect_2=t_2)
+
+    # Combine two quaternions into one quaternion for the intertial frame
+    # note: the latter step is the first argument: quat_2(quat_1(vector))
+    result_quat = quat.hamiltonian(quat_2, quat_1)
 
     return result_quat if not scalar_last else np.roll(result_quat, -1)
+
 
 def sun_quat(
     sun_vector_eci, nadir_vector_ecef, velocity_vector_ecef, eci_2_ecef
@@ -168,6 +188,8 @@ def sun_quat(
 
     Assumes scalar last notation.
 
+    Parameters
+    ----------
     sun_vector_eci
         sun vector in eci coordinates
     nadir_vector_ecef
@@ -191,69 +213,29 @@ def sun_quat(
         velocity_vector_ecef / np.linalg.norm(velocity_vector_ecef)
     )
 
-    # primary objective
-    # I want +y to face sun (solar panel)
-    #yvec = sun_vector_eci
-    #yvec = yvec / np.linalg.norm(yvec)
-    #xvec = sun_vector_eci
-    #xvec = xvec / np.linalg.norm(xvec)
-
-    zvec = sun_vector_eci
-    zvec = zvec / np.linalg.norm(zvec)
-
-
-
-    # secondary objective
-    # I want +x (star tracker) to be away from earth and sun
-    # technically, the opposite direction of this is also valid
-    # also, ensure it is orthogonal to the proper axes!
-    # find the current eci vector of the +x-axis
+    # The star tracker should be pointed away from earth and sun.
+    # This objective should not "flip" 180 degrees throughout the orbit.
     star_vector_eci = np.cross(nadir_vector_eci, velocity_vector_eci)
     star_vector_eci = star_vector_eci / np.linalg.norm(star_vector_eci)
     if np.dot(sun_vector_eci, star_vector_eci) < 0:
         star_vector_eci = -star_vector_eci
 
-    # calculate where the x axis is pointing in eci
-    # if the x-axis is already closer to the star axis vector,
-    # go for it otherwise flip it.
-    xvec = star_vector_eci
-    xvec = xvec / np.linalg.norm(xvec)
-    #yvec = star_vector_eci
-    #yvec = yvec / np.linalg.norm(yvec)
+    # One option is to only have two solar panel sides both diagonally 
+    # pointed towards the sun, regardless of star tracker,
+    # in which you would call one_boresight_quat()
 
-    #zvec = np.cross(xvec, yvec)
-    #zvec = zvec / np.linalg.norm(zvec)
-
-    yvec = np.cross(zvec, xvec)
-    yvec = yvec / np.linalg.norm(yvec)
-
-
-    # in some instances where it cannot be guaranteed that
-    # the secondary objective is not orthogonal to the primary objective,
-    # the cross product can be taken one more time
-    xvec = np.cross(yvec, zvec)
-    #yvec = np.cross(zvec, xvec)
-
-    c_bn = np.vstack(
-        (xvec, yvec, zvec)
-    )  # Create DCM for body orientation in ECI coordinates
-
-    target_quat = quat.quat_from_dcm_scalar_last(c_bn)
-
-    # try my way
-    target_quat = vector_transform_quat(
-        np.array([-1, 1, 0]),
-        sun_vector_eci,
-        scalar_last = True
+    # Another option is to include sun and nadir avoidance by having
+    # the star tracker point towards the star field.
+    target_quat = two_boresights_quat(
+        boresight_1=np.array(
+            [-1, 1, 0]
+        ),  # have two solar panel sides both be exposed towards sun
+        target_1=sun_vector_eci,
+        boresight_2=np.array([1, 0, 0]),  # have star tracker point away towards stars
+        target_2=star_vector_eci,
+        scalar_last=True,
     )
 
-    #target_quat = two_boresights_quat(
-    #    boresight_1 = np.array([0, 1, 0]), # have two solar panel sides both be exposed towards sun
-    #    target_1 = sun_vector_eci,
-    #    boresight_2 = np.array([1, 0, 0]),  # have star tracker point away towards stars
-    #    target_2 = star_vector_eci,
-    #    scalar_last = True
-    #)
     return target_quat
 
 

@@ -1,23 +1,7 @@
 import numpy as np
 import time
-from Basilisk.simulation import spacecraft, starTracker, imuSensor, reactionWheelStateEffector, magneticFieldWMM, magnetometer, MtbEffector # import simulation related support
-from Basilisk.utilities import SimulationBaseClass, macros, vizSupport, simIncludeGravBody, orbitalMotion, simIncludeRW, unitTestSupport # import general simulation support files
-from Basilisk.architecture import messaging
-from Basilisk import __path__
-from Basilisk.utilities import RigidBodyKinematics as rbk
-from Plotting_Functions import plot_rw_speeds, plot_magfield, plot_imu
-from FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
-import quaternion as quat
 from pathlib import Path
 from sys import exit
-bskPath = __path__[0]
-
-import matplotlib.pyplot as plt
-from Basilisk.utilities.supportDataTools.dataFetcher import get_path, DataFile
-
-
-# similar file of what is in oresat-simulator
-import basilisk_helpers as bsk_helpers
 
 import basilisk_core
 
