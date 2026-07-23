@@ -446,7 +446,7 @@ def sim_main(config):
         print(f"Plot saved as {png_path}")
     
     # Plot reaction wheel speeds
-    fig, ax = plt.subplots(2, 1, figsize(8, 8))
+    fig, ax = plt.subplots(2, 1, figsize=(8, 8))
     ax[0].plot(rw_speed_rec.times()*1e-9, rw_speed_data)
     ax[0].set_title("Individual Speeds")
     ax[1].plot(rw_speed_rec.times()*1e-9, np.sum(np.abs(rw_speed_data), 1))
