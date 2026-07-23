@@ -315,11 +315,11 @@ class FlightSoftware(sysModel.SysModel):
 
 
                 
-                #if (quat.error_angle(q_error) <= 0.1 and np.all(np.abs(omega) < 1e-2)):
+                if (quat.error_angle(q_error) <= 0.1 and np.all(np.abs(omega) < 1e-2)):
                     # implement momentum dumping when somewhat close to target
                     # same as detumble, but with wheel momentum
-                #    desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(H_wheels, B) # detumble controller as defined by Markley & Crassidis
-                #    self.command_MTB_torques(desired_torque, currentTimeNanos)
+                    desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(H_wheels, B) # detumble controller as defined by Markley & Crassidis
+                    self.command_MTB_torques(desired_torque, currentTimeNanos)
 
             elif self.control_mode == ControlMode.THERMAL_REORIENT: # can only be set by first part of passive thermal spin controller
                 desired_torque = self.RW_controller(q_error, omega) # compute desired 3-axis torque from controller

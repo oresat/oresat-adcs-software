@@ -12,16 +12,13 @@ from config import GuidanceMode, PointingReference, ControlMode
 if __name__ == "__main__":
 
     # select satellite model attributes
-    sat_preset_file = "presets/OreSat1.json"
-    sat_preset_file = "presets/Sentinel1.json"
+    sat_config = preset_utils.load_preset("presets/Osiris-C.json")
 
-    sat_3D_file = "models/3U_Simplified_Model.obj"
-    sat_3D_file = "models/OreSat_Simplified_Model.obj"
-    
-    sat_config = preset_utils.load_preset("presets/OreSat1.json")
     # determine if hardware should have their own configs
     rw_config = preset_utils.load_preset("presets/reaction_wheels.json")
 
+    # Select 3d file
+    sat_3D_file = "models/3U_Simplified_Model.obj"
 
     # Simulation settings
     viz_scaling = 5
@@ -67,7 +64,7 @@ if __name__ == "__main__":
     control_mode = ControlMode["RW_POINTING"]
 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
-    guidance_mode = GuidanceMode["SUN"] # "NADIR" 
+    guidance_mode = GuidanceMode["NADIR"] # "NADIR" or "SUN" 
 
     # KSAT coordinates
     target_lat = 78.231500
@@ -81,7 +78,7 @@ if __name__ == "__main__":
     
      
     if control_mode in (ControlMode.RW_POINTING, ControlMode.THERMAL_DETUMBLE, ControlMode.RW_SLOW_ROTATE): # realistic RW sim setup
-        sim_time = 10000
+        sim_time = 100000
         dynamics_update_time = .2
         fsw_update_time = 1.0
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME

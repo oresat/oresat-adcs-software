@@ -268,16 +268,21 @@ def get_eclipse_multiple_model(
 
 
 
-def get_power_sink(modelTag, nodePowerOut):
+def make_power_sink(model_tag, node_power_out):
     '''
-        modelTag: name for model
-        nodePowerOut: power output in watts. Negative means it consumes power
+    Parameters
+    ----------
+    model_tag
+        name for model
+    node_power_out: 
+        power output in watts,  negative means it consumes power
     '''
-    powerSink = simplePowerSink.SimplePowerSink()
-    powerSink.ModelTag = modelTag
-    powerSink.nodePowerOut = -3.  # Watts
-
-    return powerSink
+    power_sink = simplePowerSink.SimplePowerSink()
+    power_sink.ModelTag = model_tag
+    power_sink.nodePowerOut = node_power_out  # Watts
+    ps_msg = power_sink.nodePowerOutMsg
+    ps_rec = ps_msg.recorder()
+    return power_sink, ps_msg, ps_rec
 
 
 

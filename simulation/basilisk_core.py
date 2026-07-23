@@ -272,6 +272,13 @@ def sim_main(config):
 
     # create base power sink
 
+    power_sink, power_sink_msg, power_sink_rec = bsk_helpers.make_power_sink(
+        model_tag = "base_power_sink",
+        node_power_out = config["base_power_rate"]
+    )
+    sim.AddModelToTask('dynamicsTask', power_sink)
+    sim.AddModelToTask('dynamicsTask', power_sink_rec)
+    battery.addPowerNodeToModel(power_sink_msg)
 
     # nHat_b, area (m^2), efficiency
     # area is about 2 x 4 
@@ -306,9 +313,9 @@ def sim_main(config):
     rw_power, rw_power_msgs, rw_power_recs = bsk_helpers.make_rw_powers(
         model_tag = "rw_power",
         num_wheels = numRW,
-        base_power = 0.5,
-        eff_elec_to_mech = 0.8,
-        eff_mech_to_elec = -1.0,
+        base_power = config["rw_base_power_rate"],
+        eff_elec_to_mech = config["rw_eff_elec_to_mech"],  # should be about 0.8
+        eff_mech_to_elec = config["rw_eff_mech_to_elec"],  # should be about -1.0 (energy to brake)
     )
 
     # attach reaction wheel powers to their things
@@ -418,10 +425,10 @@ def sim_main(config):
 
     rw_speed_data = rw_speed_rec.wheelSpeeds
     mag_sensor_data = mag_sensor_rec.tam_S
-    # Solar panel data is net power
-    sp_group_data = []
-    for sp_rec in solar_panel_recs:
-        sp_group_data.append(sp_rec.netPower)
+    # Solar panel power
+    sp_group_data = [sp_pow_rec.netPower for sp_pow_rec in solar_panel_recs]
+    # Reaction wheel power
+    rw_power_group_data = [rw_pow_rec.netPower for rw_pow_rec in rw_power_recs]
 
     batt_storage_data = battery_rec.storageLevel
     batt_power_data = battery_rec.currentNetPower
@@ -439,7 +446,7 @@ def sim_main(config):
         print(f"Plot saved as {png_path}")
 
 
-    # Plot solar panel data
+    # Plot solar panel power data
     fig, ax = plt.subplots()
     sp_time = solar_panel_recs[0].times()*1e-9
     for sp_data in sp_group_data:
@@ -448,14 +455,30 @@ def sim_main(config):
     ax.plot(sp_time, np.sum(sp_group_data, axis=0))
     
     if config["save_pdf"] == True:
-        pdf_path = config["plot_basepath"] / "solar_panel_net_power.pdf"
+        pdf_path = config["plot_basepath"] / "power_solar_panels.pdf"
         plt.savefig(pdf_path, dpi=300)
         print(f"Plot saved as {pdf_path}")
     if config["save_png"] == True:
-        png_path = config["plot_basepath"] / "solar_panel_net_power.png"
+        png_path = config["plot_basepath"] / "power_solar_panels.png"
         plt.savefig(png_path, dpi=600)
         print(f"Plot saved as {png_path}")
 
+    # Plot reaction wheel power
+    fig, ax = plt.subplots()
+    rw_power_time = rw_power_recs[0].times()*1e-9
+    for rw_power_data in rw_power_group_data:
+        ax.plot(rw_power_time, rw_power_data)
+
+    ax.plot(rw_power_time, np.sum(rw_power_group_data, axis=0))
+    
+    if config["save_pdf"] == True:
+        pdf_path = config["plot_basepath"] / "power_reaction_wheels.pdf"
+        plt.savefig(pdf_path, dpi=300)
+        print(f"Plot saved as {pdf_path}")
+    if config["save_png"] == True:
+        png_path = config["plot_basepath"] / "power_reaction_wheels.png"
+        plt.savefig(png_path, dpi=600)
+        print(f"Plot saved as {png_path}")
 
 
 

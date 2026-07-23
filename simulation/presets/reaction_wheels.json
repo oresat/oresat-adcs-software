@@ -1,5 +1,5 @@
 {
-  "rw_inertia": 7.271e-06,
+  "rw_inertia": 0.000007271,
   "rw_G": [
     [
       0.6123724369785287,
@@ -20,6 +20,9 @@
       -0.5000000000000001
     ]
   ],
-  "rw_max_speed": 100000.0,
-  "rw_max_torque": 100000.0
+  "rw_max_speed": 10000.0,
+  "rw_max_torque": 10000.0,
+  "rw_base_power_rate": 0.2,
+  "rw_eff_elec_to_mech": 0.8,
+  "rw_eff_mech_to_elec": -1.0
 }
