@@ -78,8 +78,6 @@ def sim_main(config):
     sim.AddModelToTask("dynamicsTask", mag_model) 
     sim.AddModelToTask("dynamicsTask", mag_rec)
 
-    print(mag_model.envOutMsgs)
-   
     # create orbit properties using classical orbit elements. 
     # Assuming perfectly circular orbit for now.
     oe = orbitalMotion.ClassicElements()
@@ -271,7 +269,6 @@ def sim_main(config):
     sim.AddModelToTask("dynamicsTask", battery_rec)
 
     # create base power sink
-
     power_sink, power_sink_msg, power_sink_rec = bsk_helpers.make_power_sink(
         model_tag = "base_power_sink",
         node_power_out = config["base_power_rate"]
@@ -280,25 +277,17 @@ def sim_main(config):
     sim.AddModelToTask('dynamicsTask', power_sink_rec)
     battery.addPowerNodeToModel(power_sink_msg)
 
-    # nHat_b, area (m^2), efficiency
-    # area is about 2 x 4 
-    solar_panel_params = [
-        [[1, 0, 0], 0.03096768, 0.20],
-        [[0, 1, 0], 0.03096768, 0.20],
-        [[-1, 0, 0], 0.03096768, 0.20]
-    ]
-
+    # Solar Panels
     solar_panel_models = []
     solar_panel_msgs = []
     solar_panel_recs = []
-    for ii, sp_params in enumerate(solar_panel_params):
-        print("Solar panel " + str(ii))
+    for ii, sp_params in enumerate(config["solar_panel_params"]):
         sp_model, sp_msg, sp_rec = bsk_helpers.make_solar_panel(
             model_tag = "solal_panel_" + str(ii),
             sc_object_msg = sc_object_msg,
             sun_msg = sun_msg,
             eclipse_msg = eclipse_msg,
-            parameters = sp_params
+            parameters = sp_params.values()
         )
         solar_panel_models.append(sp_model)
         solar_panel_msgs.append(sp_msg)
@@ -423,16 +412,57 @@ def sim_main(config):
     # Eclipse data is shadow factor
     eclipse_data = eclipse_rec.shadowFactor
 
-    rw_speed_data = rw_speed_rec.wheelSpeeds
     mag_sensor_data = mag_sensor_rec.tam_S
+
+    # Magnetorquers torques
+    mt_torque_data = mtbLog.mtbNetTorque_B
+    # Reaction wheel speeds
+    rw_speed_data = rw_speed_rec.wheelSpeeds
+
+    # Battery capacity
+    batt_storage_data = battery_rec.storageLevel
+    batt_power_data = battery_rec.currentNetPower
+
     # Solar panel power
     sp_group_data = [sp_pow_rec.netPower for sp_pow_rec in solar_panel_recs]
     # Reaction wheel power
     rw_power_group_data = [rw_pow_rec.netPower for rw_pow_rec in rw_power_recs]
+    # Should save data to file for postprocessing
 
-    batt_storage_data = battery_rec.storageLevel
-    batt_power_data = battery_rec.currentNetPower
+    fig, ax = plt.subplots(figsize=(8,4))
+    ax.plot(mtbLog.times() *1e-9, mt_torque_data)
+    ax.set_ylim([-1e-7, 1e-7])
+    plt.title("Magnetorquers: Net Torque")
+    # plt.legend()
 
+    # Plot reaction wheel torques
+    if config["save_pdf"] == True:
+        pdf_path = config["plot_basepath"] / "mt_torque_graph.pdf"
+        plt.savefig(pdf_path, dpi=300)
+        print(f"Plot saved as {pdf_path}")
+    if config["save_png"] == True:
+        png_path = config["plot_basepath"] / "mt_torque_graph.png"
+        plt.savefig(png_path, dpi=600)
+        print(f"Plot saved as {png_path}")
+    
+    # Plot reaction wheel speeds
+    fig, ax = plt.subplots(2, 1, figsize(8, 8))
+    ax[0].plot(rw_speed_rec.times()*1e-9, rw_speed_data)
+    ax[0].set_title("Individual Speeds")
+    ax[1].plot(rw_speed_rec.times()*1e-9, np.sum(np.abs(rw_speed_data), 1))
+    ax[1].set_title("Total Speed")
+    fig.suptitle("Reaction Wheels: Speed")
+
+    if config["save_pdf"] == True:
+        pdf_path = config["plot_basepath"] / "rw_speeds.pdf"
+        plt.savefig(pdf_path, dpi=300)
+        print(f"Plot saved as {pdf_path}")
+    if config["save_png"] == True:
+        png_path = config["plot_basepath"] / "rw_speeds.png"
+        plt.savefig(png_path, dpi=600)
+        print(f"Plot saved as {png_path}")
+
+    # Plot battery power
     fig, ax = plt.subplots()
     ax.plot(battery_rec.times()*1e-9, batt_storage_data)
     
@@ -513,22 +543,7 @@ def sim_main(config):
         TAMvalues = mag_sensor_rec.tam_S
         plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
 
-        fig, ax2 = plt.subplots(figsize=(8,4))
-        ax2.plot(RW_plot_times, np.average(np.abs(rw_speed_rec.wheelSpeeds), 1), 'r--', label='True Error')
-        
-        plt.title("Total wheel momentum")
-        plt.legend()
-    
-        
-        if config["save_pdf"] == True:
-            pdf_path = config["plot_basepath"] / "tot_speed_graph.pdf"
-            plt.savefig(pdf_path, dpi=300)
-            print(f"Plot saved as {pdf_path}")
-        if config["save_png"] == True:
-            png_path = config["plot_basepath"] / "tot_speed_graph.png"
-            plt.savefig(png_path, dpi=600)
-            print(f"Plot saved as {png_path}")
-  
+
         fig, ax3 = plt.subplots(figsize=(8,4))
         ax3.plot(mtbLog.times() *1e-9, mtbLog.mtbNetTorque_B, 'r--', label='Torque')
         ax3.set_ylim([-1e-7, 1e-7])

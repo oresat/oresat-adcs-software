@@ -14,6 +14,9 @@ if __name__ == "__main__":
     # select satellite model attributes
     sat_config = preset_utils.load_preset("presets/Osiris-C.json")
 
+    # solar panels
+    solar_config = preset_utils.load_preset("presets/solar_panels.json")
+
     # determine if hardware should have their own configs
     rw_config = preset_utils.load_preset("presets/reaction_wheels.json")
 
@@ -78,7 +81,7 @@ if __name__ == "__main__":
     
      
     if control_mode in (ControlMode.RW_POINTING, ControlMode.THERMAL_DETUMBLE, ControlMode.RW_SLOW_ROTATE): # realistic RW sim setup
-        sim_time = 100000
+        sim_time = 5000
         dynamics_update_time = .2
         fsw_update_time = 1.0
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
@@ -142,7 +145,7 @@ if __name__ == "__main__":
               "time_init_string": time_init_string,
     }
 
-    whole_config = sat_config | sim_config | rw_config
+    whole_config = sat_config | sim_config | solar_config | rw_config
  
     print(f"Satellite: {sat_config['satellite']}")
     print(f"Control Mode: {control_mode.name}")
@@ -150,7 +153,7 @@ if __name__ == "__main__":
     print(f"Guidance Mode: {guidance_mode.name}")
     print(f"Activate On Overpass Mode: {activate_on_overpass}\n")
 
-    delay_time_seconds = 5
+    delay_time_seconds = 3
     print(f"\nStarting simulation in {delay_time_seconds} seconds...")
     time.sleep(delay_time_seconds)
 

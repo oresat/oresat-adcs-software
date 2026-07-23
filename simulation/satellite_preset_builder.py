@@ -6,20 +6,8 @@ from pathlib import Path
 
 from config import GuidanceMode, PointingReference, ControlMode
 
+import preset_utils
 
-def npdict_to_plaindict(npdict):
-    """Convert numpy arrays of dictionary to list"""
-    return {
-        key: val.tolist() if isinstance(val, np.ndarray) else val 
-        for key,val in npdict.items()
-    }
-
-def plaindict_to_npdict(plaindict):
-    """Convert lists in dictionary to numpy arrays"""
-    return {
-        key: np.array(var) if isinstance(val, list) else val 
-        for key,val in plaindict.items()
-    }
 
 if __name__ == "__main__":
     config_base_name = "Sentinel"
@@ -98,9 +86,44 @@ if __name__ == "__main__":
     rw_max_speed = 11000.0 # ridiculous speed so our controller does the work. 100k effectively removes limit and allows fsw to limit manually.
     rw_max_torque = 100000.0 # only used when useMaxTorque = True. 100k effectively removes limit and allows fsw to limit manually.
 
+    rw_base_power_rate = 0.2  # base power consumption in watts
+    rw_eff_elec_to_mech = 0.8  # Efficiency 
+    rw_eff_mech_to_elec = -1.0  # Recovery, negative means it takes energy to brake
+
     battery_capacity = 300000.0  # W*s according to basilisk
     battery_init_charge = 150000.0
+
+    base_power_rate = -5.0  # Watts, negative means it consumes power
+
     
+    solar_config = {
+        "solar_panel_params": [
+            {
+                "sp_norm": [1, 0, 0], 
+                "sp_area": 0.03096768, 
+                "sp_eff": 0.20
+            },
+            {
+                "sp_norm": [0, 1, 0], 
+                "sp_area": 0.03096768, 
+                "sp_eff": 0.20
+            },
+            {
+                "sp_norm": [-1, 0, 0], 
+                "sp_area": 0.03096768, 
+                "sp_eff": 0.20
+            }
+        ]
+    }
+
+    print(solar_config["solar_panel_params"])
+    blah = [
+        [val for val in panel.values()] 
+        for panel in solar_config["solar_panel_params"]
+    ]
+
+    print(blah)
+
     sat_config = {
         "satellite":satellite,  # satellite name
         "mass":mass, # satellite mass
@@ -113,22 +136,29 @@ if __name__ == "__main__":
         "ST_update_rate":ST_update_rate,  # (flightsoftware) how fast star tracker updates
         "battery_capacity": battery_capacity,  # battery capacity
         "battery_init_charge": battery_init_charge,  # initial charge of battery at start of mission
+        "base_power_rate": base_power_rate,  # rate at which power is consumed
     }
-
 
     rw_config = {
         "rw_inertia": rw_inertia,
         "rw_G": rw_G,
         "rw_max_speed": rw_max_torque,
         "rw_max_torque": rw_max_torque,
+        "rw_base_power_rate": rw_base_power_rate,
+        "rw_eff_elec_to_mech": rw_eff_elec_to_mech,
+        "rw_eff_mech_to_elec": rw_eff_mech_to_elec,
     }
 
-    blah = npdict_to_plaindict(sat_config)
+    blah = preset_utils.npdict_to_plaindict(sat_config)
     with open("example_satellite.json", "w") as fd:
         json.dump(blah, fd, indent=2)
 
-    blah = npdict_to_plaindict(rw_config)
+    blah = preset_utils.npdict_to_plaindict(rw_config)
     with open("example_reaction_wheels.json", "w") as fd:
+        json.dump(blah, fd, indent=2)
+
+    blah = preset_utils.npdict_to_plaindict(solar_config)
+    with open("example_solar_panels.json", "w") as fd:
         json.dump(blah, fd, indent=2)
 
 
