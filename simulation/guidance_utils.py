@@ -246,38 +246,18 @@ def target_tracking_quat(
     vector for the z-facing, and orients the +x facing to point into the starfield
     (away from nadir vector) in order to give star tracker unoccluded view
     """
-    r_ne = eci_2_ecef.T  # rotation matrix from ECEF to ECI
-
-    # norm target vector and convert to ECI
-    zvec = r_ne @ (target_vector / np.linalg.norm(target_vector))
-
-    neg_nadir_eci = r_ne @ (-nadir_vector_ecef)
-    # remove component parallel to nadir vector from velocity vector
-    # to determine "ram-facing-like" vector
-    xvec = neg_nadir_eci - np.dot(neg_nadir_eci, zvec) * zvec
-    xvec = xvec / np.linalg.norm(xvec)
-
-    yvec = np.cross(zvec, xvec)
-    yvec = yvec / np.linalg.norm(yvec)
-
-    c_bn = np.vstack(
-        (xvec, yvec, zvec)
-    )  # Create DCM for body orientation in ECI coordinates
-
-    target_quat = quat.quat_from_dcm_scalar_last(c_bn)  # Convert DCM to quaternion
-
-
-    # new method
+    
     target_ecef = target_vector
     nadir_ecef = nadir_vector_ecef
 
     ecef_2_eci = eci_2_ecef.T
+
     # convert target vector to ECI coordinates
     target_eci = ecef_2_eci @ (target_ecef / np.linalg.norm(target_ecef))
     # temporarily define starfield as opposite of nadir
     star_eci = ecef_2_eci @ (- nadir_ecef / np.linalg.norm(nadir_ecef))
 
-    target_quat_alt = two_boresights_quat(
+    target_quat = two_boresights_quat(
         boresight_1=np.array(
            [0, 0, 1]  # +z direction
         ),
@@ -289,36 +269,37 @@ def target_tracking_quat(
         scalar_last=True
     )
 
-    return target_quat_alt
+    return target_quat
 
 
 def nadir_quat(
-    nadir_vector_ecef: np.ndarray, v_ecef: np.ndarray, eci_2_ecef: np.ndarray
+    nadir_ecef: np.ndarray, velocity_ecef: np.ndarray, eci_2_ecef: np.ndarray
 ) -> np.ndarray:
     """
     Creates an orientation quaternion forming an orientation based on a nadir
     vector for the z-facing, and orients the +x facing towards the velocity vector
     """
-    r_ne = eci_2_ecef.T  # rotation matrix from ECEF to ECI
+    # rotation matrix from ECEF to ECI
+    ecef_2_eci = eci_2_ecef.T  
+
     # norm velocity vector and convert to ECI
-    v_eci = r_ne @ (v_ecef / np.linalg.norm(v_ecef))
+    velocity_eci = ecef_2_eci @ (velocity_ecef / np.linalg.norm(velocity_ecef))
 
     # norm target vector and convert to ECI
-    zvec = r_ne @ (nadir_vector_ecef / np.linalg.norm(nadir_vector_ecef))
+    nadir_eci = ecef_2_eci @ (nadir_ecef / np.linalg.norm(nadir_ecef))
 
-    # remove component parallel to nadir vector from velocity vector
-    # to determine "ram-facing-like" vector
-    xvec = v_eci - np.dot(v_eci, zvec) * zvec
-    xvec = xvec / np.linalg.norm(xvec)
+    target_quat = two_boresights_quat(
+        boresight_1=np.array(
+           [0, 0, 1]  # +z direction
+        ),
+        target_1=nadir_eci,
+        boresight_2=np.array(
+            [1, 0, 0]  # +x direction
+        ),
+        target_2=velocity_eci,
+        scalar_last=True
+    )
 
-    yvec = np.cross(zvec, xvec)
-    yvec = yvec / np.linalg.norm(yvec)
-
-    c_bn = np.vstack(
-        (xvec, yvec, zvec)
-    )  # Create DCM for body orientation in ECI coordinates
-
-    target_quat = quat.quat_from_dcm_scalar_last(c_bn)  # Convert DCM to quaternion
     return target_quat
 
 
