@@ -76,7 +76,7 @@ if __name__ == "__main__":
     control_mode = ControlMode["RW_POINTING"]
 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
-    guidance_mode = GuidanceMode["NADIR"] # "NADIR" or "SUN" 
+    guidance_mode = GuidanceMode["MIN_DRAG"] # "NADIR" or "SUN" 
 
     # KSAT coordinates
     target_lat = 78.231500

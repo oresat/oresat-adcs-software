@@ -305,8 +305,8 @@ def nadir_quat(
 
 def ram_quaternion(
     drag_orientation: GuidanceMode,
-    v_ecef: np.ndarray,
-    nadir_vector_ecef: np.ndarray,
+    velocity_ecef: np.ndarray,
+    nadir_ecef: np.ndarray,
     eci_2_ecef: np.ndarray,
 ) -> np.ndarray:
     """
@@ -314,35 +314,39 @@ def ram_quaternion(
     minimum drag is desired. The secondary axis is defined as the nadir
     vector, or as close as possible to it
     """
-    r_ne = eci_2_ecef.T
-    # norm velocity vector and convert to ECI
-    drag_facing = r_ne @ (v_ecef / np.linalg.norm(v_ecef))
+    ecef_2_eci = eci_2_ecef.T
+    velocity_eci = ecef_2_eci @ velocity_ecef
+    nadir_eci = ecef_2_eci @ nadir_ecef
 
-    nadir_eci = r_ne @ nadir_vector_ecef
-    # remove component parallel to velocity vector from nadir vector to determine
-    # "downwards-pointing" vector
-    nadir_facing = nadir_eci - np.dot(nadir_eci, drag_facing) * drag_facing
-    nadir_facing = nadir_facing / np.linalg.norm(nadir_facing)
-
+    # Most of the time I would not care and would use a single-boresight method, 
+    # but here the star tracker should point away to avoid occlusion
     if drag_orientation == GuidanceMode.MAX_DRAG:
-        yvec = np.cross(nadir_facing, drag_facing)
-        yvec = yvec / np.linalg.norm(yvec)
+        # y should point in velocity vector
+        target_quat = two_boresights_quat(
+            boresight_1=np.array(
+               [0, 1, 0]  # +y direction, could be -z direction
+            ),
+            target_1=velocity_eci,
+            boresight_2=np.array(
+                [1, 0, 0]  # +x direction (star tracker)
+            ),
+            target_2=-nadir_eci,
+            scalar_last=True
+        )
 
-        # Create DCM for body orientation in ECI coordinates
-        c_bn = np.vstack((drag_facing, yvec, nadir_facing))
-    else:
-        if drag_orientation != GuidanceMode.MIN_DRAG:
-            logger.error(
-                "unknown drag orientation {}. Defaulting to MIN_DRAG", drag_orientation
-            )
-        # flip vector such that in min_drag mode
-        # the satellite's solar panels (rather than the GPS antenna) are pointing anti-nadir
-        nadir_facing = -nadir_facing
-        yvec = np.cross(drag_facing, nadir_facing)
-        yvec = yvec / np.linalg.norm(yvec)
+        return target_quat
 
-        # Create DCM for body orientation in ECI coordinates
-        c_bn = np.vstack((nadir_facing, yvec, drag_facing))
+    # by default to min drag
+    target_quat = two_boresights_quat(
+        boresight_1=np.array(
+           [0, 0, 1]  # +z direction, could be -z direction
+        ),
+        target_1=velocity_eci,
+        boresight_2=np.array(
+            [1, 0, 0]  # +x direction (star tracker)
+        ),
+        target_2=-nadir_eci,
+        scalar_last=True
+    )
 
-    target_quat = quat.quat_from_dcm_scalar_last(c_bn)  # Convert DCM to quaternion
     return target_quat
