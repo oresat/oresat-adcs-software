@@ -26,7 +26,7 @@ class PointingReference(IntEnum):
     STAR_TRACKER = 2
 
 
-class GainMode(Enum):
+class GainModeRW(Enum):
     STANDARD = 0
     TRANSIENT = 1
     FINE_POINTING = 2

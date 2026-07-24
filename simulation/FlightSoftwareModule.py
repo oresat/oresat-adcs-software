@@ -14,7 +14,7 @@ import guidance_utils as guide_utils
 
 
 
-from config import GuidanceMode, PointingReference, ControlMode
+from config import GuidanceMode, PointingReference, ControlMode, GainModeRW
 
 class FlightSoftware(sysModel.SysModel):
     def __init__(self, config):
@@ -35,8 +35,11 @@ class FlightSoftware(sysModel.SysModel):
         self.torque_vals = np.zeros(36) # initialize RW torque input array
         
         # setup magnetorquer output messages
+        self.mag_dipole_msg = messaging.MTBCmdMsg()
         self.magTorqueOutMsg = messaging.MTBCmdMsg()
+        self.mag_dipole_payload = messaging.MTBCmdMsgPayload()
         self.magTorquePayload = messaging.MTBCmdMsgPayload()
+        self.mag_dipoles = np.zeros(36) # initialize MTB torque input array
         self.mag_torques = np.zeros(36) # initialize MTB torque input array
         
         self.G = config["rw_G"]
@@ -253,20 +256,33 @@ class FlightSoftware(sysModel.SysModel):
                     ECI_2_ECEF = R @ self.last_skyfield_frame # if skyfield didn't update this loop, use saved rotation matrix (zero order hold)
             else:
                 ECI_2_ECEF = true_ECI_2_ECEF # if not using skyfield, use sim-internal conversion matrix
- 
 
-            if self.guidance_mode == GuidanceMode.TARGET: # Tracking a static target on the surface of the earth via GPS coordinates        
-                target_vector = self.ECEF_target - r_ECEF # calculate target vector in ECEF cartesian coordinates
-                target_vector = target_vector/np.linalg.norm(target_vector) # normalize to unit vector
-                new_target = guide_utils.target_tracking_quat(target_vector, nadir_vector_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
-            elif self.guidance_mode == GuidanceMode.NADIR: # Continually face +z nadir (+x as close to ram as possible)
-                new_target = guide_utils.nadir_quat(nadir_vector_ECEF, v_ECEF, ECI_2_ECEF) # create orientation quaternion from cartesian target
+
+            if self.guidance_mode == GuidanceMode.TARGET: 
+                # Tracking a static target on the surface of the earth via GPS coordinates        
+                # calculate target vector in ECEF cartesian coordinates
+                target_vector = self.ECEF_target - r_ECEF 
+                target_vector = target_vector/np.linalg.norm(target_vector) 
+                # create orientation quaternion from cartesian target
+                new_target = guide_utils.target_tracking_quat(target_vector, nadir_vector_ECEF, ECI_2_ECEF) 
+
+            elif self.guidance_mode == GuidanceMode.NADIR: 
+                # Continually face +z nadir (+x as close to ram as possible)
+                # create orientation quaternion from cartesian target
+                new_target = guide_utils.nadir_quat(nadir_vector_ECEF, v_ECEF, ECI_2_ECEF) 
+
             elif self.guidance_mode == GuidanceMode.MAX_DRAG or self.guidance_mode == GuidanceMode.MIN_DRAG:
-                new_target = guide_utils.ram_quaternion(self.guidance_mode, v_ECEF, nadir_vector_ECEF, ECI_2_ECEF) # calculate ram-facing orientation for either +z or +x axis based on min or max drag
+                # calculate ram-facing orientation for either +z or +x axis based on min or max drag
+                new_target = guide_utils.ram_quaternion(self.guidance_mode, v_ECEF, nadir_vector_ECEF, ECI_2_ECEF) 
+
             elif self.guidance_mode == GuidanceMode.SUN:
+                # calculate the quaternion to face the sun
                 current_julian_day = self.init_julian_days + (currentTimeNanos*1e-9)/(60*60*24)
+                # calculate the vector in ECI coordinates
                 sun_vector_eci = guide_utils.sun_vector(current_julian_day, r_ECEF,  ECI_2_ECEF)
+                # calculate the target quaternion
                 new_target = guide_utils.sun_quat(sun_vector_eci, nadir_vector_ECEF, v_ECEF, ECI_2_ECEF)
+
             else:
                 print(f"Unknown guidance mode: {self.guidance_mode}")
             
@@ -299,7 +315,8 @@ class FlightSoftware(sysModel.SysModel):
         The following section encomposses the control algorithms which
         define actuator output based on state and target
         '''
-        
+
+        # STEP X: find the error quaternion
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hemisphere boundaries
         self.error_filter.append(q_error) # save estimated (filtered) attitude error for plotting after conclusion of sim execution
@@ -307,19 +324,17 @@ class FlightSoftware(sysModel.SysModel):
         ######################### CONTROL LOGIC ###############################
         currentTime = currentTimeNanos * 1e-9
         if ((self.controllerStartTime is not None) and (currentTime >= self.controllerStartTime) and (self.controllerEndTime is None or currentTime < self.controllerEndTime)): # turn controller on at specified time
+
             if self.control_mode == ControlMode.RW_POINTING:
                 desired_torque = self.RW_controller(q_error, omega, currentTimeNanos*1e-9) # compute desired 3-axis torque from controller (standard LQR controller)
                 desired_torque += tau_ff # feedforward torque, only non-zero for tracking mode
                 wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
-
-
-                
                 if (quat.error_angle(q_error) <= 0.1 and np.all(np.abs(omega) < 1e-2)):
                     # implement momentum dumping when somewhat close to target
                     # same as detumble, but with wheel momentum
-                    desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(H_wheels, B) # detumble controller as defined by Markley & Crassidis
-                    self.command_MTB_torques(desired_torque, currentTimeNanos)
+                    desired_dipole = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(H_wheels, B) # detumble controller as defined by Markley & Crassidis
+                    self.command_MTB_dipoles(desired_dipole, currentTimeNanos)
 
             elif self.control_mode == ControlMode.THERMAL_REORIENT: # can only be set by first part of passive thermal spin controller
                 desired_torque = self.RW_controller(q_error, omega) # compute desired 3-axis torque from controller
@@ -331,13 +346,13 @@ class FlightSoftware(sysModel.SysModel):
                     # thermal spinup
                     print(f"SWITCHING TO MAGNETORQUER SPINUP AT {currentTimeNanos*1e-9} SECONDS, {omega}")
             elif self.control_mode == ControlMode.DETUMBLE:
-                desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
-                self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
+                desired_dipole = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
+                self.command_MTB_dipoles(desired_dipole, currentTimeNanos) # Write the payload to magnetorquers
             elif self.control_mode == ControlMode.THERMAL_DETUMBLE:
                 # thermal detumble
                 # detumble controller as defined by Markley & Crassidis
                 desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) 
-                self.command_MTB_torques(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
+                self.command_MTB_dipoles(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
                 if (np.all(np.abs(omega) < 1e-4)):
                     self.control_mode = ControlMode.THERMAL_REORIENT
                     print(f"SWITCHING TO REACTION WHEEL REORIENTATION AT {currentTimeNanos*1e-9} SECONDS")
@@ -347,7 +362,7 @@ class FlightSoftware(sysModel.SysModel):
                 if (omega[2] < self.thermal_spin_rpm*2*np.pi/60): # while satellite is spinning slower than set rate about the z axis, spin up
                     tau_des = [0,0,1] # spin about the z axis
                     m = np.cross(B, tau_des) / (B @ B)
-                    self.command_MTB_torques(m, currentTimeNanos)
+                    self.command_MTB_dipoles(m, currentTimeNanos)
             elif self.control_mode == ControlMode.MTB_POINTING: 
                 # Magnetorquer fine pointing controller (experimental)
                 # Magnetorquer control law "Singularity Robust (SR) inverse" taken from: 
@@ -360,8 +375,8 @@ class FlightSoftware(sysModel.SysModel):
 
                 m_cmd_lqr = np.linalg.inv(bm.T @ bm + k*np.eye(3))@bm.T@tau_des
 
-                # print(m_cmd_end)
-                self.command_MTB_torques(m_cmd_end, currentTimeNanos)
+                self.command_MTB_dipoles(m_cmd_lqr, currentTimeNanos)
+
             elif self.control_mode == ControlMode.IDLE:
                 pass # mode to simply visualize orbits with large timespans
             elif self.control_mode == ControlMode.RW_SLOW_ROTATE: # a simple "rotate about z-axis" control mode to deal with star tracker occlusion:
@@ -381,10 +396,9 @@ class FlightSoftware(sysModel.SysModel):
             self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds)
         
             # Zero MTB dipoles
-            self.mag_torques[:] = 0.0
-            self.magTorquePayload.mtbDipoleCmds = self.mag_torques
-            self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
-    
+            self.command_MTB_dipoles(np.array([0.0, 0.0, 0.0]), currentTimeNanos)
+   
+
     def update_target(self, target_quat):
         if self.pointing_reference == PointingReference.STAR_TRACKER: # +x facing of satellite used as pointing reference
             self.q_target = quat.quat_mult(self.q_90_rot, target_quat) # define target in body coordinates
@@ -396,11 +410,21 @@ class FlightSoftware(sysModel.SysModel):
             print("ERROR: UNKNOWN POINTING REFERENCE")
             exit()
     
-    def command_MTB_torques(self, desired_torque, currentTimeNanos):
-        self.mag_torques[:3] = desired_torque
-        self.magTorquePayload.mtbDipoleCmds = self.mag_torques
-        self.magTorqueOutMsg.write(self.magTorquePayload, currentTimeNanos, self.moduleID)
+    def command_MTB_dipoles(self, desired_dipoles, current_time_nanos):
+        '''Set magnetorquer dipoles with dipole message.
+
+        Parameters
+        ----------
+        desired_dipoles
+            1x3 dipole vector for the magnetorquer
+        current_time_nanos
+            current simulation time in nanoseconds
+        '''
+        self.mag_dipoles[:3] = desired_dipoles
+        self.mag_dipole_payload.mtbDipoleCmds = self.mag_dipoles
+        self.mag_dipole_msg.write(self.mag_dipole_payload, current_time_nanos, self.moduleID)
         
+
     def command_wheel_torques(self, currentTimeNanos, wheel_torque, wheelSpeeds): # send commanded torque values to reaction wheels
         self.check_torque_vals(wheel_torque, wheelSpeeds) # ensure none of the torque values exceed max torque or accelerate wheel past max RPM in either direction and write to self.torque_vals
         self.rwMotorTorquePayload.motorTorque = self.torque_vals
@@ -421,22 +445,29 @@ class FlightSoftware(sysModel.SysModel):
             else:  # Otherwise clamp to max torque bounds
                 self.torque_vals[i] = max(-self.maxTorque, min(wheel_torque[i], self.maxTorque))
     
-    def RW_controller(self, q_error, omega, currentTimeSecs):
-        x = np.concatenate((q_error[:3], omega)) # assemble state vector            
+    def RW_controller(
+        self, q_error: np.ndarray, omega: np.ndarray, curren_time_secs: float
+    ):
+        # assemble state vector
+        x = np.concatenate((q_error[:3], omega))
 
-        if self.use_variable_gain and (quat.error_angle(q_error) < 1): # LQR controller with integral term
+        if self.use_variable_gain and (quat.error_angle(q_error) < 1): 
+            # LQR controller with integral term
             transient_time = 30 # seconds
-            if self.gain_mode == 0:
+            if self.gain_mode == GainModeRW.STANDARD:
                 self.transient_start = currentTimeSecs
-                self.gain_mode = 1 # switch to transient mode
+                self.gain_mode = GainModeRW.TRANSIENT # switch to transient mode
                 return - self.K_RW @ x # firt step of transient mode returns the same as standard controller
-            elif self.gain_mode == 1:
+            elif self.gain_mode == GainModeRW.TRANSIENT:
+                # Transient gain mode
                 if (self.transient_start >= self.transient_start+transient_time):
-                    self.gain_mode = 2 # switch to full fine-pointing mode
+                    self.gain_mode = GainModeRW.FINE_POINTING # switch to full fine-pointing mode
                 gain_switch_time = currentTimeSecs - self.transient_start
                 return (-self.K_RW_fine @ x)*gain_switch_time/transient_time - (self.K_RW @ x)*(1-gain_switch_time/transient_time) # transient mode
             else:
-                return -self.K_RW_fine @ x # - self.K_integrator @ self.state_integral
+                # Fine pointing gain mode
+                # - self.K_integrator @ self.state_integral
+                return -self.K_RW_fine @ x 
         else:
             self.gain_mode = 0 # standard gains
             return -self.K_RW @ x # invert sign for control

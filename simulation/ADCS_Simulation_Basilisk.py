@@ -24,7 +24,7 @@ if __name__ == "__main__":
     sat_3D_file = "models/3U_Simplified_Model.obj"
 
     # Simulation settings
-    viz_scaling = 5
+    viz_scaling = 10
 
     viz_filename = None # sim visualization savename
     print_states = False # print states in flight software
@@ -63,11 +63,20 @@ if __name__ == "__main__":
 
     # Select the spacecraft pointing reference (which axis/sensor defines boresight) and control modes:    
     pointing_reference = PointingReference["HELICAL"]
-    
+
+    # Modes are
+    # IDLE
+    # RW_POINTING
+    # MTB_POINTING
+    # DETUMBLE
+    # THERMAL_DETUMBLE
+    # THERMAL_REORIENT
+    # THERMAL_SPINUP
+    # RW_SLOW_RATE
     control_mode = ControlMode["RW_POINTING"]
 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
-    guidance_mode = GuidanceMode["NADIR"] # "NADIR" or "SUN" 
+    guidance_mode = GuidanceMode["TARGET"] # "NADIR" or "SUN" 
 
     # KSAT coordinates
     target_lat = 78.231500
@@ -81,7 +90,10 @@ if __name__ == "__main__":
     
      
     if control_mode in (ControlMode.RW_POINTING, ControlMode.THERMAL_DETUMBLE, ControlMode.RW_SLOW_ROTATE): # realistic RW sim setup
-        sim_time = 5000
+        if control_mode == ControlMode.THERMAL_DETUMBLE:
+            sim_time = 50000
+        else:
+            sim_time = 10000
         dynamics_update_time = .2
         fsw_update_time = 1.0
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
@@ -95,7 +107,7 @@ if __name__ == "__main__":
         use_skyfield = False
         omega_init_rad = np.array([0.0, 0.0, 0.0]) # ensure no excessive spinning
     else: # realistic MTB sim setup
-        sim_time = 30000
+        sim_time = 1000
         
         dynamics_update_time = 1
         fsw_update_time = 1

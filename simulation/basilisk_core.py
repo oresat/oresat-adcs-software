@@ -64,19 +64,11 @@ def sim_main(config):
     ########################## ORBITAL ENVIRONMENT ############################
     
     # create gravitational bodies (Earth in this case, but might add moon later as well)
-    gravFactory = bsk_helpers.get_gravity_factory_earth(scObject)
+    gravFactory = simIncludeGravBody.gravBodyFactory()
+    gravFactory.createBodies('earth')
 
     mu_earth = gravFactory.gravBodies.get("earth").mu
 
-    epoch_msg = simHelpers.timeStringToGregorianUTCMsg('2025 June 27, 10:23:0.0 (UTC)')  # set epoch date/time message for WMM
-    
-    # create the magnetic field
-    mag_model, mag_msg, mag_rec = bsk_helpers.get_mag_model("WMM", scObject)
-    # connect epoch messages
-    mag_model.epochInMsg.subscribeTo(epoch_msg) 
-    # add the magnetic field module to the simulation task
-    sim.AddModelToTask("dynamicsTask", mag_model) 
-    sim.AddModelToTask("dynamicsTask", mag_rec)
 
     # create orbit properties using classical orbit elements. 
     # Assuming perfectly circular orbit for now.
@@ -114,8 +106,10 @@ def sim_main(config):
     # Add spice object for planet rotation and ECEF coordinate simulation. Necessary for guidance algorithms.
     timeInitString = config["time_init_string"]
     
-    grav_factory, spice_object, earth, sun, moon = bsk_helpers.make_spice_earth_sun_moon(timeInitString)
- 
+    grav_factory, spice_object, earth, sun, moon = bsk_helpers.make_spice_earth_sun_moon(scObject, timeInitString)
+
+    grav_factory.addBodiesTo(scObject)
+
     earth_msg = spice_object.planetStateOutMsgs[0]
     sun_msg = spice_object.planetStateOutMsgs[1]
     moon_msg = spice_object.planetStateOutMsgs[2]
@@ -128,6 +122,8 @@ def sim_main(config):
     # Need spice to run before spacecraft module.
     # priority could also be changed
     sim.AddModelToTask("dynamicsTask", spice_object, 5)
+    # another way to add is grav_factory.spiceObject
+
 
     sim.AddModelToTask("dynamicsTask", scObject)
 
@@ -147,6 +143,17 @@ def sim_main(config):
     )
     sim.AddModelToTask("dynamicsTask", eclipse_model)
     sim.AddModelToTask("dynamicsTask", eclipse_rec)
+
+    # Magnetic field model
+    epoch_msg = simHelpers.timeStringToGregorianUTCMsg('2025 June 27, 10:23:0.0 (UTC)')  # set epoch date/time message for WMM
+    
+    # create the magnetic field
+    mag_model, mag_msg, mag_rec = bsk_helpers.get_mag_model("WMM", scObject)
+    # connect epoch messages
+    mag_model.epochInMsg.subscribeTo(epoch_msg) 
+    # add the magnetic field module to the simulation task
+    sim.AddModelToTask("dynamicsTask", mag_model) 
+    sim.AddModelToTask("dynamicsTask", mag_rec)
 
 
     ############################### SENSORS ###################################
@@ -337,7 +344,7 @@ def sim_main(config):
     sim.AddModelToTask("fswTask", fsw)
     
     rwStateEffector.rwMotorCmdInMsg.subscribeTo(fsw.rwMotorTorqueOutMsg) # subscribe reaction wheel command input to flight software control output
-    mtbEff.mtbCmdInMsg.subscribeTo(fsw.magTorqueOutMsg)  # subscribe magnetorquer command input to flight software control output
+    mtbEff.mtbCmdInMsg.subscribeTo(fsw.mag_dipole_msg)  # subscribe magnetorquer command input to flight software control output
     
     # determine initial pointing vector for relative target calculations
     sat_q_init = quat.axis_angle_to_quaternion(init_rot_axis, init_rot_angle) # account for any rotations of the satellite it self at sim initialization
@@ -379,6 +386,11 @@ def sim_main(config):
                                               saveFile=fileName, 
                                               liveStream=False, # let Vizard visualize data
                                               rwEffectorList=rwStateEffector) # add reaction wheel list to visualization
+
+
+    # add pointing lines
+    vizSupport.createPointLine(viz, toBodyName='earth', lineColor='green')
+    vizSupport.createPointLine(viz, toBodyName='sun', lineColor='yellow')
  
     vizSupport.setActuatorGuiSetting(viz, viewRWPanel=True, viewRWHUD=True)
     s_factor = config["viz_scaling"] # 3D-model scaling factor
@@ -431,7 +443,7 @@ def sim_main(config):
 
     fig, ax = plt.subplots(figsize=(8,4))
     ax.plot(mtbLog.times() *1e-9, mt_torque_data)
-    ax.set_ylim([-1e-7, 1e-7])
+    ax.set_ylim([-1e-6, 1e-6])
     plt.title("Magnetorquers: Net Torque")
     # plt.legend()
 

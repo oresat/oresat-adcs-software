@@ -181,8 +181,10 @@ def two_boresights_quat(
     return result_quat if not scalar_last else np.roll(result_quat, -1)
 
 
+
+
 def sun_quat(
-    sun_vector_eci, nadir_vector_ecef, velocity_vector_ecef, eci_2_ecef
+        sun_vector_eci: np.ndarray, nadir_vector_ecef: np.ndarray, velocity_vector_ecef: np.ndarray, eci_2_ecef: np.ndarray
 ) -> np.ndarray:
     """Finds the nearest sun_vector quaternion relative to ref_quaternion.
 
@@ -191,15 +193,13 @@ def sun_quat(
     Parameters
     ----------
     sun_vector_eci
-        sun vector in eci coordinates
+        sun vector in ECI coordinates
     nadir_vector_ecef
-        nadir vector in ecef coordinates
-    vect_2_body
-        the vector of the secondary objective in body frame
-    quat
-        A quaternion in eci frame
+        nadir vector in ECEF coordinates
+    velocity_vector_ecef
+        velocity vector in ECEF coordinates
     eci_2_ecef
-        quaternion of body from to ECI coordinates
+        ECI to ECEF conversion matrix
     """
     # calculate the vector in ECI coordinates
     ecef_2_eci = eci_2_ecef.T
@@ -265,7 +265,31 @@ def target_tracking_quat(
     )  # Create DCM for body orientation in ECI coordinates
 
     target_quat = quat.quat_from_dcm_scalar_last(c_bn)  # Convert DCM to quaternion
-    return target_quat
+
+
+    # new method
+    target_ecef = target_vector
+    nadir_ecef = nadir_vector_ecef
+
+    ecef_2_eci = eci_2_ecef.T
+    # convert target vector to ECI coordinates
+    target_eci = ecef_2_eci @ (target_ecef / np.linalg.norm(target_ecef))
+    # temporarily define starfield as opposite of nadir
+    star_eci = ecef_2_eci @ (- nadir_ecef / np.linalg.norm(nadir_ecef))
+
+    target_quat_alt = two_boresights_quat(
+        boresight_1=np.array(
+           [0, 0, 1]  # +z direction
+        ),
+        target_1=target_eci,
+        boresight_2=np.array(
+            [1, 0, 0]  # +x direction
+        ),
+        target_2=star_eci,
+        scalar_last=True
+    )
+
+    return target_quat_alt
 
 
 def nadir_quat(

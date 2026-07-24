@@ -131,7 +131,7 @@ def get_spice_earth_sun(scObject, timeInitString, zeroBase='Earth'):
     return spiceObject, plMsg, plLog, sunMsg, sunLog
 
 
-def make_spice_earth_sun_moon(init_time_string):
+def make_spice_earth_sun_moon(sc_object, init_time_string):
 
     # start with gravity factory
     grav_factory = simIncludeGravBody.gravBodyFactory()
@@ -146,6 +146,7 @@ def make_spice_earth_sun_moon(init_time_string):
     # Create the moon
     moon = grav_factory.createMoon()
 
+    grav_factory.addBodiesTo(sc_object)
 
     # Now create the spice object
     # eventually add better ephemeris data
@@ -155,6 +156,8 @@ def make_spice_earth_sun_moon(init_time_string):
         epochInMsg = True,
     )
     spice_object.zeroBase = "Earth"
+
+    grav_factory.addBodiesTo(sc_object)
 
     earth.planetBodyInMsg.subscribeTo(spice_object.planetStateOutMsgs[0])
     sun.planetBodyInMsg.subscribeTo(spice_object.planetStateOutMsgs[1])
