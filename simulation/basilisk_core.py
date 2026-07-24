@@ -363,7 +363,8 @@ def sim_main(config):
     
     # print(f"\nSatellite view device is \"{fsw.pointing}\" with initial reference: {q_init}")
     # print(f"Satellite initial pointing target: {fsw.q_target}\n")
-   
+
+
 
 
     ############################## SIMULATION #################################
@@ -391,7 +392,20 @@ def sim_main(config):
     # add pointing lines
     vizSupport.createPointLine(viz, toBodyName='earth', lineColor='green')
     vizSupport.createPointLine(viz, toBodyName='sun', lineColor='yellow')
- 
+
+    vizSupport.addLocation(viz,
+        stationName="Boulder Station", 
+        parentBodyName=earth.displayName,
+        lla_GP = [
+            np.radians(config["target_lat"]), 
+            np.radians(config["target_lon"]), 
+            config["target_height"]
+        ],
+        fieldOfView=np.radians(160.),
+        color='pink',
+        range=2000.0*1000  # meters
+    )
+
     vizSupport.setActuatorGuiSetting(viz, viewRWPanel=True, viewRWHUD=True)
     s_factor = config["viz_scaling"] # 3D-model scaling factor
     vizSupport.createCustomModel(viz,
