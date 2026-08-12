@@ -72,6 +72,7 @@ if __name__ == "__main__":
     # Reaction Wheel Presets, add to satellite?
     # Define 4 reaction wheel unit vectors in a pyramid configuration (60 deg tilt from z-axis) 
     # rw_inertia = 4.2946e-6      # [kg*m^2], moment of inertia about spin axis (old values from OreSat 0.5 wheels)
+    
     rw_inertia = 7.271e-6 # [kg*m^2] rotational inertia
 
     rw_z = np.cos(60*np.pi/180) # wheel angle from z axis. Same for all wheels

@@ -213,7 +213,7 @@ def sim_main(config):
         sc_object = scObject,
         rw_G = config["rw_G"],
         rot_inertia = config["rw_inertia"],
-        use_max_torque = False,
+        use_max_torque = True,
         max_speed = config["rw_max_speed"],
         max_torque = config["rw_max_torque"],
         has_jitter = False,
@@ -432,7 +432,7 @@ def sim_main(config):
     fig, ax = plt.subplots(figsize=(8,4))
     ax.plot(mtbLog.times() *1e-9, mt_torque_data)
     ax.set_ylim([-1e-7, 1e-7])
-    plt.title("Magnetorquers: Net Torque")
+    ax.set_title("Magnetorquers: Net Torque")
     # plt.legend()
 
     # Plot reaction wheel torques
@@ -446,7 +446,7 @@ def sim_main(config):
         print(f"Plot saved as {png_path}")
     
     # Plot reaction wheel speeds
-    fig, ax = plt.subplots(2, 1, figsize(8, 8))
+    fig, ax = plt.subplots(2, 1, figsize=(8, 8))
     ax[0].plot(rw_speed_rec.times()*1e-9, rw_speed_data)
     ax[0].set_title("Individual Speeds")
     ax[1].plot(rw_speed_rec.times()*1e-9, np.sum(np.abs(rw_speed_data), 1))
@@ -465,7 +465,8 @@ def sim_main(config):
     # Plot battery power
     fig, ax = plt.subplots()
     ax.plot(battery_rec.times()*1e-9, batt_storage_data)
-    
+    ax.set_title("Battery: Stored Energy")
+
     if config["save_pdf"] == True:
         pdf_path = config["plot_basepath"] / "battery_storage.pdf"
         plt.savefig(pdf_path, dpi=300)
@@ -483,7 +484,8 @@ def sim_main(config):
         ax.plot(sp_time, sp_data)
 
     ax.plot(sp_time, np.sum(sp_group_data, axis=0))
-    
+    ax.set_title("Solar Power")
+
     if config["save_pdf"] == True:
         pdf_path = config["plot_basepath"] / "power_solar_panels.pdf"
         plt.savefig(pdf_path, dpi=300)
@@ -500,7 +502,8 @@ def sim_main(config):
         ax.plot(rw_power_time, rw_power_data)
 
     ax.plot(rw_power_time, np.sum(rw_power_group_data, axis=0))
-    
+    ax.set_title("Reaction Wheels: Power Usage")
+
     if config["save_pdf"] == True:
         pdf_path = config["plot_basepath"] / "power_reaction_wheels.pdf"
         plt.savefig(pdf_path, dpi=300)
@@ -509,6 +512,39 @@ def sim_main(config):
         png_path = config["plot_basepath"] / "power_reaction_wheels.png"
         plt.savefig(png_path, dpi=600)
         print(f"Plot saved as {png_path}")
+
+    fig, ax = plt.subplots()
+    # get true attitude error without sensor noise for graphing and filter comparison
+    sigma_BN = np.array(stateRec.sigma_BN) # collects recorded spacecraft attitudes in MRP form. Extra rotation not necessary (as with filtered error in fsw) as it uses the same body frame as our system.
+    q_scalar_first = [rbk.MRP2EP(attitude) for attitude in sigma_BN] # convert MRP's to scalar-first quaternions
+    q_scalar_last = [quat.to_scalar_last(q) for q in q_scalar_first] # convert quaternions to scalar-last convention
+
+    target_quats = np.repeat(fsw.target_history[:-1], int(fsw_update_time/dynamics_update_time), axis=0)
+
+    # how about tracking the error in the flight software?
+    tracking_error = [
+        quat.error_angle(quat.quat_error(q_target, q)) 
+        for (q_target, q) in zip(
+            target_quats,
+            q_scalar_last[:-1]
+        )
+    ]
+    error_time = stateRec.times()*1e-9
+    ax.plot(error_time[:-1], tracking_error)
+    ax.set_title("Target Error")
+    ax.set_ylabel("Error (degrees)")
+
+    if config["save_pdf"] == True:
+        pdf_path = config["plot_basepath"] / "target_error.pdf"
+        plt.savefig(pdf_path, dpi=300)
+        print(f"Plot saved as {pdf_path}")
+    if config["save_png"] == True:
+        png_path = config["plot_basepath"] / "target_error.png"
+        plt.savefig(png_path, dpi=600)
+        print(f"Plot saved as {png_path}")
+
+
+    plt.show()
 
 
 
@@ -568,7 +604,7 @@ def sim_main(config):
         plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
 
         fig, ax2 = plt.subplots(figsize=(8,4))
-        ax2.plot(plot_times, tracking_error, 'r--', label='True Error')
+        ax2.plot(plot_times, error_true, 'r--', label='True Error')
         
         plt.title("Error")
         plt.legend()

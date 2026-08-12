@@ -18,7 +18,7 @@ if __name__ == "__main__":
     solar_config = preset_utils.load_preset("presets/solar_panels.json")
 
     # determine if hardware should have their own configs
-    rw_config = preset_utils.load_preset("presets/reaction_wheels.json")
+    rw_config = preset_utils.load_preset("presets/bad_reaction_wheels.json")
 
     # Select 3d file
     sat_3D_file = "models/3U_Simplified_Model.obj"
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     init_rot_angle = 0
     
     #omega_init_rpm = -np.array([1.5, 0.4, 0.7])  # initial spin rates [RPM]
-    omega_init_rpm = -np.array([0.3, 0.2, 0.1])  # initial spin rates [RPM]
+    omega_init_rpm = -np.array([0.03, 0.02, 0.01])  # initial spin rates [RPM]
     omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
 
     # command rotations relative to initial orientation
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     
      
     if control_mode in (ControlMode.RW_POINTING, ControlMode.THERMAL_DETUMBLE, ControlMode.RW_SLOW_ROTATE): # realistic RW sim setup
-        sim_time = 5000
+        sim_time = 1000
         dynamics_update_time = .2
         fsw_update_time = 1.0
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME

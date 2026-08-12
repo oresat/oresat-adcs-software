@@ -21,8 +21,8 @@
     ]
   ],
   "rw_max_speed": 18000.0,
-  "rw_max_torque": 1.0,
+  "rw_max_torque": 5.0,
   "rw_base_power_rate": 0.2,
-  "rw_eff_elec_to_mech": 0.9,
+  "rw_eff_elec_to_mech": 0.8,
   "rw_eff_mech_to_elec": -1.0
 }
