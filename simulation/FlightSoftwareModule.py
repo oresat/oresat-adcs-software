@@ -77,7 +77,7 @@ class FlightSoftware(sysModel.SysModel):
         
         # self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
         self.maxTorque = 0.001 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
-        self.maxSpeed = 10000 * macros.RPM # converts RPM to [rad/s]
+        self.maxSpeed = config["rw_max_speed"] * macros.RPM # converts RPM to [rad/s]
         self.thermal_spin_rpm = 1.0 # thermal spin rate about the z-axis (body frame)
         self.controllerStartTime = 3 # time at which controller should activate [seconds]
         self.controllerEndTime = None # time at which controller should turn off. Used for deactivation after overpass. When set to None controller will not be deactivated
@@ -99,7 +99,7 @@ class FlightSoftware(sysModel.SysModel):
         # max_input = 0.001 # QUALITATIVE value for max torque used by LQR tuning ONLY
         # LQR_max_error = 1
         # LQR_max_rate = 0.2
-        max_input = 0.001 # QUALITATIVE value for max torque used by LQR tuning ONLY
+        max_input = 0.1 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error = 1
         LQR_max_rate = 0.09
         self.K_RW = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error, LQR_max_rate, max_input)
@@ -435,22 +435,30 @@ class FlightSoftware(sysModel.SysModel):
             print(f"\n\nMANUAL ERROR: Array shapes do not match. Got G_pinv shape [1] {self.G_pinv.shape[1]} and torque_array shape [0] {np.shape(torque_array)[0]}", flush = True)  # this doesn't work because of Basilisk stuff, kernel crashes before flushing output buffer
         return self.G_pinv @ torque_array
     
-    def check_torque_vals(self, wheel_torque, rwSpeeds): # ensure torque does not exceed maxTorque and that wheel speed does not exceed maxSpeed by the beginning of next step
+    def check_torque_vals(self, wheel_torque, rwSpeeds): 
+        # ensure torque does not exceed maxTorque and that wheel speed does not exceed maxSpeed by the beginning of next step
         for i in range(len(self.torque_vals[:4])):
+            # [kg*m^2*s^-2] / [kg*m^2] = s^-2
+            # s^-2 *s = s^-1: units could be hertz but need to be in rad/s
             projected_speed = rwSpeeds[i] + (wheel_torque[i]/self.rwInertia) * self.updateTime # predicted speed at requested torque after next time step
+            # rwSpeeds are in rad/s, max speed is in rad/s 
             if abs(projected_speed) > self.maxSpeed: # Clamp torque if it would cause overspeed
                 speed_sign = np.sign(rwSpeeds[i]) if rwSpeeds[i] != 0 else np.sign(wheel_torque[i])
                 required_torque = (speed_sign * self.maxSpeed - rwSpeeds[i]) * self.rwInertia / self.updateTime
                 self.torque_vals[i] = max(-self.maxTorque, min(required_torque, self.maxTorque))
             else:  # Otherwise clamp to max torque bounds
                 self.torque_vals[i] = max(-self.maxTorque, min(wheel_torque[i], self.maxTorque))
-    
-    def RW_controller(
-        self, q_error: np.ndarray, omega: np.ndarray, curren_time_secs: float
-    ):
-        # assemble state vector
-        x = np.concatenate((q_error[:3], omega))
 
+    def saturate_wheel_speeds(self, wheel_torque, rwSpeeds):
+        saturation_factors = []
+        print(f"number of torque vals: {len(self.torque_vals)}")
+        for ii in range(len(self.torque_vals)):
+            speed_headroom = (self.maxSpeed - rwSpeeds[ii])
+            torque_headroom = self.rwInertia / self.updateTime
+
+
+    def RW_controller(self, q_error, omega, currentTimeSecs):
+        x = np.concatenate((q_error[:3], omega)) # assemble state vector            
         if self.use_variable_gain and (quat.error_angle(q_error) < 1): 
             # LQR controller with integral term
             transient_time = 30 # seconds

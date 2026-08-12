@@ -484,7 +484,7 @@ def make_rw_set(
     use_max_torque
         satureate the reaction wheel torque
     max_speed
-        maximum speed of reaction wheel
+        maximum speed of reaction wheel [RPM]
     max_torque
         maximum torque of reaction wheel
     base_power
@@ -511,8 +511,9 @@ def make_rw_set(
             gsHat_B = axis,                  # spin axis
             Js = rot_inertia,       # wheel inertia
             useMaxTorque = use_max_torque,    # disable max torque check
-            Omega_max = max_speed,    # max speed
-            u_max = max_torque,
+            Omega_max = max_speed,    # max speed [RPM]
+            u_max = max_torque, # max torque
+            cViscous = 0.00001,
             RWModel=varRWModel
         )
 
