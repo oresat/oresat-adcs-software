@@ -24,7 +24,7 @@
   "sigma_ST": 2.4e-06,
   "P_ST_0": 8.7e-07,
   "ST_update_rate": 1.1,
-  "battery_capacity": 300000.0,
+  "battery_capacity": 269568.0,
   "battery_init_charge": 150000.0,
   "base_power_rate": -3.0
 }

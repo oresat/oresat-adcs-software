@@ -351,8 +351,8 @@ class FlightSoftware(sysModel.SysModel):
             elif self.control_mode == ControlMode.THERMAL_DETUMBLE:
                 # thermal detumble
                 # detumble controller as defined by Markley & Crassidis
-                desired_torque = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) 
-                self.command_MTB_dipoles(desired_torque, currentTimeNanos) # Write the payload to magnetorquers
+                desired_dipoles = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) 
+                self.command_MTB_dipoles(desired_dipoles, currentTimeNanos) # Write the payload to magnetorquers
                 if (np.all(np.abs(omega) < 1e-4)):
                     self.control_mode = ControlMode.THERMAL_REORIENT
                     print(f"SWITCHING TO REACTION WHEEL REORIENTATION AT {currentTimeNanos*1e-9} SECONDS")

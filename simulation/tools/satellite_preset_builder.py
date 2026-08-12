@@ -90,8 +90,25 @@ if __name__ == "__main__":
     rw_eff_elec_to_mech = 0.8  # Efficiency 
     rw_eff_mech_to_elec = -1.0  # Recovery, negative means it takes energy to brake
 
-    battery_capacity = 300000.0  # W*s according to basilisk
-    battery_init_charge = 150000.0
+
+    battery_mah = 2600
+    battery_voltage = 3.6
+    # each battery pack has two (18650) batteries
+    # each card as two packs (four 18650 batteries)
+    # a satellite may have two battery cards (8 18650 batteries)
+    num_batteries = 8
+
+    # Joules (basilisk example started with 300,000 joules
+    # the calculation is about 269,568 joules
+    battery_capacity = battery_mah * battery_voltage * 3.6 * num_batteries
+    # Joules
+    battery_init_charge = 0.5 * battery_capacity
+
+    battery_capacity = 300000.0  # Joules according to basilisk
+    battery_init_charge = 150000.0  # Joules according to basilisk
+    # for batteries, do mAh * V * 3.6
+
+
 
     base_power_rate = -5.0  # Watts, negative means it consumes power
 
