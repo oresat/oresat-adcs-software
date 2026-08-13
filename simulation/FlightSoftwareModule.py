@@ -54,6 +54,7 @@ class FlightSoftware(sysModel.SysModel):
         self.crashTheKernel = False # intentional exit to catch errors. Crashes the kernel because of SWIG behavior and difficulty with standard Python error-catching techniques. 
         self.error_filter = [] # used for tracking and graphing filter error (estimated error based on filter state estimates)
         self.target_history = [] # only used if self.guidance_mode is not None
+        self.mt_cmd_history = []
         self.time_zero = 0 # initialized in sim main, used to keep track of GPS time
         self.omega_earth = 7.2921150e-5 # sidereal rotation rate of Earth for propogation calculations [rad/s]. Approximation suffices for the calculations we're doing
         self.r_earth = 4.07e7 # approximate earth radius for line-of-sight (LOS) calculations
@@ -164,7 +165,9 @@ class FlightSoftware(sysModel.SysModel):
         ######### GATHER SYSTEM STATES AND CALCULATE ERROR QUATERNION #########
         if self.imuMsgIn.isWritten():
             self.imuMsg = self.imuMsgIn()
-            omega = np.asarray(self.imuMsg.AngVelPlatform) # explicitly stored as numpy array for filter operations
+            # explicitly stored as numpy array for filter operations
+            # AngVelPlatform is in r/s
+            omega = np.asarray(self.imuMsg.AngVelPlatform) 
         if self.rwSpeedMsgIn.isWritten():
             self.rwSpeedMsg = self.rwSpeedMsgIn()
             wheelSpeeds = self.rwSpeedMsg.wheelSpeeds
@@ -335,7 +338,46 @@ class FlightSoftware(sysModel.SysModel):
                     # same as detumble, but with wheel momentum
                     desired_dipole = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(H_wheels, B) # detumble controller as defined by Markley & Crassidis
                     self.command_MTB_dipoles(desired_dipole, currentTimeNanos)
+            elif self.control_mode == ControlMode.DETUMBLE:
+                # high speeds to something different
+                if False:
+                    if self.ticks < 1000:
+                        desired_dipole = np.array([0, 0, 5e-2])
+                    elif self.ticks < 20000:
+                        # try instability
+                        desired_dipole = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(-omega, B) # detumble controller as defined by Markley & Crassidis
+                    elif np.linalg.norm(omega) > 10:
+                        desired_dipole = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
+                    else:
+                        desired_dipole = np.array([0, 0, 0])
 
+                if np.linalg.norm(omega) > 4:
+                    # Depending on the magnetic field, angular rates higher than
+                    # 0.5 rev / iteration may be unstable with the normal controller
+                    pass
+                if False and np.linalg.norm(omega) < 0.002:
+                    # if the angular rate is sufficiently low, keep the magnetorquers off
+                    # 0.002 rad/s is about 0.11 deg/s
+                    desired_dipole = np.array([0, 0, 0])
+                else:
+                    # otherwise, use the standard
+                    # detumble controller as defined by Markley & Crassidis
+                    desired_dipole = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) 
+
+                self.command_MTB_dipoles(desired_dipole, currentTimeNanos) # Write the payload to magnetorquers
+
+            elif self.control_mode == ControlMode.THERMAL_DETUMBLE:
+                # thermal detumble
+                # detumble controller as defined by Markley & Crassidis
+                if (np.all(np.abs(omega) < 1e-4)):
+                    self.control_mode = ControlMode.THERMAL_REORIENT
+                    print(f"SWITCHING TO REACTION WHEEL REORIENTATION AT {currentTimeNanos*1e-9} SECONDS")
+                    # turn off magnetorquers
+                    desired_dipoles = np.array([0, 0, 0])
+                else:
+                    desired_dipoles = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) 
+                self.command_MTB_dipoles(desired_dipoles, currentTimeNanos) # Write the payload to magnetorquers
+            
             elif self.control_mode == ControlMode.THERMAL_REORIENT: # can only be set by first part of passive thermal spin controller
                 desired_torque = self.RW_controller(q_error, omega) # compute desired 3-axis torque from controller
                 wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
@@ -345,17 +387,7 @@ class FlightSoftware(sysModel.SysModel):
                     self.control_mode = ControlMode.SPINUP
                     # thermal spinup
                     print(f"SWITCHING TO MAGNETORQUER SPINUP AT {currentTimeNanos*1e-9} SECONDS, {omega}")
-            elif self.control_mode == ControlMode.DETUMBLE:
-                desired_dipole = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
-                self.command_MTB_dipoles(desired_dipole, currentTimeNanos) # Write the payload to magnetorquers
-            elif self.control_mode == ControlMode.THERMAL_DETUMBLE:
-                # thermal detumble
-                # detumble controller as defined by Markley & Crassidis
-                desired_dipoles = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) 
-                self.command_MTB_dipoles(desired_dipoles, currentTimeNanos) # Write the payload to magnetorquers
-                if (np.all(np.abs(omega) < 1e-4)):
-                    self.control_mode = ControlMode.THERMAL_REORIENT
-                    print(f"SWITCHING TO REACTION WHEEL REORIENTATION AT {currentTimeNanos*1e-9} SECONDS")
+
             elif self.control_mode == ControlMode.THERMAL_SPINUP: 
                 # thermal spinup
                 # spinup satellite for thermal spin about the axis
@@ -421,6 +453,7 @@ class FlightSoftware(sysModel.SysModel):
             current simulation time in nanoseconds
         '''
         self.mag_dipoles[:3] = desired_dipoles
+        self.mt_cmd_history.append(desired_dipoles)
         self.mag_dipole_payload.mtbDipoleCmds = self.mag_dipoles
         self.mag_dipole_msg.write(self.mag_dipole_payload, current_time_nanos, self.moduleID)
         

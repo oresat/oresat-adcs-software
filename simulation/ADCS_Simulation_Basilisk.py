@@ -40,10 +40,27 @@ if __name__ == "__main__":
     # initial satellite states
     init_rot_axis = [1, 0, 0] # this vector cannot be all zeros or quat.axis_angle_to_quaternion will return nan! 
     init_rot_angle = 0
-    
+ 
+    # because the flight software updates once per second,
+    # it is more intuitive to do stability analysis based on rev/s
+    # or deg/s
+
+    # equivalent of [0.3, 0.2, 0.1]
+    # omega_init_deg = np.array([1.8, 1.2, 0.6])
+    # equivalent of [1.5, 0.4, 0.7]
+    # omega_init_deg = np.array([9, 2.4, 4.2])
+    # equivalent of [50, 20, 10]
+    # omega_init_deg = np.array([300, 120, 60])
+    omega_init_deg = np.array([8, 0, 0])
+   
     #omega_init_rpm = -np.array([1.5, 0.4, 0.7])  # initial spin rates [RPM]
-    omega_init_rpm = -np.array([0.03, 0.02, 0.01])  # initial spin rates [RPM]
-    omega_init_rad = omega_init_rpm * 2*np.pi/60  # convert RPM to rad/s
+    #omega_init_rpm = -np.array([0.3, 0.2, 0.1])  # initial spin rates [RPM]
+    # omega_init_rpm = -np.array([50, 20, 10])  # initial spin rates [RPM]
+
+    # convert rev/s to rpm
+    omega_init_rpm = omega_init_deg*60/360
+    # convert Hz to rad/s
+    omega_init_rad = omega_init_deg*np.pi/180
 
     # command rotations relative to initial orientation
     sat_rot_axis = [0, 1, 0]
@@ -73,20 +90,20 @@ if __name__ == "__main__":
     # THERMAL_REORIENT
     # THERMAL_SPINUP
     # RW_SLOW_RATE
-    control_mode = ControlMode["RW_POINTING"]
+    control_mode = ControlMode["DETUMBLE"]
 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
-    guidance_mode = GuidanceMode["TARGET"] # "NADIR" or "SUN" 
+    guidance_mode = GuidanceMode["NADIR"] # "NADIR" or "SUN" 
 
     # KSAT coordinates
-    target_lat = 78.231500
-    target_lon = 15.411100
-    target_height = 488 # [m]
+    # target_lat = 78.231500
+    # target_lon = 15.411100
+    # target_height = 488 # [m]
     
     # ESI headquarters coordinates
-    # target_lat = 39.608251
-    # target_lon = -104.895788
-    # target_height = 1716 # [m]
+    target_lat = 39.608251
+    target_lon = -104.895788
+    target_height = 1716 # [m]
     
      
     if control_mode in (ControlMode.RW_POINTING, ControlMode.THERMAL_DETUMBLE, ControlMode.RW_SLOW_ROTATE): # realistic RW sim setup
@@ -104,9 +121,9 @@ if __name__ == "__main__":
         use_skyfield = False
         omega_init_rad = np.array([0.0, 0.0, 0.0]) # ensure no excessive spinning
     else: # realistic MTB sim setup
-        sim_time = 1000
+        sim_time = 40000
         
-        dynamics_update_time = 1
+        dynamics_update_time = 0.1
         fsw_update_time = 1
         
         #if control_mode == ControlMode.DETUMBLE:

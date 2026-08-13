@@ -431,7 +431,8 @@ def sim_main(config):
     '''
 
     # save data
-
+    # degrees
+    rotation_deg_data = imuRec.AngVelPlatform * 180 / np.pi
     # Magnetic data is magnetic field, not in satellite reference frame
     magnetic_data = mag_rec.magField_N
 
@@ -471,205 +472,283 @@ def sim_main(config):
         plt.savefig(png_path, dpi=600)
         print(f"Plot saved as {png_path}")
     
-    # Plot reaction wheel speeds
-    fig, ax = plt.subplots(2, 1, figsize=(8, 8))
-    ax[0].plot(rw_speed_rec.times()*1e-9, rw_speed_data)
-    ax[0].set_title("Individual Speeds")
-    ax[1].plot(rw_speed_rec.times()*1e-9, np.sum(np.abs(rw_speed_data), 1))
-    ax[1].set_title("Total Speed")
-    fig.suptitle("Reaction Wheels: Speed")
 
-    if config["save_pdf"] == True:
-        pdf_path = config["plot_basepath"] / "rw_speeds.pdf"
-        plt.savefig(pdf_path, dpi=300)
-        print(f"Plot saved as {pdf_path}")
-    if config["save_png"] == True:
-        png_path = config["plot_basepath"] / "rw_speeds.png"
-        plt.savefig(png_path, dpi=600)
-        print(f"Plot saved as {png_path}")
+    # Magnetorquer detumble effectiveness
+    if config["control_mode"] == ControlMode.DETUMBLE: 
+        fig, ax = plt.subplots(2, 2, figsize=(8,6))
+        #ax[0, 0].plot(mtbLog.times() *1e-9, np.linalg.norm(mt_torque_data, axis=1))
+        #ax[0, 0].set_title("MT Torque Magnitude")
+        ax[0, 0].plot(fsw.mt_cmd_history)
+        ax[0, 0].plot(np.linalg.norm(fsw.mt_cmd_history, axis=1))
+        ax[0, 0].set_title("MT Dipole")
+        ax[0, 0].legend(["X", "Y", "Z", "Magnitude"])
 
-    # Plot battery power
-    fig, ax = plt.subplots()
-    ax.plot(battery_rec.times()*1e-9, batt_storage_data)
-    ax.set_title("Battery: Stored Energy")
+        ax[0, 1].plot(fsw.mt_cmd_history)
+        ax[0, 1].plot(np.linalg.norm(fsw.mt_cmd_history, axis=1))
+        ax[0, 1].set_title("MT Dipole")
+        ax[0, 1].legend(["X", "Y", "Z", "Magnitude"])
+        ax[0, 1].set_ylim([-0.01, 0.01])
 
-    if config["save_pdf"] == True:
-        pdf_path = config["plot_basepath"] / "battery_storage.pdf"
-        plt.savefig(pdf_path, dpi=300)
-        print(f"Plot saved as {pdf_path}")
-    if config["save_png"] == True:
-        png_path = config["plot_basepath"] / "battery_storage.png"
-        plt.savefig(png_path, dpi=600)
-        print(f"Plot saved as {png_path}")
+        ax[1, 0].plot(imuRec.times()*1e-9/3600, rotation_deg_data)
+        ax[1, 0].plot(imuRec.times()*1e-9/3600, np.linalg.norm(rotation_deg_data, axis=1))
+        ax[1, 0].set_title("rotation speed")
+        ax[1, 0].legend(["x", "y", "z", "magnitude"])
+        ax[1, 0].set_xlabel("time (hours)")
+        ax[1, 0].set_ylabel("angular speed (deg/s)")
+        # target speed deadband
+        ax[1, 0].hlines(np.array([-0.002, 0.002])*180/np.pi, 0, max(imuRec.times())*1e-9/3600)
+        # approximate maximum values that can be read by imu (+- 15 degrees)
+        ax[1, 0].hlines([-15, 15], 0, max(imuRec.times())*1e-9/3600)
+
+        ax[1, 1].plot(imuRec.times()*1e-9/3600, rotation_deg_data)
+        ax[1, 1].plot(imuRec.times()*1e-9/3600, np.linalg.norm(rotation_deg_data, axis=1))
+        ax[1, 1].set_title("rotation speed")
+        ax[1, 1].legend(["x", "y", "z", "magnitude"])
+        ax[1, 1].set_xlabel("time (hours)")
+        ax[1, 1].set_ylabel("angular speed (deg/s)")
+        # 0.002 is the controller threshold in rad/s
+        ax[1, 1].hlines(np.array([-0.002, 0.002])*180/np.pi, 0, max(imuRec.times())*1e-9/3600)
+        ax[1, 1].set_ylim(np.array([-0.004, 0.004])*180/np.pi)
 
 
-    # Plot solar panel power data
-    fig, ax = plt.subplots()
-    sp_time = solar_panel_recs[0].times()*1e-9
-    for sp_data in sp_group_data:
-        ax.plot(sp_time, sp_data)
 
-    ax.plot(sp_time, np.sum(sp_group_data, axis=0))
-    ax.set_title("Solar Power")
 
-    if config["save_pdf"] == True:
-        pdf_path = config["plot_basepath"] / "power_solar_panels.pdf"
-        plt.savefig(pdf_path, dpi=300)
-        print(f"Plot saved as {pdf_path}")
-    if config["save_png"] == True:
-        png_path = config["plot_basepath"] / "power_solar_panels.png"
-        plt.savefig(png_path, dpi=600)
-        print(f"Plot saved as {png_path}")
 
-    # Plot reaction wheel power
-    fig, ax = plt.subplots()
-    rw_power_time = rw_power_recs[0].times()*1e-9
-    for rw_power_data in rw_power_group_data:
-        ax.plot(rw_power_time, rw_power_data)
 
-    ax.plot(rw_power_time, np.sum(rw_power_group_data, axis=0))
-    ax.set_title("Reaction Wheels: Power Usage")
+        fig, ax = plt.subplots(1, 2, figsize=(8, 6))
+        skip_n = 0
+        ax[0].plot(rotation_deg_data)
+        ax[0].legend(["x", "y", "z"])
 
-    if config["save_pdf"] == True:
-        pdf_path = config["plot_basepath"] / "power_reaction_wheels.pdf"
-        plt.savefig(pdf_path, dpi=300)
-        print(f"Plot saved as {pdf_path}")
-    if config["save_png"] == True:
-        png_path = config["plot_basepath"] / "power_reaction_wheels.png"
-        plt.savefig(png_path, dpi=600)
-        print(f"Plot saved as {png_path}")
+        color = plt.cm.magma(np.linspace(0, 1, len(mag_sensor_data[:,0]) -skip_n))
+        limit = np.max(np.abs(rotation_deg_data))*1.5
 
-    fig, ax = plt.subplots()
-    # get true attitude error without sensor noise for graphing and filter comparison
-    sigma_BN = np.array(stateRec.sigma_BN) # collects recorded spacecraft attitudes in MRP form. Extra rotation not necessary (as with filtered error in fsw) as it uses the same body frame as our system.
-    q_scalar_first = [rbk.MRP2EP(attitude) for attitude in sigma_BN] # convert MRP's to scalar-first quaternions
-    q_scalar_last = [quat.to_scalar_last(q) for q in q_scalar_first] # convert quaternions to scalar-last convention
-
-    target_quats = np.repeat(fsw.target_history[:-1], int(fsw_update_time/dynamics_update_time), axis=0)
-
-    # how about tracking the error in the flight software?
-    tracking_error = [
-        quat.error_angle(quat.quat_error(q_target, q)) 
-        for (q_target, q) in zip(
-            target_quats,
-            q_scalar_last[:-1]
-        )
-    ]
-    error_time = stateRec.times()*1e-9
-    ax.plot(error_time[:-1], tracking_error)
-    ax.set_title("Target Error")
-    ax.set_ylabel("Error (degrees)")
-
-    if config["save_pdf"] == True:
-        pdf_path = config["plot_basepath"] / "target_error.pdf"
-        plt.savefig(pdf_path, dpi=300)
-        print(f"Plot saved as {pdf_path}")
-    if config["save_png"] == True:
-        png_path = config["plot_basepath"] / "target_error.png"
-        plt.savefig(png_path, dpi=600)
-        print(f"Plot saved as {png_path}")
-
+        ax[1].remove()
+        ax[1] = fig.add_subplot(1, 2, 2, projection="3d")
+        ax[1].scatter(
+                rotation_deg_data[skip_n:, 0],
+                rotation_deg_data[skip_n:, 1],
+                rotation_deg_data[skip_n:, 2], 
+                c = color)
+        ax[1].set_xlim([-limit, limit])
+        ax[1].set_ylim([-limit, limit])
+        ax[1].set_zlim([-limit, limit])
+        ax[1].set_title("Rotation Vector")
 
     plt.show()
 
 
 
-    # get true attitude error without sensor noise for graphing and filter comparison
-    sigma_BN = np.array(stateRec.sigma_BN) # collects recorded spacecraft attitudes in MRP form. Extra rotation not necessary (as with filtered error in fsw) as it uses the same body frame as our system.
-    q_scalar_first = [rbk.MRP2EP(attitude) for attitude in sigma_BN] # convert MRP's to scalar-first quaternions
-    q_scalar_last = [quat.to_scalar_last(q) for q in q_scalar_first] # convert quaternions to scalar-last convention
-    
-    # Target tracking mode requires special error calculations as we are dealing with step changes in target, which happens in fsw, not dynamics
-    if config["guidance_mode"] is not None:
-        tracking_error = [quat.error_angle(quat.quat_error(q_target, q)) for (q_target, q) in zip(fsw.target_history, q_scalar_last[::int(fsw_update_time/dynamics_update_time)])] # calculate step-errors for tracking mode
-        error_true = np.repeat(tracking_error[:-1], fsw_update_time/dynamics_update_time, axis=0) # expand to match plotting times
-        error_true = np.append(error_true, tracking_error[-1])
-    else:
-        error_true = [quat.error_angle(quat.quat_error(fsw.q_target, q)) for q in q_scalar_last] # calculate angle error (degrees) over simulation
-    
-    if(config["use_filter"]):
-        error_angles_filter = [quat.error_angle(quaternion) for quaternion in fsw.error_filter[:-1]]
-        error_expanded_filter = np.repeat(error_angles_filter, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
-        error_expanded_filter = np.append(error_expanded_filter, quat.error_angle(fsw.error_filter[-1])) # append final value
-    else:
-        error_expanded_filter = None
-    
-    plot_times = imuRec.times() * 1e-9
-    if (config["control_mode"] in (ControlMode.RW_POINTING, ControlMode.RW_SLOW_ROTATE)):
-        RW_plot_times = rw_speed_rec.times() * 1e-9 # dynamics process intervals
-
-        time_axis = "seconds"
-        plot_rw_speeds(RW_plot_times, rw_speed_rec.wheelSpeeds, numRW, config, error_true, error_expanded_filter)
-        
-        time_axis = "orbits"
-        TAMvalues = mag_sensor_rec.tam_S
-        plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
 
 
-        fig, ax3 = plt.subplots(figsize=(8,4))
-        ax3.plot(mtbLog.times() *1e-9, mtbLog.mtbNetTorque_B, 'r--', label='Torque')
-        ax3.set_ylim([-1e-7, 1e-7])
-        plt.title("MTB Net Torque")
-        plt.legend()
-    
-        
+
+    if False:
+        # Plot reaction wheel speeds
+        fig, ax = plt.subplots(2, 1, figsize=(8, 8))
+        ax[0].plot(rw_speed_rec.times()*1e-9, rw_speed_data)
+        ax[0].set_title("Individual Speeds")
+        ax[1].plot(rw_speed_rec.times()*1e-9, np.sum(np.abs(rw_speed_data), 1))
+        ax[1].set_title("Total Speed")
+        fig.suptitle("Reaction Wheels: Speed")
+
         if config["save_pdf"] == True:
-            pdf_path = config["plot_basepath"] / "mtb_torque_graph.pdf"
+            pdf_path = config["plot_basepath"] / "rw_speeds.pdf"
             plt.savefig(pdf_path, dpi=300)
             print(f"Plot saved as {pdf_path}")
         if config["save_png"] == True:
-            png_path = config["plot_basepath"] / "mtb_torque_graph.png"
+            png_path = config["plot_basepath"] / "rw_speeds.png"
             plt.savefig(png_path, dpi=600)
             print(f"Plot saved as {png_path}")
-        
-        plt.show(block=False)
-       
-    else:
-        time_axis = "orbits"
-        TAMvalues = mag_sensor_rec.tam_S
-        plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
 
-        fig, ax2 = plt.subplots(figsize=(8,4))
-        ax2.plot(plot_times, error_true, 'r--', label='True Error')
-        
-        plt.title("Error")
-        plt.legend()
-    
-        
+        # Plot battery power
+        fig, ax = plt.subplots()
+        ax.plot(battery_rec.times()*1e-9, batt_storage_data)
+        ax.set_title("Battery: Stored Energy")
+
         if config["save_pdf"] == True:
-            pdf_path = config["plot_basepath"] / "Err_graph.pdf"
+            pdf_path = config["plot_basepath"] / "battery_storage.pdf"
             plt.savefig(pdf_path, dpi=300)
             print(f"Plot saved as {pdf_path}")
         if config["save_png"] == True:
-            png_path = config["plot_basepath"] / "Err_graph.png"
+            png_path = config["plot_basepath"] / "battery_storage.png"
             plt.savefig(png_path, dpi=600)
             print(f"Plot saved as {png_path}")
-        
-        plt.show(block=False)
- 
-        fig, ax3 = plt.subplots(figsize=(8,4))
-        ax3.plot(mtbLog.times() *1e-9, mtbLog.mtbNetTorque_B, 'r--', label='Torque')
-        ax3.set_ylim([-0.000005, 0.000005])
-        plt.title("MTB Net Torque")
-        plt.legend()
-    
-        
+
+
+        # Plot solar panel power data
+        fig, ax = plt.subplots()
+        sp_time = solar_panel_recs[0].times()*1e-9
+        for sp_data in sp_group_data:
+            ax.plot(sp_time, sp_data)
+
+        ax.plot(sp_time, np.sum(sp_group_data, axis=0))
+        ax.set_title("Solar Power")
+
         if config["save_pdf"] == True:
-            pdf_path = config["plot_basepath"] / "mtb_torque_graph.pdf"
+            pdf_path = config["plot_basepath"] / "power_solar_panels.pdf"
             plt.savefig(pdf_path, dpi=300)
             print(f"Plot saved as {pdf_path}")
         if config["save_png"] == True:
-            png_path = config["plot_basepath"] / "mtb_torque_graph.png"
+            png_path = config["plot_basepath"] / "power_solar_panels.png"
             plt.savefig(png_path, dpi=600)
             print(f"Plot saved as {png_path}")
+
+        # Plot reaction wheel power
+        fig, ax = plt.subplots()
+        rw_power_time = rw_power_recs[0].times()*1e-9
+        for rw_power_data in rw_power_group_data:
+            ax.plot(rw_power_time, rw_power_data)
+
+        ax.plot(rw_power_time, np.sum(rw_power_group_data, axis=0))
+        ax.set_title("Reaction Wheels: Power Usage")
+
+        if config["save_pdf"] == True:
+            pdf_path = config["plot_basepath"] / "power_reaction_wheels.pdf"
+            plt.savefig(pdf_path, dpi=300)
+            print(f"Plot saved as {pdf_path}")
+        if config["save_png"] == True:
+            png_path = config["plot_basepath"] / "power_reaction_wheels.png"
+            plt.savefig(png_path, dpi=600)
+            print(f"Plot saved as {png_path}")
+
+        fig, ax = plt.subplots()
+        # get true attitude error without sensor noise for graphing and filter comparison
+        sigma_BN = np.array(stateRec.sigma_BN) # collects recorded spacecraft attitudes in MRP form. Extra rotation not necessary (as with filtered error in fsw) as it uses the same body frame as our system.
+        q_scalar_first = [rbk.MRP2EP(attitude) for attitude in sigma_BN] # convert MRP's to scalar-first quaternions
+        q_scalar_last = [quat.to_scalar_last(q) for q in q_scalar_first] # convert quaternions to scalar-last convention
+
+        target_quats = np.repeat(fsw.target_history[:-1], int(fsw_update_time/dynamics_update_time), axis=0)
+
+        # how about tracking the error in the flight software?
+        tracking_error = [
+            quat.error_angle(quat.quat_error(q_target, q)) 
+            for (q_target, q) in zip(
+                target_quats,
+                q_scalar_last[:-1]
+            )
+        ]
+        error_time = stateRec.times()*1e-9
+        ax.plot(error_time[:-1], tracking_error)
+        ax.set_title("Target Error")
+        ax.set_ylabel("Error (degrees)")
+
+        if config["save_pdf"] == True:
+            pdf_path = config["plot_basepath"] / "target_error.pdf"
+            plt.savefig(pdf_path, dpi=300)
+            print(f"Plot saved as {pdf_path}")
+        if config["save_png"] == True:
+            png_path = config["plot_basepath"] / "target_error.png"
+            plt.savefig(png_path, dpi=600)
+            print(f"Plot saved as {png_path}")
+
+        fig, ax = plt.subplots()
+        ax.plot(imuRec.times()*1e-9/3600, rotation_data)
+        ax.set_title("Angular rotation rates")
+        ax.set_xlabel("Time (hours)")
+        ax.set_ylabel("Rotational rate (r/s)")
+        plt.show()
+
+
+    if False:
+
+        # get true attitude error without sensor noise for graphing and filter comparison
+        sigma_BN = np.array(stateRec.sigma_BN) # collects recorded spacecraft attitudes in MRP form. Extra rotation not necessary (as with filtered error in fsw) as it uses the same body frame as our system.
+        q_scalar_first = [rbk.MRP2EP(attitude) for attitude in sigma_BN] # convert MRP's to scalar-first quaternions
+        q_scalar_last = [quat.to_scalar_last(q) for q in q_scalar_first] # convert quaternions to scalar-last convention
         
-        plt.show(block=False)
+        # Target tracking mode requires special error calculations as we are dealing with step changes in target, which happens in fsw, not dynamics
+        if config["guidance_mode"] is not None:
+            tracking_error = [quat.error_angle(quat.quat_error(q_target, q)) for (q_target, q) in zip(fsw.target_history, q_scalar_last[::int(fsw_update_time/dynamics_update_time)])] # calculate step-errors for tracking mode
+            error_true = np.repeat(tracking_error[:-1], fsw_update_time/dynamics_update_time, axis=0) # expand to match plotting times
+            error_true = np.append(error_true, tracking_error[-1])
+        else:
+            error_true = [quat.error_angle(quat.quat_error(fsw.q_target, q)) for q in q_scalar_last] # calculate angle error (degrees) over simulation
+        
+        if(config["use_filter"]):
+            error_angles_filter = [quat.error_angle(quaternion) for quaternion in fsw.error_filter[:-1]]
+            error_expanded_filter = np.repeat(error_angles_filter, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
+            error_expanded_filter = np.append(error_expanded_filter, quat.error_angle(fsw.error_filter[-1])) # append final value
+        else:
+            error_expanded_filter = None
+        
+        plot_times = imuRec.times() * 1e-9
+        if (config["control_mode"] in (ControlMode.RW_POINTING, ControlMode.RW_SLOW_ROTATE)):
+            RW_plot_times = rw_speed_rec.times() * 1e-9 # dynamics process intervals
+
+            time_axis = "seconds"
+            plot_rw_speeds(RW_plot_times, rw_speed_rec.wheelSpeeds, numRW, config, error_true, error_expanded_filter)
+            
+            time_axis = "orbits"
+            TAMvalues = mag_sensor_rec.tam_S
+            plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
+
+
+            fig, ax3 = plt.subplots(figsize=(8,4))
+            ax3.plot(mtbLog.times() *1e-9, mtbLog.mtbNetTorque_B, 'r--', label='Torque')
+            ax3.set_ylim([-1e-7, 1e-7])
+            plt.title("MTB Net Torque")
+            plt.legend()
+        
+            
+            if config["save_pdf"] == True:
+                pdf_path = config["plot_basepath"] / "mtb_torque_graph.pdf"
+                plt.savefig(pdf_path, dpi=300)
+                print(f"Plot saved as {pdf_path}")
+            if config["save_png"] == True:
+                png_path = config["plot_basepath"] / "mtb_torque_graph.png"
+                plt.savefig(png_path, dpi=600)
+                print(f"Plot saved as {png_path}")
+            
+            plt.show(block=False)
+           
+        else:
+            time_axis = "orbits"
+            TAMvalues = mag_sensor_rec.tam_S
+            plot_magfield(plot_times, TAMvalues, orbital_period, config, time_axis)
+
+            fig, ax2 = plt.subplots(figsize=(8,4))
+            ax2.plot(plot_times, error_true, 'r--', label='True Error')
+            
+            plt.title("Error")
+            plt.legend()
+        
+            
+            if config["save_pdf"] == True:
+                pdf_path = config["plot_basepath"] / "Err_graph.pdf"
+                plt.savefig(pdf_path, dpi=300)
+                print(f"Plot saved as {pdf_path}")
+            if config["save_png"] == True:
+                png_path = config["plot_basepath"] / "Err_graph.png"
+                plt.savefig(png_path, dpi=600)
+                print(f"Plot saved as {png_path}")
+            
+            plt.show(block=False)
      
-    
-    
-    imuValues = imuRec.AngVelPlatform
-    plot_imu(plot_times, imuValues, orbital_period, config, time_axis)
-    
+            fig, ax3 = plt.subplots(figsize=(8,4))
+            ax3.plot(mtbLog.times() *1e-9, mtbLog.mtbNetTorque_B, 'r--', label='Torque')
+            ax3.set_ylim([-0.000005, 0.000005])
+            plt.title("MTB Net Torque")
+            plt.legend()
+        
+            
+            if config["save_pdf"] == True:
+                pdf_path = config["plot_basepath"] / "mtb_torque_graph.pdf"
+                plt.savefig(pdf_path, dpi=300)
+                print(f"Plot saved as {pdf_path}")
+            if config["save_png"] == True:
+                png_path = config["plot_basepath"] / "mtb_torque_graph.png"
+                plt.savefig(png_path, dpi=600)
+                print(f"Plot saved as {png_path}")
+            
+            plt.show(block=False)
+         
+        
+        
+        imuValues = imuRec.AngVelPlatform
+        plot_imu(plot_times, imuValues, orbital_period, config, time_axis)
+
+
+    # Finish with summary
     print(f"\nSimulation completed in {end-start:.2f} seconds\nSimulated time of flight: {config["sim_time"]} seconds")
     if config["control_mode"] in (ControlMode.RW_POINTING, ControlMode.MTB_POINTING):
         print(f"\nFinal target was: {fsw.q_target}")
