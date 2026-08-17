@@ -1,19 +1,16 @@
 from Basilisk.utilities import macros
 import numpy as np
-import basilisk_core
 import json
 from pathlib import Path
 
-from config import GuidanceMode, PointingReference, ControlMode
 
 import preset_utils
 
 
 if __name__ == "__main__":
-    config_base_name = "Sentinel"
+    config_base_name = "Prism"
     # select satellite model attributes
-    satellite = "Sentinel"
-    # satellite = "SENTINEL"
+    satellite = "Prism"
     
     # select 3D model file
     if satellite == "Sentinel":
@@ -36,6 +33,52 @@ if __name__ == "__main__":
                       [Jyx, Jyy, Jyz], 
                       [Jzx, Jzy, Jzz]])
         J = R @ J @ R.T
+    elif satellite == "Prism":
+        sat_3D_file = "models/3U_Simplified_Model.obj"
+        viz_scaling = 5 # 3D-model scaling factor
+    
+        # Inertia tensor data
+        Jxx = 0.031
+        Jxy = 0.000001
+        Jxz = 0.000001
+        Jyx = Jxy
+        Jyy = 0.025
+        Jyz = 0.000001
+        Jzx = Jxz
+        Jzy = Jyz
+        Jzz = 0.012
+
+        # 180 deg rotation about x
+        # wait why is there a rotation?
+        R = R = np.diag([1, -1, -1])
+        J = np.array([[Jxx, Jxy, Jxz], # satellite inertia matrix
+                      [Jyx, Jyy, Jyz], 
+                      [Jzx, Jzy, Jzz]])
+        J = R @ J @ R.T
+
+    elif satellite == "Beecon":
+        sat_3D_file = "models/3U_Simplified_Model.obj"
+        viz_scaling = 5 # 3D-model scaling factor
+    
+        # Inertia tensor data
+        Jxx = 0.031
+        Jxy = 0.000001
+        Jxz = 0.000001
+        Jyx = Jxy
+        Jyy = 0.025
+        Jyz = 0.000001
+        Jzx = Jxz
+        Jzy = Jyz
+        Jzz = 0.012
+
+        # 180 deg rotation about x
+        # wait why is there a rotation?
+        R = R = np.diag([1, -1, -1])
+        J = np.array([[Jxx, Jxy, Jxz], # satellite inertia matrix
+                      [Jyx, Jyy, Jyz], 
+                      [Jzx, Jzy, Jzz]])
+        J = R @ J @ R.T
+ 
     else:
         sat_3D_file = "models/OreSat_Simplified_Model.obj"
         viz_scaling = 7 # 3D-model scaling factor
@@ -90,6 +133,15 @@ if __name__ == "__main__":
     rw_base_power_rate = 0.2  # base power consumption in watts
     rw_eff_elec_to_mech = 0.8  # Efficiency 
     rw_eff_mech_to_elec = -1.0  # Recovery, negative means it takes energy to brake
+
+    # expects single 1x(3*n) array
+    mt_qty = 3
+    mt_G = np.array([
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0
+    ])
+    mt_max_dipoles = [2.326784361405822, 2.326784361405822, 0.37338038792999995]
 
 
     battery_mah = 2600
@@ -166,6 +218,11 @@ if __name__ == "__main__":
         "rw_eff_elec_to_mech": rw_eff_elec_to_mech,
         "rw_eff_mech_to_elec": rw_eff_mech_to_elec,
     }
+    mt_config = {
+        "mt_qty": mt_qty,
+        "mt_G": mt_G,
+        "mt_max_dipoles": mt_max_dipoles
+    }
 
     blah = preset_utils.npdict_to_plaindict(sat_config)
     with open("example_satellite.json", "w") as fd:
@@ -175,9 +232,13 @@ if __name__ == "__main__":
     with open("example_reaction_wheels.json", "w") as fd:
         json.dump(blah, fd, indent=2)
 
+    blah = preset_utils.npdict_to_plaindict(mt_config)
+    with open("example_magnetorquers.json", "w") as fd:
+        json.dump(blah, fd, indent=2)
+
+
     blah = preset_utils.npdict_to_plaindict(solar_config)
     with open("example_solar_panels.json", "w") as fd:
         json.dump(blah, fd, indent=2)
 
 
-    # basilisk_core.sim_main(config)

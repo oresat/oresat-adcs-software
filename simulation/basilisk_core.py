@@ -58,7 +58,9 @@ def sim_main(config):
     scObject.hub.omega_BN_BInit = config["omega_init_rad"]
 
     sc_object_msg = scObject.scStateOutMsg
+
     sc_object_rec = sc_object_msg.recorder()
+
 
 
     ########################## ORBITAL ENVIRONMENT ############################
@@ -126,6 +128,7 @@ def sim_main(config):
 
 
     sim.AddModelToTask("dynamicsTask", scObject)
+    sim.AddModelToTask("dynamicsTask", sc_object_rec)
 
     # used to record ECEF coordinates
     sim.AddModelToTask("dynamicsTask", earth_rec)
@@ -246,11 +249,10 @@ def sim_main(config):
     sim.AddModelToTask("dynamicsTask", mtbLog)
 
     mtbConfigParams = messaging.MTBArrayConfigMsgPayload()
-    mtbConfigParams.numMTB = 3
-    mtbConfigParams.GtMatrix_B = [1., 0., 0., # expects single 1x(3*n) array
-                                  0., 1., 0.,
-                                  0., 0., 1.]
-    mtbConfigParams.maxMtbDipoles = [2.326784361405822, 2.326784361405822, 0.37338038792999995] # individual rod Dipole limits when using current of 0.1 Amps [A·m^2]
+    mtbConfigParams.numMTB = config["mt_qty"]
+    mtbConfigParams.GtMatrix_B = config["mt_G"]
+    mtbConfigParams.maxMtbDipoles = config["mt_max_dipoles"]
+    #[2.326784361405822, 2.326784361405822, 0.37338038792999995] # individual rod Dipole limits when using current of 0.1 Amps [A·m^2]
 
     mtbCfgMsg = messaging.MTBArrayConfigMsg().write(mtbConfigParams)
     
@@ -432,6 +434,8 @@ def sim_main(config):
 
     # save data
     # degrees
+    rotation_raw_data = sc_object_rec.omega_BN_B
+
     rotation_deg_data = imuRec.AngVelPlatform * 180 / np.pi
     # Magnetic data is magnetic field, not in satellite reference frame
     magnetic_data = mag_rec.magField_N
@@ -475,7 +479,7 @@ def sim_main(config):
 
     # Magnetorquer detumble effectiveness
     if config["control_mode"] == ControlMode.DETUMBLE: 
-        fig, ax = plt.subplots(2, 2, figsize=(8,6))
+        fig, ax = plt.subplots(3, 2, figsize=(8,6))
         #ax[0, 0].plot(mtbLog.times() *1e-9, np.linalg.norm(mt_torque_data, axis=1))
         #ax[0, 0].set_title("MT Torque Magnitude")
         ax[0, 0].plot(fsw.mt_cmd_history)
@@ -483,8 +487,8 @@ def sim_main(config):
         ax[0, 0].set_title("MT Dipole")
         ax[0, 0].legend(["X", "Y", "Z", "Magnitude"])
 
-        ax[0, 1].plot(fsw.mt_cmd_history)
-        ax[0, 1].plot(np.linalg.norm(fsw.mt_cmd_history, axis=1))
+        ax[0, 1].plot(np.array(fsw.times)*1e-9/3600, fsw.mt_cmd_history)
+        ax[0, 1].plot(np.array(fsw.times)*1e-9/3600, np.linalg.norm(fsw.mt_cmd_history, axis=1))
         ax[0, 1].set_title("MT Dipole")
         ax[0, 1].legend(["X", "Y", "Z", "Magnitude"])
         ax[0, 1].set_ylim([-0.01, 0.01])
@@ -508,11 +512,14 @@ def sim_main(config):
         ax[1, 1].set_ylabel("angular speed (deg/s)")
         # 0.002 is the controller threshold in rad/s
         ax[1, 1].hlines(np.array([-0.002, 0.002])*180/np.pi, 0, max(imuRec.times())*1e-9/3600)
-        ax[1, 1].set_ylim(np.array([-0.004, 0.004])*180/np.pi)
+        # ax[1, 1].set_ylim(np.array([-0.004, 0.004])*180/np.pi)
 
 
+        ax[2, 0].plot(np.array(fsw.times)*1e-9/3600, fsw.omega_history)
+        ax[2, 0].plot(np.array(fsw.times)*1e-9/3600, fsw.omega_norm_history)
 
 
+        ax[2, 1].plot(sc_object_rec.times()*1e-9/3600, rotation_raw_data)
 
 
         fig, ax = plt.subplots(1, 2, figsize=(8, 6))

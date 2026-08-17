@@ -55,6 +55,11 @@ class FlightSoftware(sysModel.SysModel):
         self.error_filter = [] # used for tracking and graphing filter error (estimated error based on filter state estimates)
         self.target_history = [] # only used if self.guidance_mode is not None
         self.mt_cmd_history = []
+        self.times_raw = []
+        self.omega_raw_history = []
+        self.times = []
+        self.omega_history = []
+        self.omega_norm_history = []
         self.time_zero = 0 # initialized in sim main, used to keep track of GPS time
         self.omega_earth = 7.2921150e-5 # sidereal rotation rate of Earth for propogation calculations [rad/s]. Approximation suffices for the calculations we're doing
         self.r_earth = 4.07e7 # approximate earth radius for line-of-sight (LOS) calculations
@@ -161,6 +166,7 @@ class FlightSoftware(sysModel.SysModel):
         '''
         The following section gathers all sensor and frame states.
         '''
+
         
         ######### GATHER SYSTEM STATES AND CALCULATE ERROR QUATERNION #########
         if self.imuMsgIn.isWritten():
@@ -168,6 +174,8 @@ class FlightSoftware(sysModel.SysModel):
             # explicitly stored as numpy array for filter operations
             # AngVelPlatform is in r/s
             omega = np.asarray(self.imuMsg.AngVelPlatform) 
+            self.times_raw.append(currentTimeNanos)
+            self.omega_raw_history.append(omega)
         if self.rwSpeedMsgIn.isWritten():
             self.rwSpeedMsg = self.rwSpeedMsgIn()
             wheelSpeeds = self.rwSpeedMsg.wheelSpeeds
@@ -355,7 +363,7 @@ class FlightSoftware(sysModel.SysModel):
                     # Depending on the magnetic field, angular rates higher than
                     # 0.5 rev / iteration may be unstable with the normal controller
                     pass
-                if False and np.linalg.norm(omega) < 0.002:
+                if np.linalg.norm(omega) < 0.002:
                     # if the angular rate is sufficiently low, keep the magnetorquers off
                     # 0.002 rad/s is about 0.11 deg/s
                     desired_dipole = np.array([0, 0, 0])
@@ -364,6 +372,10 @@ class FlightSoftware(sysModel.SysModel):
                     # detumble controller as defined by Markley & Crassidis
                     desired_dipole = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) 
 
+                self.times.append(currentTimeNanos)
+                self.omega_history.append(omega)
+                self.omega_norm_history.append(np.linalg.norm(omega))
+                self.mt_cmd_history.append(desired_dipole)
                 self.command_MTB_dipoles(desired_dipole, currentTimeNanos) # Write the payload to magnetorquers
 
             elif self.control_mode == ControlMode.THERMAL_DETUMBLE:
@@ -453,7 +465,6 @@ class FlightSoftware(sysModel.SysModel):
             current simulation time in nanoseconds
         '''
         self.mag_dipoles[:3] = desired_dipoles
-        self.mt_cmd_history.append(desired_dipoles)
         self.mag_dipole_payload.mtbDipoleCmds = self.mag_dipoles
         self.mag_dipole_msg.write(self.mag_dipole_payload, current_time_nanos, self.moduleID)
         

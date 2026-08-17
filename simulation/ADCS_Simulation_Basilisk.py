@@ -5,20 +5,22 @@ from sys import exit
 
 import basilisk_core
 
-import preset_utils
+from tools import preset_utils
 
 from config import GuidanceMode, PointingReference, ControlMode
 
 if __name__ == "__main__":
 
     # select satellite model attributes
-    sat_config = preset_utils.load_preset("presets/Osiris-C.json")
+    sat_config = preset_utils.load_preset("presets/Prism.json")
 
     # solar panels
     solar_config = preset_utils.load_preset("presets/solar_panels.json")
 
     # determine if hardware should have their own configs
     rw_config = preset_utils.load_preset("presets/bad_reaction_wheels.json")
+
+    mt_config = preset_utils.load_preset("presets/magnetorquers.json")
 
     # Select 3d file
     sat_3D_file = "models/3U_Simplified_Model.obj"
@@ -51,7 +53,7 @@ if __name__ == "__main__":
     # omega_init_deg = np.array([9, 2.4, 4.2])
     # equivalent of [50, 20, 10]
     # omega_init_deg = np.array([300, 120, 60])
-    omega_init_deg = np.array([8, 0, 0])
+    omega_init_deg = np.array([8, 4, 2])
    
     #omega_init_rpm = -np.array([1.5, 0.4, 0.7])  # initial spin rates [RPM]
     #omega_init_rpm = -np.array([0.3, 0.2, 0.1])  # initial spin rates [RPM]
@@ -121,9 +123,9 @@ if __name__ == "__main__":
         use_skyfield = False
         omega_init_rad = np.array([0.0, 0.0, 0.0]) # ensure no excessive spinning
     else: # realistic MTB sim setup
-        sim_time = 40000
+        sim_time = 20000
         
-        dynamics_update_time = 0.1
+        dynamics_update_time = 0.2
         fsw_update_time = 1
         
         #if control_mode == ControlMode.DETUMBLE:
@@ -171,7 +173,7 @@ if __name__ == "__main__":
               "time_init_string": time_init_string,
     }
 
-    whole_config = sat_config | sim_config | solar_config | rw_config
+    whole_config = sat_config | sim_config | solar_config | rw_config | mt_config
  
     print(f"Satellite: {sat_config['satellite']}")
     print(f"Control Mode: {control_mode.name}")

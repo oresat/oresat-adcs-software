@@ -26,6 +26,7 @@ from Basilisk.simulation import starTracker
 from Basilisk.simulation import imuSensor
 from Basilisk.simulation import magnetometer
 
+from Basilisk.simulation import MtbEffector
 from Basilisk.simulation import reactionWheelStateEffector
 from Basilisk.simulation import ReactionWheelPower
 
@@ -460,6 +461,36 @@ def make_magnetometer(modelTag, magMsg, scObjMsg, record_t, dcm=None, noise_std=
     magSensor.UpdateState(0)
     return magSensor, magRec
 
+def make_mt_set(
+):
+    """
+    """
+
+    mt_eff = MtbEffector.MtbEffector()
+    mt_eff.ModelTag = ""
+
+    mt_rec = mt_eff.mtbOutMsg.recorder()
+    
+    # configuration is unlike other methods
+    mt_cfg_params = messaging.MTBArrayConfigMsgPayload()
+    mt_cfg_params.numMTB = mt_qty
+    # the g matrix should be 1x(3*qty) in row major format
+    mt_cfg_params.GtMatrix_B = mt_G
+    mt_cfg_params.magMtbDipoles = mt_max_dipoles
+
+    # create a config message
+    mt_cfg_msg = messaging.MTBArrayConfigMsg().write(mt_cfg_params)
+
+    # initialize with a zeroed out command
+    mt_cmd = messaging.MTBCmdMsgPayload()
+    mt_cmd.mtbDipoleCmds = [0.0] * mt_qty
+    mt_cmd_msg = messaging.MTBCmdMsg().write(mt_cmd)
+
+    mt_eff.mtbParamsInMsg.subscribeTo(mt_cfg_msg)
+    mt_eff.mtbCmdInMsg.subscribeTo(mt_cmd_msg)
+    mt_eff.magInMsg.subscribeTo(mag_msg)
+
+    return mt_eff, mt_rec
 
 def make_rw_set(
     model_tag: str, 
