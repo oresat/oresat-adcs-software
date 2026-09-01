@@ -123,9 +123,9 @@ if __name__ == "__main__":
         use_skyfield = False
         omega_init_rad = np.array([0.0, 0.0, 0.0]) # ensure no excessive spinning
     else: # realistic MTB sim setup
-        sim_time = 20000
+        sim_time = 25000
         
-        dynamics_update_time = 0.2
+        dynamics_update_time = 0.5
         fsw_update_time = 1
         
         #if control_mode == ControlMode.DETUMBLE:

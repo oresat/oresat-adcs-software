@@ -436,6 +436,22 @@ def sim_main(config):
     # degrees
     rotation_raw_data = sc_object_rec.omega_BN_B
 
+    # position data
+    position_eci_data = sc_object_rec.r_BN_N
+    # this is inertial reference frame, not ECEF
+    # rotation will be based on time
+    np.savetxt("output_data/position_eci_data.csv", position_eci_data, delimiter=",")
+
+    # get earth rotation data
+    eci_2_ecef_data = earth_rec.J20002Pfix
+    print(eci_2_ecef_data.shape)
+
+    position_ecef_data = np.zeros(position_eci_data.shape)
+    for ii in range(position_eci_data.shape[0]):
+        position_ecef_data[ii] = eci_2_ecef_data[ii] @ position_eci_data[ii]
+
+    np.savetxt("output_data/position_ecef_data.csv", position_ecef_data, delimiter=",")
+
     rotation_deg_data = imuRec.AngVelPlatform * 180 / np.pi
     # Magnetic data is magnetic field, not in satellite reference frame
     magnetic_data = mag_rec.magField_N
@@ -444,6 +460,9 @@ def sim_main(config):
     eclipse_data = eclipse_rec.shadowFactor
 
     mag_sensor_data = mag_sensor_rec.tam_S
+
+    np.savetxt("output_data/mag_field.csv", magnetic_data, delimiter=",")
+    np.savetxt("output_data/mag_sensor.csv", mag_sensor_data, delimiter=",")
 
     # Magnetorquers torques
     mt_torque_data = mtbLog.mtbNetTorque_B
