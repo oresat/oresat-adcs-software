@@ -9,7 +9,17 @@ from tools import preset_utils
 
 from config import GuidanceMode, PointingReference, ControlMode
 
+import logging
 if __name__ == "__main__":
+    
+    logger_fsw = logging.getLogger("FlightSoftwareModule")
+    logger_fsw.addHandler(logging.StreamHandler())
+    logger_fsw.setLevel(logging.DEBUG)
+
+    
+    loggers = [str(logging.getLogger(name)) for name in logging.root.manager.loggerDict]
+    print("\n".join(loggers))
+
 
     # select satellite model attributes
     sat_config = preset_utils.load_preset("presets/Prism.json")

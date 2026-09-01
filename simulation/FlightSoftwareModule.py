@@ -16,6 +16,9 @@ import guidance_utils as guide_utils
 
 from config import GuidanceMode, PointingReference, ControlMode, GainModeRW
 
+import logging
+logger = logging.getLogger(__name__)
+
 class FlightSoftware(sysModel.SysModel):
     def __init__(self, config):
         super(FlightSoftware, self).__init__()
@@ -134,7 +137,9 @@ class FlightSoftware(sysModel.SysModel):
         # Controller gains
         Jmin = np.min(np.linalg.eigvals(self.satInertia)) # maximum principal moment of inertia (Markley & Crassidis defines this with the minimum principal moment of inertia as a safe upper bound to avoid instability, but maximum works better)
         self.detumble_gain = 4*np.pi/config["orbital_period"]*(1+np.sin(config["orbital_inclination"]))*Jmin # gain based on minimal principal moment of inertia as defined in Markley & Crassidis
-        
+        self.detumble_gain = 0.2
+        logger.debug(f"Detumble gain: {self.detumble_gain}")
+
         # Kalman filter object to store filter states and sensor values
         self.gyro_bias_drift_rate = 0.015 * macros.D2R # [rad/s/K] additional bias drift dependent on difference between current and reference (25 C) temperatures
         self.EKF = MEKF(config["P_ST_0"], config["sigma_ST"], config["P_b0"], config["sigma_gyro"], config["sigma_bias"])

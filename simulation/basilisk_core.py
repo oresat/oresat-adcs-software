@@ -6,6 +6,7 @@ from Basilisk.architecture import messaging
 from Basilisk import __path__
 from Basilisk.utilities import RigidBodyKinematics as rbk
 from Plotting_Functions import plot_rw_speeds, plot_magfield, plot_imu
+import FlightSoftwareModule
 from FlightSoftwareModule import FlightSoftware # self defined module to emulate flight software ADCS tasks
 import quaternion as quat
 from pathlib import Path
