@@ -201,13 +201,14 @@ def sim_main(config):
 
     # Create magnetometer sensor
     mag_sensor, mag_sensor_rec = bsk_helpers.make_magnetometer(
-        modelTag="TAM_sensor",
-        magMsg = mag_model.envOutMsgs[0], # is this reading only the first element?
-        scObjMsg=scObject.scStateOutMsg,
-        record_t=macros.sec2nano(fsw_update_time),
-        dcm=None,
-        noise_std=None,
-        w_bounds=None
+        model_tag="TAM_sensor",
+        mag_msg = mag_model.envOutMsgs[0], # is this reading only the first element?
+        sc_object_msg = scObject.scStateOutMsg,
+        record_t = macros.sec2nano(fsw_update_time),
+        dcm = None,
+        noise_std = config["tam_noise_std"],
+        bias = config["tam_bias"],
+        w_bounds = config["tam_w_bounds"]
     )
 
     sim.AddModelToTask("fswTask", mag_sensor)
@@ -444,7 +445,6 @@ def sim_main(config):
 
     # get earth rotation data
     eci_2_ecef_data = earth_rec.J20002Pfix
-    print(eci_2_ecef_data.shape)
 
     position_ecef_data = np.zeros(position_eci_data.shape)
     for ii in range(position_eci_data.shape[0]):
@@ -494,7 +494,28 @@ def sim_main(config):
         png_path = config["plot_basepath"] / "mt_torque_graph.png"
         plt.savefig(png_path, dpi=600)
         print(f"Plot saved as {png_path}")
+
+    # compare actual mag field to sensor for noise
+    fig = plt.figure()
+    ax1 = fig.add_subplot(1, 3, 1)
+    ax1.plot(np.linalg.norm(mag_sensor_data, axis=1))
     
+    ax2 = fig.add_subplot(1, 3, 2)
+    ax2.plot(np.linalg.norm(magnetic_data, axis=1))
+
+    ax3 = fig.add_subplot(1, 3, 3)
+    mag_sensor_magnitude = np.repeat(
+        np.linalg.norm(mag_sensor_data, axis=1)[:-1], 
+        int(fsw_update_time/dynamics_update_time), 
+        axis=0
+    )
+    mag_field_magnitude = np.linalg.norm(magnetic_data, axis=1)[:-1]
+
+    print(mag_sensor_magnitude.shape)
+    print(mag_field_magnitude.shape)
+    ax3.plot(mag_sensor_magnitude)
+    ax3.plot(mag_field_magnitude, linewidth=5)
+
 
     # Magnetorquer detumble effectiveness
     if config["control_mode"] == ControlMode.DETUMBLE: 

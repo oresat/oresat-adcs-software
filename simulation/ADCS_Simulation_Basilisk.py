@@ -17,10 +17,15 @@ if __name__ == "__main__":
     # solar panels
     solar_config = preset_utils.load_preset("presets/solar_panels.json")
 
-    # determine if hardware should have their own configs
+    # reaction wheels
     rw_config = preset_utils.load_preset("presets/bad_reaction_wheels.json")
 
+    # magnetorquers
     mt_config = preset_utils.load_preset("presets/magnetorquers.json")
+
+    # tam sensor
+    tam_config = preset_utils.load_preset("presets/bad_magnetometer.json")
+
 
     # Select 3d file
     sat_3D_file = "models/3U_Simplified_Model.obj"
@@ -125,7 +130,7 @@ if __name__ == "__main__":
     else: # realistic MTB sim setup
         sim_time = 25000
         
-        dynamics_update_time = 0.5
+        dynamics_update_time = 0.2
         fsw_update_time = 1
         
         #if control_mode == ControlMode.DETUMBLE:
@@ -173,7 +178,7 @@ if __name__ == "__main__":
               "time_init_string": time_init_string,
     }
 
-    whole_config = sat_config | sim_config | solar_config | rw_config | mt_config
+    whole_config = sat_config | sim_config | solar_config | rw_config | mt_config | tam_config
  
     print(f"Satellite: {sat_config['satellite']}")
     print(f"Control Mode: {control_mode.name}")

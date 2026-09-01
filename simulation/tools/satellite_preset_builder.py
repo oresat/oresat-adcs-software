@@ -110,7 +110,14 @@ if __name__ == "__main__":
     sigma_ST = 2.4e-6 # [rad] measurement noise (instantaneous orientation error)
     P_ST_0 = 8.7e-7 # [rad^2] initial star tracker attitude uncertainty
     ST_update_rate = 1.1 # defined in seconds
-    
+
+    # magnetometer sensor noise standard deviation, Tesla
+    # RM3100 typically has 30 nT but also account for space weather
+    tam_sigma = np.array([100e-9, 100e-9, 100e-9])
+    # magnetometer sensor bias, Tesla
+    tam_bias = np.array([0, 0, 0])
+    # magnetometer sensor noise bounds from truth, Telsa
+    tam_w_bounds = np.array([1000e-9, 1000e-9, 1000e-9])
  
     # Reaction Wheel Presets, add to satellite?
     # Define 4 reaction wheel unit vectors in a pyramid configuration (60 deg tilt from z-axis) 
@@ -223,6 +230,11 @@ if __name__ == "__main__":
         "mt_G": mt_G,
         "mt_max_dipoles": mt_max_dipoles
     }
+    tam_config = {
+        "tam_noise_std": tam_sigma,
+        "tam_bias": tam_bias,
+        "tam_w_bounds": tam_w_bounds
+    }
 
     blah = preset_utils.npdict_to_plaindict(sat_config)
     with open("example_satellite.json", "w") as fd:
@@ -234,6 +246,10 @@ if __name__ == "__main__":
 
     blah = preset_utils.npdict_to_plaindict(mt_config)
     with open("example_magnetorquers.json", "w") as fd:
+        json.dump(blah, fd, indent=2)
+
+    blah = preset_utils.npdict_to_plaindict(tam_config)
+    with open("example_magnetometer.json", "w") as fd:
         json.dump(blah, fd, indent=2)
 
 
