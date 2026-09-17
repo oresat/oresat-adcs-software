@@ -498,24 +498,17 @@ def sim_main(config):
     # compare actual mag field to sensor for noise
     fig = plt.figure()
     ax1 = fig.add_subplot(1, 3, 1)
-    ax1.plot(np.linalg.norm(mag_sensor_data, axis=1))
-    
-    ax2 = fig.add_subplot(1, 3, 2)
-    ax2.plot(np.linalg.norm(magnetic_data, axis=1))
-
-    ax3 = fig.add_subplot(1, 3, 3)
     mag_sensor_magnitude = np.repeat(
         np.linalg.norm(mag_sensor_data, axis=1)[:-1], 
         int(fsw_update_time/dynamics_update_time), 
         axis=0
     )
     mag_field_magnitude = np.linalg.norm(magnetic_data, axis=1)[:-1]
+    ax1.plot(mag_sensor_magnitude)
+    ax1.plot(mag_field_magnitude, linewidth=5)
 
-    print(mag_sensor_magnitude.shape)
-    print(mag_field_magnitude.shape)
-    ax3.plot(mag_sensor_magnitude)
-    ax3.plot(mag_field_magnitude, linewidth=5)
-
+    ax2 = fig.add_subplot(1, 3, 2)
+    ax2.plot(mag_sensor_magnitude - mag_field_magnitude)
 
     # Magnetorquer detumble effectiveness
     if config["control_mode"] == ControlMode.DETUMBLE: 

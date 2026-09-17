@@ -24,7 +24,7 @@ if __name__ == "__main__":
     mt_config = preset_utils.load_preset("presets/magnetorquers.json")
 
     # tam sensor
-    tam_config = preset_utils.load_preset("presets/bad_magnetometer.json")
+    tam_config = preset_utils.load_preset("presets/magnetometer.json")
 
 
     # Select 3d file
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     # omega_init_deg = np.array([9, 2.4, 4.2])
     # equivalent of [50, 20, 10]
     # omega_init_deg = np.array([300, 120, 60])
-    omega_init_deg = np.array([8, 4, 2])
+    omega_init_deg = np.array([0.1, 0.1, 0.1])
    
     #omega_init_rpm = -np.array([1.5, 0.4, 0.7])  # initial spin rates [RPM]
     #omega_init_rpm = -np.array([0.3, 0.2, 0.1])  # initial spin rates [RPM]
