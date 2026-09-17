@@ -18,7 +18,7 @@ if __name__ == "__main__":
     solar_config = preset_utils.load_preset("presets/solar_panels.json")
 
     # reaction wheels
-    rw_config = preset_utils.load_preset("presets/bad_reaction_wheels.json")
+    rw_config = preset_utils.load_preset("presets/reaction_wheels.json")
 
     # magnetorquers
     mt_config = preset_utils.load_preset("presets/magnetorquers.json")
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     # omega_init_deg = np.array([9, 2.4, 4.2])
     # equivalent of [50, 20, 10]
     # omega_init_deg = np.array([300, 120, 60])
-    omega_init_deg = np.array([8, 4, 2])
+    omega_init_deg = np.array([2, 2, 1])
    
     #omega_init_rpm = -np.array([1.5, 0.4, 0.7])  # initial spin rates [RPM]
     #omega_init_rpm = -np.array([0.3, 0.2, 0.1])  # initial spin rates [RPM]
@@ -97,10 +97,10 @@ if __name__ == "__main__":
     # THERMAL_REORIENT
     # THERMAL_SPINUP
     # RW_SLOW_RATE
-    control_mode = ControlMode["DETUMBLE"]
+    control_mode = ControlMode["MTB_POINTING"]
 
     # Track specified target on Earth's surface or nadir vector. Both with +x axis ram-facing.
-    guidance_mode = GuidanceMode["NADIR"] # "NADIR" or "SUN" 
+    guidance_mode = GuidanceMode["SUN"] # "NADIR" or "SUN" 
 
     # KSAT coordinates
     # target_lat = 78.231500
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     
      
     if control_mode in (ControlMode.RW_POINTING, ControlMode.THERMAL_DETUMBLE, ControlMode.RW_SLOW_ROTATE): # realistic RW sim setup
-        sim_time = 1000
+        sim_time = 10000
         dynamics_update_time = .2
         fsw_update_time = 1.0
         if (fsw_update_time > 2): # give user warning about unrealistic time steps so THEY DON'T WASTE TIME
@@ -128,7 +128,7 @@ if __name__ == "__main__":
         use_skyfield = False
         omega_init_rad = np.array([0.0, 0.0, 0.0]) # ensure no excessive spinning
     else: # realistic MTB sim setup
-        sim_time = 25000
+        sim_time = 50000
         
         dynamics_update_time = 0.2
         fsw_update_time = 1

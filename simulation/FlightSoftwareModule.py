@@ -54,12 +54,23 @@ class FlightSoftware(sysModel.SysModel):
         self.crashTheKernel = False # intentional exit to catch errors. Crashes the kernel because of SWIG behavior and difficulty with standard Python error-catching techniques. 
         self.error_filter = [] # used for tracking and graphing filter error (estimated error based on filter state estimates)
         self.target_history = [] # only used if self.guidance_mode is not None
+        # history of magnetorquer commands
         self.mt_cmd_history = []
+        # raw history of time
         self.times_raw = []
+        # raw history of omega (Euler spin rates)
         self.omega_raw_history = []
         self.times = []
+        # filtered history of omega (Euler spin rates)
         self.omega_history = []
+        # history of the normalized spin vector
         self.omega_norm_history = []
+        # history of the alignment of the torque vector with mag field vector
+        # 1 means complete alignment, meaning MTBs cannot satisfy any amount of torque
+        # 0 means the desired torque is orthogonal to the magnetic field, meaning the resultant MTB torque should be good
+        self.torque_alignment_history = []
+
+
         self.time_zero = 0 # initialized in sim main, used to keep track of GPS time
         self.omega_earth = 7.2921150e-5 # sidereal rotation rate of Earth for propogation calculations [rad/s]. Approximation suffices for the calculations we're doing
         self.r_earth = 4.07e7 # approximate earth radius for line-of-sight (LOS) calculations
@@ -81,8 +92,10 @@ class FlightSoftware(sysModel.SysModel):
             self.skyfield_timescale = load.timescale()
             self.skyfield_EOP = itrs
         
-        # self.maxTorque = 0.01 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
-        self.maxTorque = 0.001 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
+        # TODO: check units for maxTorque
+        self.maxTorque = 1 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
+        # self.maxTorque = 0.001 # maximum torque output of reaction wheel (this is just to properly simulate, doesn't currently reflect the real-world behavior of OreSat reaction wheels)
+
         self.maxSpeed = config["rw_max_speed"] * macros.RPM # converts RPM to [rad/s]
         self.thermal_spin_rpm = 1.0 # thermal spin rate about the z-axis (body frame)
         self.controllerStartTime = 3 # time at which controller should activate [seconds]
@@ -118,7 +131,8 @@ class FlightSoftware(sysModel.SysModel):
             
         max_input_mag = 3 # QUALITATIVE value for max torque used by LQR tuning ONLY
         LQR_max_error_mag = 0.5
-        LQR_max_rate_mag = 0.0003
+        # LQR_max_rate_mag = 0.0003
+        LQR_max_rate_mag = 0.03
         self.K_MAG = get_gain_matrix(self.satInertia, self.updateTime, LQR_max_error_mag, LQR_max_rate_mag, max_input_mag)
         self.mag_torque_integral = 0
         
@@ -134,7 +148,9 @@ class FlightSoftware(sysModel.SysModel):
         # Controller gains
         Jmin = np.min(np.linalg.eigvals(self.satInertia)) # maximum principal moment of inertia (Markley & Crassidis defines this with the minimum principal moment of inertia as a safe upper bound to avoid instability, but maximum works better)
         self.detumble_gain = 4*np.pi/config["orbital_period"]*(1+np.sin(config["orbital_inclination"]))*Jmin # gain based on minimal principal moment of inertia as defined in Markley & Crassidis
-        
+
+        print(self.detumble_gain)
+
         # Kalman filter object to store filter states and sensor values
         self.gyro_bias_drift_rate = 0.015 * macros.D2R # [rad/s/K] additional bias drift dependent on difference between current and reference (25 C) temperatures
         self.EKF = MEKF(config["P_ST_0"], config["sigma_ST"], config["P_b0"], config["sigma_gyro"], config["sigma_bias"])
@@ -331,33 +347,35 @@ class FlightSoftware(sysModel.SysModel):
         q_error = quat.quat_error(self.q_target, q) # get error quaternion, this function automatically sanitizes by performing normalization and hemisphere checks
         q_error = quat.hemi(q_error) # only apply hemisphere check once after determining error quaternion to maintain associativity across hemisphere boundaries
         self.error_filter.append(q_error) # save estimated (filtered) attitude error for plotting after conclusion of sim execution
-        
+       
+
         ######################### CONTROL LOGIC ###############################
         currentTime = currentTimeNanos * 1e-9
         if ((self.controllerStartTime is not None) and (currentTime >= self.controllerStartTime) and (self.controllerEndTime is None or currentTime < self.controllerEndTime)): # turn controller on at specified time
 
             if self.control_mode == ControlMode.RW_POINTING:
-                desired_torque = self.RW_controller(q_error, omega, currentTimeNanos*1e-9) # compute desired 3-axis torque from controller (standard LQR controller)
-                desired_torque += tau_ff # feedforward torque, only non-zero for tracking mode
-                wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
-                self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
-                if (quat.error_angle(q_error) <= 0.1 and np.all(np.abs(omega) < 1e-2)):
+                # REACION WHEEL POINTING CONTROL MODE
+                desired_torque = self.RW_controller(q_error, omega, currentTimeNanos*1e-9) 
+                # compute desired 3-axis torque from controller (standard LQR controller)
+                desired_torque += tau_ff 
+                # feedforward torque, only non-zero for tracking mode
+                wheel_torque = self.convert_torque_to_wheels(desired_torque) 
+                # convert desired 3-axis torque to inputs for 4 wheels
+                self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) 
+                # Write the payload to reaction wheels
+
+                if (quat.error_angle(q_error) <= 0.01 and np.all(np.abs(omega) < 1e-6)):
+                    print("POINTING MODE SATISFIED")
+                    # WHEEL DESATURATION CONTROLLER
                     # implement momentum dumping when somewhat close to target
                     # same as detumble, but with wheel momentum
+
                     desired_dipole = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(H_wheels, B) # detumble controller as defined by Markley & Crassidis
                     self.command_MTB_dipoles(desired_dipole, currentTimeNanos)
+
             elif self.control_mode == ControlMode.DETUMBLE:
+                # DETUMBLE CONTROL MODE
                 # high speeds to something different
-                if False:
-                    if self.ticks < 1000:
-                        desired_dipole = np.array([0, 0, 5e-2])
-                    elif self.ticks < 20000:
-                        # try instability
-                        desired_dipole = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(-omega, B) # detumble controller as defined by Markley & Crassidis
-                    elif np.linalg.norm(omega) > 10:
-                        desired_dipole = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) # detumble controller as defined by Markley & Crassidis
-                    else:
-                        desired_dipole = np.array([0, 0, 0])
 
                 if np.linalg.norm(omega) > 4:
                     # Depending on the magnetic field, angular rates higher than
@@ -372,6 +390,7 @@ class FlightSoftware(sysModel.SysModel):
                     # detumble controller as defined by Markley & Crassidis
                     desired_dipole = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) 
 
+                # log data
                 self.times.append(currentTimeNanos)
                 self.omega_history.append(omega)
                 self.omega_norm_history.append(np.linalg.norm(omega))
@@ -379,6 +398,7 @@ class FlightSoftware(sysModel.SysModel):
                 self.command_MTB_dipoles(desired_dipole, currentTimeNanos) # Write the payload to magnetorquers
 
             elif self.control_mode == ControlMode.THERMAL_DETUMBLE:
+                # THERMAL DETUMBLE CONTROL MODE
                 # thermal detumble
                 # detumble controller as defined by Markley & Crassidis
                 if (np.all(np.abs(omega) < 1e-4)):
@@ -390,10 +410,16 @@ class FlightSoftware(sysModel.SysModel):
                     desired_dipoles = self.detumble_gain/(np.linalg.norm(B)**2)*np.cross(omega, B) 
                 self.command_MTB_dipoles(desired_dipoles, currentTimeNanos) # Write the payload to magnetorquers
             
-            elif self.control_mode == ControlMode.THERMAL_REORIENT: # can only be set by first part of passive thermal spin controller
-                desired_torque = self.RW_controller(q_error, omega) # compute desired 3-axis torque from controller
-                wheel_torque = self.convert_torque_to_wheels(desired_torque) # convert desired 3-axis torque to inputs for 4 wheels
-                self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) # Write the payload to reaction wheels
+            elif self.control_mode == ControlMode.THERMAL_REORIENT: 
+                # THERMAL REORIENT CONTROL MODE
+                # can only be set by first part of passive thermal spin controller
+                # compute desired 3-axis torque from controller
+                desired_torque = self.RW_controller(q_error, omega) 
+                # convert desired 3-axis torque to inputs for 4 wheels
+                wheel_torque = self.convert_torque_to_wheels(desired_torque) 
+                # Write the payload to reaction wheels
+                self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds) 
+
                 if (quat.error_angle(q_error) <= 0.1 and np.all(np.abs(omega) < 1e-6)):
                     #zero wheel speeds?
                     self.control_mode = ControlMode.SPINUP
@@ -401,12 +427,13 @@ class FlightSoftware(sysModel.SysModel):
                     print(f"SWITCHING TO MAGNETORQUER SPINUP AT {currentTimeNanos*1e-9} SECONDS, {omega}")
 
             elif self.control_mode == ControlMode.THERMAL_SPINUP: 
-                # thermal spinup
+                # THERMAL SPINUP CONTROL MODE
                 # spinup satellite for thermal spin about the axis
                 if (omega[2] < self.thermal_spin_rpm*2*np.pi/60): # while satellite is spinning slower than set rate about the z axis, spin up
                     tau_des = [0,0,1] # spin about the z axis
                     m = np.cross(B, tau_des) / (B @ B)
                     self.command_MTB_dipoles(m, currentTimeNanos)
+                
             elif self.control_mode == ControlMode.MTB_POINTING: 
                 # Magnetorquer fine pointing controller (experimental)
                 # Magnetorquer control law "Singularity Robust (SR) inverse" taken from: 
@@ -414,18 +441,45 @@ class FlightSoftware(sysModel.SysModel):
                 # by Nobuo Sugimura, Toshinori Kuwahara, Kazuya Yoshida
                 
                 tau_des = self.mag_LQR_controller(q_error, omega) # desired 3-axis torque in body frame
+                # tau_des = self.RW_controller(q_error, omega) # desired 3-axis torque in body frame
                 bm = self.b_mat(B)
                 k = 1e-8
 
-                m_cmd_lqr = np.linalg.inv(bm.T @ bm + k*np.eye(3))@bm.T@tau_des
+                # 1 = torque is aligned with mag field, 0 means orthogonal
+                torque_alignment = np.dot(np.linalg.norm(tau_des), np.linalg.norm(B))
 
-                self.command_MTB_dipoles(m_cmd_lqr, currentTimeNanos)
+                self.torque_alignment_history.append(torque_alignment)
+
+                # check if this is even the dipole
+                #m_cmd_lqr = np.linalg.inv(bm.T @ bm + k*np.eye(3))@bm.T@tau_des
+
+                # just take the cross product to find the unit vector of the desired dipole
+                m_cmd_norm = np.cross(B, tau_des) / (np.linalg.norm(B)**2)
+
+
+                # proportional term
+                m_cmd_p = 7e-7*quat.error_angle(q_error)*np.linalg.norm(m_cmd_norm)
+
+
+                # check tha angle between the mag field and the desired torque
+                blah = np.dot(np.linalg.norm(tau_des), np.linalg.norm(B))
+
+                # derivative term, oppose spin
+                m_cmd_d = self.detumble_gain * np.cross(omega, B) / ( B @ B)
+
+                # self.command_MTB_dipoles(m_cmd_lqr, currentTimeNanos)
+                self.command_MTB_dipoles(m_cmd_p + m_cmd_d, currentTimeNanos)
 
             elif self.control_mode == ControlMode.IDLE:
                 pass # mode to simply visualize orbits with large timespans
-            elif self.control_mode == ControlMode.RW_SLOW_ROTATE: # a simple "rotate about z-axis" control mode to deal with star tracker occlusion:
-                d_omega = self.spin_omega_target-omega # desired delta omega
-                tau = self.satInertia @ d_omega/self.updateTime/5 # divide by five to smooth control inputs
+
+            elif self.control_mode == ControlMode.RW_SLOW_ROTATE:
+                # a simple "rotate about z-axis" control mode to deal with star tracker occlusion:
+                
+                # desired delta omega
+                d_omega = self.spin_omega_target-omega 
+                # divide by five to smooth control inputs
+                tau = self.satInertia @ d_omega/self.updateTime/5 
                 wheel_torque = self.G_pinv @ tau
                 self.command_wheel_torques(currentTimeNanos, wheel_torque, wheelSpeeds)
             else:
@@ -469,8 +523,10 @@ class FlightSoftware(sysModel.SysModel):
         self.mag_dipole_msg.write(self.mag_dipole_payload, current_time_nanos, self.moduleID)
         
 
-    def command_wheel_torques(self, currentTimeNanos, wheel_torque, wheelSpeeds): # send commanded torque values to reaction wheels
-        self.check_torque_vals(wheel_torque, wheelSpeeds) # ensure none of the torque values exceed max torque or accelerate wheel past max RPM in either direction and write to self.torque_vals
+    def command_wheel_torques(self, currentTimeNanos, wheel_torque, wheelSpeeds):
+        # send commanded torque values to reaction wheels
+        # ensure none of the torque values exceed max torque or accelerate wheel past max RPM in either direction and write to self.torque_vals
+        self.check_torque_vals(wheel_torque, wheelSpeeds) 
         self.rwMotorTorquePayload.motorTorque = self.torque_vals
         self.rwMotorTorqueOutMsg.write(self.rwMotorTorquePayload, currentTimeNanos, self.moduleID)
           

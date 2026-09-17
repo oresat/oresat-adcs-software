@@ -479,42 +479,51 @@ def sim_main(config):
     rw_power_group_data = [rw_pow_rec.netPower for rw_pow_rec in rw_power_recs]
     # Should save data to file for postprocessing
 
-    fig, ax = plt.subplots(figsize=(8,4))
-    ax.plot(mtbLog.times() *1e-9, mt_torque_data)
-    ax.set_ylim([-1e-6, 1e-6])
-    plt.title("Magnetorquers: Net Torque")
-    # plt.legend()
 
-    # Plot reaction wheel torques
-    if config["save_pdf"] == True:
-        pdf_path = config["plot_basepath"] / "mt_torque_graph.pdf"
-        plt.savefig(pdf_path, dpi=300)
-        print(f"Plot saved as {pdf_path}")
-    if config["save_png"] == True:
-        png_path = config["plot_basepath"] / "mt_torque_graph.png"
-        plt.savefig(png_path, dpi=600)
-        print(f"Plot saved as {png_path}")
+    if config["control_mode"] == ControlMode.MTB_POINTING:
+        fig, ax = plt.subplots(figsize=(8,4))
+        ax.plot(mtbLog.times() *1e-9, mt_torque_data)
+        ax.set_ylim([-1e-6, 1e-6])
+        plt.title("Magnetorquers: Net Torque")
+        # plt.legend()
 
-    # compare actual mag field to sensor for noise
-    fig = plt.figure()
-    ax1 = fig.add_subplot(1, 3, 1)
-    ax1.plot(np.linalg.norm(mag_sensor_data, axis=1))
-    
-    ax2 = fig.add_subplot(1, 3, 2)
-    ax2.plot(np.linalg.norm(magnetic_data, axis=1))
+        # Plot reaction wheel torques
+        if config["save_pdf"] == True:
+            pdf_path = config["plot_basepath"] / "mt_torque_graph.pdf"
+            plt.savefig(pdf_path, dpi=300)
+            print(f"Plot saved as {pdf_path}")
+        if config["save_png"] == True:
+            png_path = config["plot_basepath"] / "mt_torque_graph.png"
+            plt.savefig(png_path, dpi=600)
+            print(f"Plot saved as {png_path}")
 
-    ax3 = fig.add_subplot(1, 3, 3)
-    mag_sensor_magnitude = np.repeat(
-        np.linalg.norm(mag_sensor_data, axis=1)[:-1], 
-        int(fsw_update_time/dynamics_update_time), 
-        axis=0
-    )
-    mag_field_magnitude = np.linalg.norm(magnetic_data, axis=1)[:-1]
+        # compare actual mag field to sensor for noise
+        fig = plt.figure()
+        ax1 = fig.add_subplot(2, 2, 1)
+        ax1.plot(np.linalg.norm(mag_sensor_data, axis=1))
+        
+        ax2 = fig.add_subplot(2, 2, 2)
+        ax2.plot(np.linalg.norm(magnetic_data, axis=1))
 
-    print(mag_sensor_magnitude.shape)
-    print(mag_field_magnitude.shape)
-    ax3.plot(mag_sensor_magnitude)
-    ax3.plot(mag_field_magnitude, linewidth=5)
+        ax3 = fig.add_subplot(2, 2, 3)
+        mag_sensor_magnitude = np.repeat(
+            np.linalg.norm(mag_sensor_data, axis=1)[:-1], 
+            int(fsw_update_time/dynamics_update_time), 
+            axis=0
+        )
+        mag_field_magnitude = np.linalg.norm(magnetic_data, axis=1)[:-1]
+
+        print(mag_sensor_magnitude.shape)
+        print(mag_field_magnitude.shape)
+        ax3.plot(mag_sensor_magnitude)
+
+        ax4 = fig.add_subplot(2, 2, 4)
+        ax4.plot(imuRec.times()*1e-9/3600, rotation_deg_data)
+        ax4.plot(imuRec.times()*1e-9/3600, np.linalg.norm(rotation_deg_data, axis=1))
+        ax4.set_title("rotation speed")
+        ax4.legend(["x", "y", "z", "magnitude"])
+        ax4.set_xlabel("time (hours)")
+        ax4.set_ylabel("angular speed (deg/s)")
 
 
     # Magnetorquer detumble effectiveness
@@ -606,7 +615,9 @@ def sim_main(config):
             png_path = config["plot_basepath"] / "rw_speeds.png"
             plt.savefig(png_path, dpi=600)
             print(f"Plot saved as {png_path}")
+        plt.show()
 
+    if False:
         # Plot battery power
         fig, ax = plt.subplots()
         ax.plot(battery_rec.times()*1e-9, batt_storage_data)
@@ -695,29 +706,39 @@ def sim_main(config):
         ax.set_ylabel("Rotational rate (r/s)")
         plt.show()
 
+    # get true attitude error without sensor noise for graphing and filter comparison
+    sigma_BN = np.array(stateRec.sigma_BN) # collects recorded spacecraft attitudes in MRP form. Extra rotation not necessary (as with filtered error in fsw) as it uses the same body frame as our system.
+    q_scalar_first = [rbk.MRP2EP(attitude) for attitude in sigma_BN] # convert MRP's to scalar-first quaternions
+    q_scalar_last = [quat.to_scalar_last(q) for q in q_scalar_first] # convert quaternions to scalar-last convention
+    
+    # Target tracking mode requires special error calculations as we are dealing with step changes in target, which happens in fsw, not dynamics
+    if config["guidance_mode"] is not None:
+        tracking_error = [quat.error_angle(quat.quat_error(q_target, q)) for (q_target, q) in zip(fsw.target_history, q_scalar_last[::int(fsw_update_time/dynamics_update_time)])] # calculate step-errors for tracking mode
+        error_true = np.repeat(tracking_error[:-1], fsw_update_time/dynamics_update_time, axis=0) # expand to match plotting times
+        error_true = np.append(error_true, tracking_error[-1])
+    else:
+        error_true = [quat.error_angle(quat.quat_error(fsw.q_target, q)) for q in q_scalar_last] # calculate angle error (degrees) over simulation
+    
+    if(config["use_filter"]):
+        error_angles_filter = [quat.error_angle(quaternion) for quaternion in fsw.error_filter[:-1]]
+        error_expanded_filter = np.repeat(error_angles_filter, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
+        error_expanded_filter = np.append(error_expanded_filter, quat.error_angle(fsw.error_filter[-1])) # append final value
+    else:
+        error_expanded_filter = None
+
+    fig, ax = plt.subplots()
+    ax.plot(error_true)
+    ax.set_title("True Error")
+
+    fig, ax = plt.subplots()
+    ax.plot(fsw.torque_alignemnt_history)
+    ax.set_title("Torque Alignment history")
+
+    plt.show()
+
 
     if False:
-
-        # get true attitude error without sensor noise for graphing and filter comparison
-        sigma_BN = np.array(stateRec.sigma_BN) # collects recorded spacecraft attitudes in MRP form. Extra rotation not necessary (as with filtered error in fsw) as it uses the same body frame as our system.
-        q_scalar_first = [rbk.MRP2EP(attitude) for attitude in sigma_BN] # convert MRP's to scalar-first quaternions
-        q_scalar_last = [quat.to_scalar_last(q) for q in q_scalar_first] # convert quaternions to scalar-last convention
-        
-        # Target tracking mode requires special error calculations as we are dealing with step changes in target, which happens in fsw, not dynamics
-        if config["guidance_mode"] is not None:
-            tracking_error = [quat.error_angle(quat.quat_error(q_target, q)) for (q_target, q) in zip(fsw.target_history, q_scalar_last[::int(fsw_update_time/dynamics_update_time)])] # calculate step-errors for tracking mode
-            error_true = np.repeat(tracking_error[:-1], fsw_update_time/dynamics_update_time, axis=0) # expand to match plotting times
-            error_true = np.append(error_true, tracking_error[-1])
-        else:
-            error_true = [quat.error_angle(quat.quat_error(fsw.q_target, q)) for q in q_scalar_last] # calculate angle error (degrees) over simulation
-        
-        if(config["use_filter"]):
-            error_angles_filter = [quat.error_angle(quaternion) for quaternion in fsw.error_filter[:-1]]
-            error_expanded_filter = np.repeat(error_angles_filter, fsw_update_time/dynamics_update_time, axis=0)  # stretch all but last to match with times
-            error_expanded_filter = np.append(error_expanded_filter, quat.error_angle(fsw.error_filter[-1])) # append final value
-        else:
-            error_expanded_filter = None
-        
+       
         plot_times = imuRec.times() * 1e-9
         if (config["control_mode"] in (ControlMode.RW_POINTING, ControlMode.RW_SLOW_ROTATE)):
             RW_plot_times = rw_speed_rec.times() * 1e-9 # dynamics process intervals
@@ -793,7 +814,6 @@ def sim_main(config):
         
         imuValues = imuRec.AngVelPlatform
         plot_imu(plot_times, imuValues, orbital_period, config, time_axis)
-
 
     # Finish with summary
     print(f"\nSimulation completed in {end-start:.2f} seconds\nSimulated time of flight: {config["sim_time"]} seconds")
