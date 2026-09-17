@@ -70,32 +70,27 @@ def sim_main(config):
     gravFactory = simIncludeGravBody.gravBodyFactory()
     gravFactory.createBodies('earth')
 
-    mu_earth = gravFactory.gravBodies.get("earth").mu
-
-
-    # create orbit properties using classical orbit elements. 
-    # Assuming perfectly circular orbit for now.
-    oe = orbitalMotion.ClassicElements()
-    oe.a = (415+6371) * 1e3 # semi-major axis  [meters] (altitude + earth's radius)
-    oe.e = 0 # eccentricity
-    oe.i = 50 * macros.D2R # inclination [rad]
-    oe.Omega = 0 * macros.D2R  # RAAN or Longitude of the Ascending Node [rad]
-    oe.omega = 0.0 * macros.D2R  # argument of periapsis [rad]
-    oe.f = 10 * macros.D2R       # true anomaly [rad]
-    
     # true orbit parameters for SENTINEL mission
     oe = orbitalMotion.ClassicElements()
-    Re = 6371e3 # radius of Earth
-    apoapsis = 600e3
-    periapsis = 580e3
-    ra = Re + apoapsis
-    rp = Re + periapsis
+    # radius of earth
+    Re = 6371e3
+    # standard gravitational parameter of earth
+    mu_earth = 398600436000000.0
+    # radii of apoapsis and periapsis
+    ra = Re + config["apoapsis"]
+    rp = Re + config["periapsis"]
+    # semi-major axis [meters]
     oe.a = 0.5*(rp + ra)
+    # eccentricity
     oe.e = (ra - rp)/(ra + rp)
-    oe.i = 98.7 * macros.D2R # [degrees]
-    oe.Omega = 130 * macros.D2R # [degrees]
-    oe.omega = 0 * macros.D2R   # sets perigee vector angle from ascending node in the orbital plane [degrees]
-    oe.f = 82 * macros.D2R      # where the satellite is on the ellipse at epoch (start of sim) [degrees]
+    # inclination angle [degrees]
+    oe.i = config["inclination_deg"] * macros.D2R
+    # RAAN [degrees]
+    oe.Omega = config["ascending_node_deg"] * macros.D2R
+    # sets perigee vector angle from ascending node in the orbital plane [degrees]
+    oe.omega = config["arg_periapsis_deg"] * macros.D2R   
+    # where the satellite is on the ellipse at epoch (start of sim) [degrees]
+    oe.f = config["true_anomaly_deg"] * macros.D2R
     
     rN, vN = orbitalMotion.elem2rv(mu_earth, oe)
     oe = orbitalMotion.rv2elem(mu_earth, rN, vN)  # this stores consistent initial orbit elements, fixes numerical errors, particulary with perfectly circular orbits. Consult ChatGPT for detailed explanation.
@@ -618,7 +613,10 @@ def sim_main(config):
             print(f"Plot saved as {png_path}")
         plt.show()
 
-    if False:
+    if True:
+        fig, ax = plt.subplots()
+        ax.plot(eclipse_rec.times()*1e-9, eclipse_data)
+
         # Plot battery power
         fig, ax = plt.subplots()
         ax.plot(battery_rec.times()*1e-9, batt_storage_data)
@@ -670,6 +668,9 @@ def sim_main(config):
             plt.savefig(png_path, dpi=600)
             print(f"Plot saved as {png_path}")
 
+        plt.show()
+
+    if False:
         fig, ax = plt.subplots()
         # get true attitude error without sensor noise for graphing and filter comparison
         sigma_BN = np.array(stateRec.sigma_BN) # collects recorded spacecraft attitudes in MRP form. Extra rotation not necessary (as with filtered error in fsw) as it uses the same body frame as our system.
@@ -732,7 +733,7 @@ def sim_main(config):
     ax.set_title("True Error")
 
     fig, ax = plt.subplots()
-    ax.plot(fsw.torque_alignemnt_history)
+    ax.plot(fsw.torque_alignment_history)
     ax.set_title("Torque Alignment history")
 
     plt.show()

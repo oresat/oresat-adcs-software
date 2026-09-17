@@ -22,7 +22,9 @@ if __name__ == "__main__":
 
 
     # select satellite model attributes
-    sat_config = preset_utils.load_preset("presets/Prism.json")
+    sat_config = preset_utils.load_preset("presets/Sentinel.json")
+
+    orbit_config = preset_utils.load_preset("presets/orbit_sentinel.json")
 
     # solar panels
     solar_config = preset_utils.load_preset("presets/solar_panels.json")
@@ -35,7 +37,6 @@ if __name__ == "__main__":
 
     # tam sensor
     tam_config = preset_utils.load_preset("presets/bad_magnetometer.json")
-
 
     # Select 3d file
     sat_3D_file = "models/3U_Simplified_Model.obj"
@@ -188,7 +189,7 @@ if __name__ == "__main__":
               "time_init_string": time_init_string,
     }
 
-    whole_config = sat_config | sim_config | solar_config | rw_config | mt_config | tam_config
+    whole_config = sat_config | orbit_config | sim_config | solar_config | rw_config | mt_config | tam_config
  
     print(f"Satellite: {sat_config['satellite']}")
     print(f"Control Mode: {control_mode.name}")
