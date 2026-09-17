@@ -24,7 +24,7 @@ if __name__ == "__main__":
     # select satellite model attributes
     sat_config = preset_utils.load_preset("presets/Sentinel.json")
 
-    orbit_config = preset_utils.load_preset("presets/orbit_sentinel.json")
+    orbit_config = preset_utils.load_preset("presets/orbit_qvoyager.json")
 
     # solar panels
     solar_config = preset_utils.load_preset("presets/solar_panels.json")

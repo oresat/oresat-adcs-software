@@ -83,6 +83,7 @@ def sim_main(config):
     oe.a = 0.5*(rp + ra)
     # eccentricity
     oe.e = (ra - rp)/(ra + rp)
+    print(f"Eccentricity: {oe.e}")
     # inclination angle [degrees]
     oe.i = config["inclination_deg"] * macros.D2R
     # RAAN [degrees]

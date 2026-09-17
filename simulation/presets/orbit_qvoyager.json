@@ -1,0 +1,8 @@
+{
+  "apoapsis": 520000.0,
+  "periapsis": 500000.0,
+  "inclination_deg": 97.4,
+  "ascending_node_deg": 157.5,
+  "arg_periapsis_deg": 0.0,
+  "true_anomaly_deg": 82.0
+}
