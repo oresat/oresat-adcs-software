@@ -422,44 +422,65 @@ def make_gyro(modelTag, scObjMsg, record_t, dcm=None, noise_std=None, e_bounds=N
 
 
 
-def make_magnetometer(modelTag, magMsg, scObjMsg, record_t, dcm=None, noise_std=None, w_bounds=None):
-    '''
-        makes a magnetometer, this could be expanded in the future
+def make_magnetometer(
+    model_tag: str, 
+    mag_msg,
+    sc_object_msg,
+    record_t,
+    dcm=None, 
+    noise_std: np.ndarray | None = None, 
+    bias: np.ndarray | None = None,
+    w_bounds: np.ndarray | None = None
+):
+    '''Make a three axis magnetometer (TAM). This could be expanded in the future.
 
-        modelTag: name of model
-        magMsg: message from the magnetic field 
-        scObjMsg: the messager of the scObject
-        record_t: time delta for the recorder
-        dcm (optional): orientation relative to body (body to sensor frame)
-        noiseStd (optional): noise standard deviation (assumed to be the same for all axes)
-        e_bounds (optional): sensor error bounds (may default to +- 3 standard errors)
-        w_bounds (optional): sensor walk bounds (may default to +- 5 standard errors)
+    Parameters
+    ----------
+    model_tag: 
+        name of model
+    mag_msg:
+        message from the magnetic field 
+    sc_object_msg: 
+        the message object of the spacecraft object
+    record_t: 
+        time delta for the recorder
+    dcm (optional): 
+        3x3 orientation relative to body (body to sensor frame)
+    noise_std (optional): 
+        3x1 noise standard deviation (Tesla)
+    bias (optional):
+        3x1 axis sensor bias (Tesla)
+    w_bounds (optional): 
+        3x1 sensor walk bounds aka maximum error allowed (Tesla)
     '''
-    magSensor = magnetometer.Magnetometer()
-    magSensor.ModelTag = modelTag
+    mag_sensor = magnetometer.Magnetometer()
+    mag_sensor.ModelTag = model_tag
     
     if dcm is not None:
         # if there is a body-to-case rotation, apply it
         # syntax is different and this is untested
-        magSensor.dcm_SB = dcm
-
+        mag_sensor.dcm_SB = dcm
 
     if noise_std is not None:
         # if there is noise, apply it
-        magSensor.senNoiseStd = [noise_std, noise_std, noise_std]
+        mag_sensor.senNoiseStd = noise_std
+
+    if bias is not None:
+        # if there is sensor bias, apply it
+        mag_sensor.senBias = bias
 
     if w_bounds is not None:
         # if there are walk bounds, apply them
-        magSensor.walkBounds = [w_bounds, w_bounds, w_bounds]
+        mag_sensor.walkBounds = w_bounds
 
     # set up message and recorder pipelines
-    magSensor.magInMsg.subscribeTo(magMsg)
-    magSensor.stateInMsg.subscribeTo(scObjMsg)
-    magRec = magSensor.tamDataOutMsg.recorder(record_t)
+    mag_sensor.magInMsg.subscribeTo(mag_msg)
+    mag_sensor.stateInMsg.subscribeTo(sc_object_msg)
+    mag_rec = mag_sensor.tamDataOutMsg.recorder(record_t)
 
-    # assumes the scObject state has already been set
-    magSensor.UpdateState(0)
-    return magSensor, magRec
+    # assumes the sc_object state has already been set
+    mag_sensor.UpdateState(0)
+    return mag_sensor, mag_rec
 
 def make_mt_set(
 ):

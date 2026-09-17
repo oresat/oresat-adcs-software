@@ -19,6 +19,27 @@ class ControlMode(IntEnum):
     THERMAL_SPINUP = 6
     RW_SLOW_ROTATE = 91
 
+class ControlActuators(IntEnum):
+    NONE = 0
+    RW_ONLY = 1
+    MT_ONLY = 2
+    RW_AND_MT = 3
+
+class ControlPlan(IntEnum):
+    # TODO: this is to have multi-stage algorithms
+    IDLE = 0
+    DETUMBLE = 1
+    POINTING = 2
+    # for example, the thermal control algorithm
+    # first needs to detumble
+    # then need or reorient
+    # and finally needs to spin
+    THERMAL = 3
+    # TODO: overall I want to classify control types
+    # 1) nothing
+    # 2) only zero the velocity (detumble)
+    # 3) only nonzero velocity (spin)
+    # 3) only position control
 
 class PointingReference(IntEnum):
     HELICAL = 0
