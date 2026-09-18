@@ -207,4 +207,8 @@ if __name__ == "__main__":
     print(f"\nStarting simulation in {delay_time_seconds} seconds...")
     time.sleep(delay_time_seconds)
 
-    basilisk_core.sim_main(whole_config)
+    RAANs = np.arange(0, 180, 30)
+    for RAAN in RAANs:
+        whole_config["ascending_node_deg"] = RAAN
+        basilisk_core.sim_main(whole_config)
+

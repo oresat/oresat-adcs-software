@@ -1,4 +1,6 @@
 import numpy as np
+import scipy
+
 import time
 from Basilisk.simulation import spacecraft, starTracker, imuSensor, reactionWheelStateEffector, magneticFieldWMM, magnetometer, MtbEffector # import simulation related support
 from Basilisk.utilities import SimulationBaseClass, macros, vizSupport, simIncludeGravBody, orbitalMotion, simIncludeRW, simHelpers # import general simulation support files
@@ -183,7 +185,7 @@ def sim_main(config):
     noise_std = config["sigma_gyro"] if config["use_filter"] else None
     e_bounds = 5 if config["use_filter"] else None
 
-    imu, imuRec = bsk_helpers.make_gyro(modelTag="imu",
+    imu, imu_rec = bsk_helpers.make_gyro(modelTag="imu",
                                        scObjMsg=scObject.scStateOutMsg,
                                        record_t=macros.sec2nano(fsw_update_time),
                                        dcm=None,
@@ -192,7 +194,7 @@ def sim_main(config):
                                        w_bounds=None)
 
     sim.AddModelToTask("fswTask", imu) # Add sensor to flight software task
-    sim.AddModelToTask("fswTask", imuRec) # Add recording to task
+    sim.AddModelToTask("fswTask", imu_rec) # Add recording to task
    
 
 
@@ -372,47 +374,48 @@ def sim_main(config):
     # add spacecraft state recording in order to read attitudes for plotting
     stateRec = scObject.scStateOutMsg.recorder(macros.sec2nano(dynamics_update_time)) # create dynamics recorder
     sim.AddModelToTask("dynamicsTask", stateRec) # add recorder to dynamics simulation
-     
-    if config["viz_filename"]:
-        fileName = "./{viz_filename}"
-    else:
-        fileName = __file__
     
-    current_dir = Path(__file__).parent.resolve() # find current working directory such that any system running code directly from git can use the simplified model
-    model_file_path = current_dir / config["sat_3D_file"]
+    if config["make_vizfile"]:
+        if config["viz_filename"]:
+            fileName = "./{viz_filename}"
+        else:
+            fileName = __file__
+        
+        current_dir = Path(__file__).parent.resolve() # find current working directory such that any system running code directly from git can use the simplified model
+        model_file_path = current_dir / config["sat_3D_file"]
 
 
 
-    viz = vizSupport.enableUnityVisualization(sim, "dynamicsTask", scObject, 
-                                              saveFile=fileName, 
-                                              liveStream=False, # let Vizard visualize data
-                                              rwEffectorList=rwStateEffector) # add reaction wheel list to visualization
+        viz = vizSupport.enableUnityVisualization(sim, "dynamicsTask", scObject, 
+                                                  saveFile=fileName, 
+                                                  liveStream=False, # let Vizard visualize data
+                                                  rwEffectorList=rwStateEffector) # add reaction wheel list to visualization
 
 
-    # add pointing lines
-    vizSupport.createPointLine(viz, toBodyName='earth', lineColor='green')
-    vizSupport.createPointLine(viz, toBodyName='sun', lineColor='yellow')
+        # add pointing lines
+        vizSupport.createPointLine(viz, toBodyName='earth', lineColor='green')
+        vizSupport.createPointLine(viz, toBodyName='sun', lineColor='yellow')
 
-    vizSupport.addLocation(viz,
-        stationName="Boulder Station", 
-        parentBodyName=earth.displayName,
-        lla_GP = [
-            np.radians(config["target_lat"]), 
-            np.radians(config["target_lon"]), 
-            config["target_height"]
-        ],
-        fieldOfView=np.radians(160.),
-        color='pink',
-        range=2000.0*1000  # meters
-    )
+        vizSupport.addLocation(viz,
+            stationName="Boulder Station", 
+            parentBodyName=earth.displayName,
+            lla_GP = [
+                np.radians(config["target_lat"]), 
+                np.radians(config["target_lon"]), 
+                config["target_height"]
+            ],
+            fieldOfView=np.radians(160.),
+            color='pink',
+            range=2000.0*1000  # meters
+        )
 
-    vizSupport.setActuatorGuiSetting(viz, viewRWPanel=True, viewRWHUD=True)
-    s_factor = config["viz_scaling"] # 3D-model scaling factor
-    vizSupport.createCustomModel(viz,
-                                 modelPath=str(model_file_path), # Vizard expects filepath as a string
-                                 scale=[-s_factor, s_factor, s_factor], # scale model and mirror on x-axis (don't know why the model is otherwise improperly mirrored)
-                                 rotation=[0,np.pi/2,np.pi/2]) # rotate to properly align body axes with simulation axes
-    
+        vizSupport.setActuatorGuiSetting(viz, viewRWPanel=True, viewRWHUD=True)
+        s_factor = config["viz_scaling"] # 3D-model scaling factor
+        vizSupport.createCustomModel(viz,
+                                     modelPath=str(model_file_path), # Vizard expects filepath as a string
+                                     scale=[-s_factor, s_factor, s_factor], # scale model and mirror on x-axis (don't know why the model is otherwise improperly mirrored)
+                                     rotation=[0,np.pi/2,np.pi/2]) # rotate to properly align body axes with simulation axes
+        
     # simulate:
     sim.InitializeSimulation() # initialize simulation
     sim.ConfigureStopTime(macros.sec2nano(config["sim_time"])) # configure a simulation stop time
@@ -449,7 +452,7 @@ def sim_main(config):
 
     np.savetxt("output_data/position_ecef_data.csv", position_ecef_data, delimiter=",")
 
-    rotation_deg_data = imuRec.AngVelPlatform * 180 / np.pi
+    rotation_deg_data = imu_rec.AngVelPlatform * 180 / np.pi
     # Magnetic data is magnetic field, not in satellite reference frame
     magnetic_data = mag_rec.magField_N
 
@@ -515,13 +518,14 @@ def sim_main(config):
         ax3.plot(mag_sensor_magnitude)
 
         ax4 = fig.add_subplot(2, 2, 4)
-        ax4.plot(imuRec.times()*1e-9/3600, rotation_deg_data)
-        ax4.plot(imuRec.times()*1e-9/3600, np.linalg.norm(rotation_deg_data, axis=1))
+        ax4.plot(imu_rec.times()*1e-9/3600, rotation_deg_data)
+        ax4.plot(imu_rec.times()*1e-9/3600, np.linalg.norm(rotation_deg_data, axis=1))
         ax4.set_title("rotation speed")
         ax4.legend(["x", "y", "z", "magnitude"])
         ax4.set_xlabel("time (hours)")
         ax4.set_ylabel("angular speed (deg/s)")
 
+        plt.show()
 
     # Magnetorquer detumble effectiveness
     if config["control_mode"] == ControlMode.DETUMBLE: 
@@ -539,25 +543,25 @@ def sim_main(config):
         ax[0, 1].legend(["X", "Y", "Z", "Magnitude"])
         ax[0, 1].set_ylim([-0.01, 0.01])
 
-        ax[1, 0].plot(imuRec.times()*1e-9/3600, rotation_deg_data)
-        ax[1, 0].plot(imuRec.times()*1e-9/3600, np.linalg.norm(rotation_deg_data, axis=1))
+        ax[1, 0].plot(imu_rec.times()*1e-9/3600, rotation_deg_data)
+        ax[1, 0].plot(imu_rec.times()*1e-9/3600, np.linalg.norm(rotation_deg_data, axis=1))
         ax[1, 0].set_title("rotation speed")
         ax[1, 0].legend(["x", "y", "z", "magnitude"])
         ax[1, 0].set_xlabel("time (hours)")
         ax[1, 0].set_ylabel("angular speed (deg/s)")
         # target speed deadband
-        ax[1, 0].hlines(np.array([-0.002, 0.002])*180/np.pi, 0, max(imuRec.times())*1e-9/3600)
+        ax[1, 0].hlines(np.array([-0.002, 0.002])*180/np.pi, 0, max(imu_rec.times())*1e-9/3600)
         # approximate maximum values that can be read by imu (+- 15 degrees)
-        ax[1, 0].hlines([-15, 15], 0, max(imuRec.times())*1e-9/3600)
+        ax[1, 0].hlines([-15, 15], 0, max(imu_rec.times())*1e-9/3600)
 
-        ax[1, 1].plot(imuRec.times()*1e-9/3600, rotation_deg_data)
-        ax[1, 1].plot(imuRec.times()*1e-9/3600, np.linalg.norm(rotation_deg_data, axis=1))
+        ax[1, 1].plot(imu_rec.times()*1e-9/3600, rotation_deg_data)
+        ax[1, 1].plot(imu_rec.times()*1e-9/3600, np.linalg.norm(rotation_deg_data, axis=1))
         ax[1, 1].set_title("rotation speed")
         ax[1, 1].legend(["x", "y", "z", "magnitude"])
         ax[1, 1].set_xlabel("time (hours)")
         ax[1, 1].set_ylabel("angular speed (deg/s)")
         # 0.002 is the controller threshold in rad/s
-        ax[1, 1].hlines(np.array([-0.002, 0.002])*180/np.pi, 0, max(imuRec.times())*1e-9/3600)
+        ax[1, 1].hlines(np.array([-0.002, 0.002])*180/np.pi, 0, max(imu_rec.times())*1e-9/3600)
         # ax[1, 1].set_ylim(np.array([-0.004, 0.004])*180/np.pi)
 
 
@@ -588,10 +592,7 @@ def sim_main(config):
         ax[1].set_zlim([-limit, limit])
         ax[1].set_title("Rotation Vector")
 
-    plt.show()
-
-
-
+        plt.show()
 
 
 
@@ -614,10 +615,45 @@ def sim_main(config):
             print(f"Plot saved as {png_path}")
         plt.show()
 
+    # solar analysis
     if True:
-        fig, ax = plt.subplots()
-        ax.plot(eclipse_rec.times()*1e-9, eclipse_data)
+        fig = plt.figure()
+        ax1 = fig.add_subplot(4, 1, 1)
+        ax1.plot(eclipse_rec.times()*1e-9, eclipse_data)
 
+        ax2 = fig.add_subplot(4, 1, 2)
+        ax2.plot(eclipse_rec.times()*1e-9, np.gradient(eclipse_data))
+
+        ax3 = fig.add_subplot(4, 1, 3)
+        ax3.plot(imu_rec.times()*1e-9, position_eci_data[:,2])
+
+        ax4 = fig.add_subplot(4, 1, 4)
+        ax4.plot(imu_rec.times()*1e-9, np.gradient(position_eci_data[:,2]))
+        plt.show()
+
+        times = np.array(eclipse_rec.times()*1e-9)
+
+        enter_sun = scipy.signal.argrelextrema(np.gradient(eclipse_data), np.greater)[0]
+        exit_sun = scipy.signal.argrelextrema(np.gradient(eclipse_data), np.less)[0]
+
+        print(enter_sun)
+        print(exit_sun)
+        print(np.diff(enter_sun))
+        print(np.diff(exit_sun))
+        if enter_sun.shape[0] > 1 and exit_sun.shape[0] > 1:
+            if enter_sun[0] > exit_sun[0]:
+                # thing
+                print(f"Time in shadow: {times[enter_sun[0]] - times[exit_sun[0]]}")
+                print(f"Time in sun: {times[exit_sun[1]] - times[enter_sun[0]]}")
+            else:
+                print(f"Time in sun: {times[exit_sun[0]] - times[enter_sun[0]]}")
+                print(f"Time in shadow: {times[enter_sun[1]] - times[exit_sun[0]]}")
+                # thing
+        else:
+            print("Simulation is not long enough OR the satellite is either ALWAYS in the sun or ALWAYS in shadow.")
+
+    # power analysis
+    if False:
         # Plot battery power
         fig, ax = plt.subplots()
         ax.plot(battery_rec.times()*1e-9, batt_storage_data)
@@ -703,7 +739,7 @@ def sim_main(config):
             print(f"Plot saved as {png_path}")
 
         fig, ax = plt.subplots()
-        ax.plot(imuRec.times()*1e-9/3600, rotation_data)
+        ax.plot(imu_rec.times()*1e-9/3600, rotation_data)
         ax.set_title("Angular rotation rates")
         ax.set_xlabel("Time (hours)")
         ax.set_ylabel("Rotational rate (r/s)")
@@ -729,20 +765,20 @@ def sim_main(config):
     else:
         error_expanded_filter = None
 
-    fig, ax = plt.subplots()
-    ax.plot(error_true)
-    ax.set_title("True Error")
+    if False:
+        fig, ax = plt.subplots()
+        ax.plot(error_true)
+        ax.set_title("True Error")
 
-    fig, ax = plt.subplots()
-    ax.plot(fsw.torque_alignment_history)
-    ax.set_title("Torque Alignment history")
-
+        fig, ax = plt.subplots()
+        ax.plot(fsw.torque_alignment_history)
+        ax.set_title("Torque Alignment history")
     plt.show()
 
 
     if False:
        
-        plot_times = imuRec.times() * 1e-9
+        plot_times = imu_rec.times() * 1e-9
         if (config["control_mode"] in (ControlMode.RW_POINTING, ControlMode.RW_SLOW_ROTATE)):
             RW_plot_times = rw_speed_rec.times() * 1e-9 # dynamics process intervals
 
@@ -815,7 +851,7 @@ def sim_main(config):
          
         
         
-        imuValues = imuRec.AngVelPlatform
+        imuValues = imu_rec.AngVelPlatform
         plot_imu(plot_times, imuValues, orbital_period, config, time_axis)
 
     # Finish with summary
